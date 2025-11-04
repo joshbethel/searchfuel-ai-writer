@@ -1,0 +1,32 @@
+project_id = "qihpywleopgrlvwcffvy"
+
+[functions.scan-website]
+verify_jwt = false
+
+[functions.generate-article]
+verify_jwt = false
+
+[functions.generate-blog-post]
+verify_jwt = false
+
+[functions.test-cms-connection]
+verify_jwt = true
+
+[functions.fetch-keywords]
+verify_jwt = true
+
+[functions.generate-missing-images]
+verify_jwt = false
+
+[functions.publish-to-cms]
+verify_jwt = false
+
+[functions.proxy-extract]
+verify_jwt = true
+[functions.proxy-extract.cors]
+allowed_origins = ["http://localhost:8080", "http://localhost:3000"]
+
+[functions.fetch-seo-data]
+verify_jwt = true
+[functions.fetch-seo-data.cors]
+allowed_origins = ["http://localhost:8080", "http://localhost:3000"]

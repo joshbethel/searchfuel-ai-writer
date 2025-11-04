@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WordPress Publishing Debug Tool</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #007cba; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #005a87; }
+        .result { margin-top: 20px; padding: 15px; border-radius: 4px; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 WordPress Publishing Debug Tool</h1>
+    <p>This tool helps debug WordPress publishing issues by testing the REST API connection and credentials.</p>
+
+    <form id="debugForm">
+        <div class="form-group">
+            <label for="siteUrl">WordPress Site URL:</label>
+            <input type="url" id="siteUrl" placeholder="https://yoursite.com" required>
+            <small>Enter your WordPress site URL (without trailing slash)</small>
+        </div>
+
+        <div class="form-group">
+            <label for="username">WordPress Username:</label>
+            <input type="text" id="username" placeholder="admin" required>
+            <small>WordPress admin username</small>
+        </div>
+
+        <div class="form-group">
+            <label for="password">WordPress Password/App Password:</label>
+            <input type="password" id="password" placeholder="••••••••••••" required>
+            <small>WordPress password or application password</small>
+        </div>
+
+        <div class="form-group">
+            <label for="postTitle">Test Post Title:</label>
+            <input type="text" id="postTitle" value="Test Post from SearchFuel" required>
+        </div>
+
+        <div class="form-group">
+            <label for="postContent">Test Post Content:</label>
+            <textarea id="postContent" rows="4" required>This is a test post created by SearchFuel to verify the WordPress REST API connection.</textarea>
+        </div>
+
+        <button type="submit">🧪 Test WordPress Connection & Publishing</button>
+    </form>
+
+    <div id="results"></div>
+
+    <script>
+        document.getElementById('debugForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="info">🔄 Testing WordPress connection...</div>';
+            
+            const siteUrl = document.getElementById('siteUrl').value.replace(/\/$/, '');
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const postTitle = document.getElementById('postTitle').value;
+            const postContent = document.getElementById('postContent').value;
+            
+            try {
+                let testResults = [];
+                
+                // Test 1: Check if WordPress REST API is accessible
+                testResults.push('<h3>🧪 Test 1: WordPress REST API Accessibility</h3>');
+                try {
+                    const apiTestUrl = `${siteUrl}/wp-json/wp/v2`;
+                    const apiResponse = await fetch(apiTestUrl);
+                    
+                    if (apiResponse.ok) {
+                        testResults.push('<div class="success">✅ WordPress REST API is accessible</div>');
+                        const apiData = await apiResponse.json();
+                        testResults.push(`<pre>API Info: ${JSON.stringify({
+                            name: apiData.name,
+                            description: apiData.description,
+                            url: apiData.url,
+                            routes: Object.keys(apiData.routes).length + ' routes available'
+                        }, null, 2)}</pre>`);
+                    } else {
+                        testResults.push(`<div class="error">❌ WordPress REST API not accessible (Status: ${apiResponse.status})</div>`);
+                        return;
+                    }
+                } catch (error) {
+                    testResults.push(`<div class="error">❌ Cannot reach WordPress site: ${error.message}</div>`);
+                    return;
+                }
+                
+                // Test 2: Check authentication
+                testResults.push('<h3>🔐 Test 2: Authentication Test</h3>');
+                try {
+                    const authTestUrl = `${siteUrl}/wp-json/wp/v2/posts?per_page=1`;
+                    const authHeader = 'Basic ' + btoa(username + ':' + password);
+                    
+                    const authResponse = await fetch(authTestUrl, {
+                        headers: {
+                            'Authorization': authHeader,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (authResponse.ok) {
+                        testResults.push('<div class="success">✅ Authentication successful</div>');
+                        const posts = await authResponse.json();
+                        testResults.push(`<pre>Found ${posts.length} existing posts</pre>`);
+                    } else if (authResponse.status === 401) {
+                        testResults.push('<div class="error">❌ Authentication failed - check username and password</div>');
+                        const errorText = await authResponse.text();
+                        testResults.push(`<pre>Error: ${errorText}</pre>`);
+                        return;
+                    } else if (authResponse.status === 403) {
+                        testResults.push('<div class="error">❌ User doesn\'t have permission to access posts</div>');
+                        return;
+                    } else {
+                        testResults.push(`<div class="error">❌ Authentication test failed (Status: ${authResponse.status})</div>`);
+                        return;
+                    }
+                } catch (error) {
+                    testResults.push(`<div class="error">❌ Authentication test error: ${error.message}</div>`);
+                    return;
+                }
+                
+                // Test 3: Try to create a post
+                testResults.push('<h3>📝 Test 3: Post Creation Test</h3>');
+                try {
+                    const createPostUrl = `${siteUrl}/wp-json/wp/v2/posts`;
+                    const authHeader = 'Basic ' + btoa(username + ':' + password);
+                    
+                    const postData = {
+                        title: postTitle,
+                        content: postContent,
+                        status: 'draft', // Create as draft first
+                        excerpt: 'Test post created by SearchFuel debug tool'
+                    };
+                    
+                    const createResponse = await fetch(createPostUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': authHeader,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(postData)
+                    });
+                    
+                    if (createResponse.ok) {
+                        const newPost = await createResponse.json();
+                        testResults.push('<div class="success">✅ Post creation successful!</div>');
+                        testResults.push(`<pre>Created post: 
+ID: ${newPost.id}
+Title: ${newPost.title.rendered}
+Status: ${newPost.status}
+URL: ${newPost.link}
+Date: ${newPost.date}</pre>`);
+                        
+                        // Test 4: Try to publish the post
+                        testResults.push('<h3>🚀 Test 4: Post Publishing Test</h3>');
+                        try {
+                            const publishUrl = `${siteUrl}/wp-json/wp/v2/posts/${newPost.id}`;
+                            const publishResponse = await fetch(publishUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': authHeader,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ status: 'publish' })
+                            });
+                            
+                            if (publishResponse.ok) {
+                                const publishedPost = await publishResponse.json();
+                                testResults.push('<div class="success">✅ Post publishing successful!</div>');
+                                testResults.push(`<pre>Published post URL: ${publishedPost.link}</pre>`);
+                                testResults.push('<div class="info">🎉 All tests passed! Your WordPress setup is working correctly.</div>');
+                            } else {
+                                testResults.push(`<div class="error">❌ Post publishing failed (Status: ${publishResponse.status})</div>`);
+                                const publishError = await publishResponse.text();
+                                testResults.push(`<pre>Publish Error: ${publishError}</pre>`);
+                            }
+                        } catch (error) {
+                            testResults.push(`<div class="error">❌ Post publishing error: ${error.message}</div>`);
+                        }
+                        
+                    } else {
+                        testResults.push(`<div class="error">❌ Post creation failed (Status: ${createResponse.status})</div>`);
+                        const createError = await createResponse.text();
+                        testResults.push(`<pre>Create Error: ${createError}</pre>`);
+                        
+                        if (createResponse.status === 403) {
+                            testResults.push('<div class="error">⚠️ User doesn\'t have permission to create posts. Make sure the user has Editor or Administrator role.</div>');
+                        }
+                    }
+                } catch (error) {
+                    testResults.push(`<div class="error">❌ Post creation error: ${error.message}</div>`);
+                }
+                
+                resultsDiv.innerHTML = testResults.join('');
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Unexpected error: ${error.message}</div>`;
+            }
+        });
+    </script>
+</body>
+</html>
