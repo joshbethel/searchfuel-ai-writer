@@ -654,7 +654,6 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
         
         // For other errors, fallback to client-side extraction
         console.warn('proxy-extract failed, falling back to client-side extraction:', res.error);
-        toast.warning('Server extraction failed — using local fallback');
 
         // fetch content/title so we can run local extractor
         const { data: rowData, error: rowErr } = await supabase
