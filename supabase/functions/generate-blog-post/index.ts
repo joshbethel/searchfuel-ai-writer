@@ -458,8 +458,6 @@ Format: 16:9 aspect ratio, centered single subject.`;
         console.log(`Generated ${selectedArticleType.name} post for blog ${blog.id}: ${postData.title}`);
 
         // Check if we should schedule or publish immediately
-        const { scheduledPublishDate } = req.body || {};
-        
         if (scheduledPublishDate) {
           // Schedule for later
           console.log(`Scheduling post for ${scheduledPublishDate}`);
