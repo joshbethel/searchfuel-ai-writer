@@ -21,6 +21,8 @@ interface BlogPost {
   excerpt: string | null;
   published_at: string;
   featured_image: string | null;
+  meta_title: string | null;
+  meta_description: string | null;
 }
 
 // Remove the first H1 from content to avoid duplication
@@ -170,6 +172,27 @@ export default function PublicBlogPost() {
                 })}
               </time>
             </div>
+
+            {/* SEO Metadata */}
+            {(post.meta_title || post.meta_description) && (
+              <div className="bg-secondary/50 border border-border rounded-lg p-6 mb-8">
+                <h2 className="text-lg font-bold text-foreground mb-4">SEO Metadata</h2>
+                <div className="space-y-3">
+                  {post.meta_title && (
+                    <div>
+                      <span className="text-sm font-semibold text-muted-foreground">Meta Title:</span>
+                      <p className="text-foreground">{post.meta_title}</p>
+                    </div>
+                  )}
+                  {post.meta_description && (
+                    <div>
+                      <span className="text-sm font-semibold text-muted-foreground">Meta Description:</span>
+                      <p className="text-foreground">{post.meta_description}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="prose prose-lg dark:prose-invert max-w-none
               prose-headings:font-bold prose-headings:text-foreground

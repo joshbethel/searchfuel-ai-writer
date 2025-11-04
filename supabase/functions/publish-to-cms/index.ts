@@ -167,6 +167,46 @@ serve(async (req: any) => {
   }
 });
 
+// Helper function to convert markdown to HTML
+function markdownToHtml(markdown: string): string {
+  if (!markdown) return '';
+  
+  // Remove first H1 if present (since title is separate)
+  let content = markdown.replace(/^#\s+.+$/m, '').trim();
+  
+  // Convert markdown to HTML
+  // Headers
+  content = content.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  content = content.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  content = content.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  
+  // Bold and italic
+  content = content.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  // Links
+  content = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  
+  // Lists - unordered
+  content = content.replace(/^\s*[-*+]\s+(.*)$/gim, '<li>$1</li>');
+  content = content.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+  
+  // Lists - ordered
+  content = content.replace(/^\s*\d+\.\s+(.*)$/gim, '<li>$1</li>');
+  
+  // Paragraphs - split by double newlines
+  const paragraphs = content.split(/\n\n+/);
+  content = paragraphs.map(p => {
+    p = p.trim();
+    // Don't wrap if already has HTML tags
+    if (p.match(/^<[^>]+>/)) return p;
+    return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n\n');
+  
+  return content;
+}
+
 // Helper function to extract actual content from JSON-wrapped content
 function extractContent(rawContent: string): string {
   if (!rawContent) return '';
@@ -244,14 +284,15 @@ async function publishToWordPress(blog: any, post: any): Promise<string> {
   console.log(`WordPress API URL: ${apiUrl}`);
   console.log(`Using username: ${username}`);
 
-  // Extract actual content from JSON-wrapped format
-  const actualContent = extractContent(post.content);
-  console.log(`Content extracted, length: ${actualContent.length} characters`);
+  // Extract actual content from JSON-wrapped format and convert to HTML
+  const markdownContent = extractContent(post.content);
+  const htmlContent = markdownToHtml(markdownContent);
+  console.log(`Content converted to HTML, length: ${htmlContent.length} characters`);
 
   // Prepare post data with meta fields
   const postData = {
     title: post.title,
-    content: actualContent,
+    content: htmlContent,
     excerpt: post.excerpt || "",
     status: "publish",
     featured_media: featuredImageId, // WordPress REST API field for featured image
