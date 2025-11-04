@@ -413,6 +413,8 @@ Format: 16:9 aspect ratio, centered single subject.`;
             published_at: scheduledPublishDate || new Date().toISOString(),
             scheduled_publish_date: scheduledPublishDate || null,
             publishing_status: scheduledPublishDate ? "scheduled" : "pending",
+            meta_title: postData.meta_title || postData.title,
+            meta_description: postData.meta_description || postData.excerpt,
           })
           .select()
           .single();

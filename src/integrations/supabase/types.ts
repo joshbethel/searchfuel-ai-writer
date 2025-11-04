@@ -18,9 +18,11 @@ export type Database = {
         Row: {
           content: Json
           created_at: string
+          extracted_keywords: Json | null
           id: string
           intent: string
           keyword: string
+          recommended_topics: Json | null
           status: string | null
           title: string
           updated_at: string
@@ -30,9 +32,11 @@ export type Database = {
         Insert: {
           content: Json
           created_at?: string
+          extracted_keywords?: Json | null
           id?: string
           intent: string
           keyword: string
+          recommended_topics?: Json | null
           status?: string | null
           title: string
           updated_at?: string
@@ -42,9 +46,11 @@ export type Database = {
         Update: {
           content?: Json
           created_at?: string
+          extracted_keywords?: Json | null
           id?: string
           intent?: string
           keyword?: string
+          recommended_topics?: Json | null
           status?: string | null
           title?: string
           updated_at?: string
@@ -112,11 +118,16 @@ export type Database = {
           created_at: string
           excerpt: string | null
           external_post_id: string | null
+          extracted_keywords: Json | null
           featured_image: string | null
           id: string
           last_published_at: string | null
+          meta_description: string | null
+          meta_title: string | null
           published_at: string | null
           publishing_status: string | null
+          recommended_topics: Json | null
+          scheduled_publish_date: string | null
           slug: string
           status: string
           title: string
@@ -129,11 +140,16 @@ export type Database = {
           created_at?: string
           excerpt?: string | null
           external_post_id?: string | null
+          extracted_keywords?: Json | null
           featured_image?: string | null
           id?: string
           last_published_at?: string | null
+          meta_description?: string | null
+          meta_title?: string | null
           published_at?: string | null
           publishing_status?: string | null
+          recommended_topics?: Json | null
+          scheduled_publish_date?: string | null
           slug: string
           status?: string
           title: string
@@ -146,11 +162,16 @@ export type Database = {
           created_at?: string
           excerpt?: string | null
           external_post_id?: string | null
+          extracted_keywords?: Json | null
           featured_image?: string | null
           id?: string
           last_published_at?: string | null
+          meta_description?: string | null
+          meta_title?: string | null
           published_at?: string | null
           publishing_status?: string | null
+          recommended_topics?: Json | null
+          scheduled_publish_date?: string | null
           slug?: string
           status?: string
           title?: string
