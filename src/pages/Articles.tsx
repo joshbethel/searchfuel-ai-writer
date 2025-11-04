@@ -33,10 +33,16 @@ const ARTICLE_TYPE_LABELS: Record<string, { name: string; emoji: string }> = {
   interactive_tool: { name: "Interactive Tools", emoji: "🛠️" },
 };
 
-const getPublishingStatusBadge = (status: string) => {
+const getPublishingStatusBadge = (status: string, scheduledDate?: string | null) => {
   switch (status) {
     case 'published':
       return <Badge variant="default" className="bg-green-600">Published</Badge>;
+    case 'scheduled':
+      return (
+        <Badge variant="secondary" className="bg-purple-600 text-white">
+          Scheduled {scheduledDate && `(${format(parseISO(scheduledDate), 'MMM d, h:mm a')})`}
+        </Badge>
+      );
     case 'failed':
       return <Badge variant="destructive">Failed</Badge>;
     case 'pending':
