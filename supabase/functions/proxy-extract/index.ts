@@ -169,7 +169,7 @@ function calculateSimilarity(a: string, b: string): number {
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { 
+    return new Response(undefined, { 
       status: 204, 
       headers: corsHeaders
     });
