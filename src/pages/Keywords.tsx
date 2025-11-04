@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TrendingUp, TrendingDown, Minus, Search, Loader2, Trash2, RotateCcw, Plus, AlertCircle } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Search, Loader2, Trash2, RotateCcw, Plus, AlertCircle, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +26,7 @@ export default function Keywords() {
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [isFetching, setIsFetching] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [manualKeywords, setManualKeywords] = useState("");
@@ -44,9 +45,17 @@ export default function Keywords() {
       // Transform database data to match Keyword interface
       const transformedKeywords: Keyword[] = (data || []).map((kw) => ({
         keyword: kw.keyword,
-        searchVolume: kw.search_volume,
-        difficulty: kw.difficulty || 0,
-        intent: (kw.intent as Keyword["intent"]) || "Informational",
+        searchVolume: kw.search_volume || 0,
+        difficulty: kw.difficulty ?? 0,
+        intent: (() => {
+          const v = (kw.intent as string) || 'informational';
+          switch (v.toLowerCase()) {
+            case 'commercial': return 'Commercial';
+            case 'transactional': return 'Transactional';
+            case 'navigational': return 'Navigational';
+            default: return 'Informational';
+          }
+        })() as Keyword["intent"],
         trend: (kw.trend as Keyword["trend"]) || "stable",
         cpc: parseFloat(kw.cpc?.toString() || "0"),
       }));
@@ -138,6 +147,62 @@ export default function Keywords() {
     }
   };
 
+  // Refresh stats for existing keywords via SEO API
+  const handleRefreshStats = async () => {
+    if (keywords.length === 0) {
+      toast.info("No keywords to refresh");
+      return;
+    }
+
+    try {
+      setIsRefreshing(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const list = keywords.map(k => k.keyword);
+      const { data, error } = await supabase.functions.invoke('fetch-seo-data', { body: { keywords: list } });
+      if (error) throw error;
+
+      // Helper to compute trend label from trendsData
+      const computeTrend = (arr?: Array<{ month: string | number; volume: number }>): Keyword['trend'] => {
+        if (!arr || arr.length < 6) return 'stable';
+        const recent = arr.slice(0, 3);
+        const older = arr.slice(-3);
+        const avg = (xs: typeof recent) => xs.reduce((s, x) => s + (x.volume || 0), 0) / xs.length;
+        const change = ((avg(recent) - avg(older)) / Math.max(1, avg(older))) * 100;
+        if (change > 10) return 'up';
+        if (change < -10) return 'down';
+        return 'stable';
+      };
+
+      // Apply updates in parallel
+      const updates = Object.entries(data || {}).map(async ([kw, stats]: any) => {
+        const trend = computeTrend(stats?.trendsData);
+        const payload: any = {
+          search_volume: Number(stats?.searchVolume) || 0,
+          cpc: Number(stats?.cpc) || 0,
+          difficulty: Number(stats?.keywordDifficulty) || 0,
+          intent: (stats?.intent || 'informational').toLowerCase(),
+          trend,
+          updated_at: new Date().toISOString(),
+        };
+        await supabase
+          .from('keywords')
+          .update(payload)
+          .eq('user_id', user.id)
+          .eq('keyword', kw);
+      });
+
+      await Promise.all(updates);
+      toast.success('Keyword metrics refreshed');
+      fetchKeywords();
+    } catch (err: any) {
+      console.error('Failed to refresh stats:', err);
+      toast.error(err?.message || 'Failed to refresh stats');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   // Add manual keywords
   const handleAddManualKeywords = async () => {
     const keywordsToAdd = manualKeywords
@@ -248,6 +313,24 @@ export default function Keywords() {
         </div>
         {keywords.length > 0 && (
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleRefreshStats}
+              disabled={isRefreshing}
+              className="flex items-center gap-2"
+            >
+              {isRefreshing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Refresh Stats
+                </>
+              )}
+            </Button>
             <Button
               variant="outline"
               onClick={() => setShowAddDialog(true)}
