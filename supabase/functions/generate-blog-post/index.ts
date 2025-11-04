@@ -457,8 +457,22 @@ Format: 16:9 aspect ratio, centered single subject.`;
 
         console.log(`Generated ${selectedArticleType.name} post for blog ${blog.id}: ${postData.title}`);
 
-        // Auto-publish to CMS if configured
-        if (blog.cms_platform && blog.cms_credentials) {
+        // Check if we should schedule or publish immediately
+        const { scheduledPublishDate } = req.body || {};
+        
+        if (scheduledPublishDate) {
+          // Schedule for later
+          console.log(`Scheduling post for ${scheduledPublishDate}`);
+          await supabase
+            .from('blog_posts')
+            .update({ 
+              publishing_status: 'scheduled',
+              scheduled_publish_date: scheduledPublishDate
+            })
+            .eq('id', post.id);
+          console.log(`Post scheduled for ${scheduledPublishDate}`);
+        } else if (blog.cms_platform && blog.cms_credentials) {
+          // Auto-publish to CMS immediately
           console.log(`Auto-publishing to ${blog.cms_platform}...`);
           
           // Update status to publishing

@@ -34,13 +34,14 @@ export function GenerateArticleDialog({
   onGenerate,
   isGenerating,
 }: GenerateArticleDialogProps) {
+  const [publishOption, setPublishOption] = useState<"now" | "schedule">("now");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState<string>("09:00");
 
   const handleGenerate = async () => {
     let scheduleDate: Date | undefined;
     
-    if (date) {
+    if (publishOption === "schedule" && date) {
       // Combine date and time
       scheduleDate = new Date(date);
       const [hours, minutes] = time.split(":").map(Number);
@@ -56,70 +57,91 @@ export function GenerateArticleDialog({
         <DialogHeader>
           <DialogTitle>Generate New Article</DialogTitle>
           <DialogDescription>
-            Choose when to publish the article to your CMS. Leave empty for immediate publishing.
+            Choose when to publish the article to your CMS.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <label className="text-sm font-medium">Publication Date</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "justify-start text-left font-normal",
-                    !date && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP") : "Pick a date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Publication Time</label>
-            <Select value={time} onValueChange={setTime}>
+            <label className="text-sm font-medium">Publishing Option</label>
+            <Select value={publishOption} onValueChange={(value) => setPublishOption(value as "now" | "schedule")}>
               <SelectTrigger>
-                <SelectValue placeholder="Select a time" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Array.from({ length: 24 }, (_, hour) => [
-                    <SelectItem 
-                      key={`${hour}-00`} 
-                      value={`${hour.toString().padStart(2, "0")}:00`}
-                    >
-                      {`${hour.toString().padStart(2, "0")}:00`}
-                    </SelectItem>,
-                    <SelectItem 
-                      key={`${hour}-30`} 
-                      value={`${hour.toString().padStart(2, "0")}:30`}
-                    >
-                      {`${hour.toString().padStart(2, "0")}:30`}
-                    </SelectItem>
-                  ]).flat()}
+                <SelectItem value="now">Publish Now</SelectItem>
+                <SelectItem value="schedule">Schedule for Later</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
+          {publishOption === "schedule" && (
+            <>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Publication Date</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "justify-start text-left font-normal",
+                        !date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {date ? format(date, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={date}
+                      onSelect={setDate}
+                      initialFocus
+                      disabled={(date) => date < new Date()}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Publication Time</label>
+                <Select value={time} onValueChange={setTime}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 24 }, (_, hour) => [
+                        <SelectItem 
+                          key={`${hour}-00`} 
+                          value={`${hour.toString().padStart(2, "0")}:00`}
+                        >
+                          {`${hour.toString().padStart(2, "0")}:00`}
+                        </SelectItem>,
+                        <SelectItem 
+                          key={`${hour}-30`} 
+                          value={`${hour.toString().padStart(2, "0")}:30`}
+                        >
+                          {`${hour.toString().padStart(2, "0")}:30`}
+                        </SelectItem>
+                      ]).flat()}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleGenerate} disabled={isGenerating}>
+          <Button 
+            onClick={handleGenerate} 
+            disabled={isGenerating || (publishOption === "schedule" && !date)}
+          >
             {isGenerating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Generate Article
+            {publishOption === "now" ? "Generate & Publish Now" : "Generate & Schedule"}
           </Button>
         </DialogFooter>
       </DialogContent>
