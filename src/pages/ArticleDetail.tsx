@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import KeywordPanel from '@/components/KeywordPanel';
+import { ArticleStatusViewer } from '@/components/ArticleStatusViewer';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, Copy, Download, ExternalLink, Loader2 } from "lucide-react";
@@ -116,16 +117,27 @@ export default function ArticleDetail() {
             Back to Articles
           </Button>
 
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <div className="space-y-6">
+            {/* Title and Metadata */}
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
+              <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
                 {article.title}
               </h1>
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                {article.keyword}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-4 mb-4">
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                  {article.keyword}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  Created: {new Date(article.created_at).toLocaleString()}
+                </span>
+              </div>
             </div>
-            <div className="flex gap-3">
+
+            {/* Post Status - Full Width */}
+            <ArticleStatusViewer articleId={article.id} />
+            
+            {/* Action Buttons */}
+            <div className="flex gap-3 justify-end">
               <Button onClick={handleCopy} variant="outline">
                 <Copy className="w-4 h-4 mr-2" />
                 Copy

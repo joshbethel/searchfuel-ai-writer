@@ -339,6 +339,82 @@ export default function Articles() {
   const publishedPosts = articles.filter(a => a.publishing_status === 'published');
   const failedPosts = articles.filter(a => a.publishing_status === 'failed');
 
+  const renderPostCard = (post: any, status: 'scheduled' | 'pending' | 'published' | 'failed') => {
+    const statusClasses = {
+      scheduled: "bg-purple-600 text-white",
+      pending: "bg-blue-600 text-white",
+      published: "bg-green-600",
+      failed: "bg-red-600 text-white"
+    };
+
+    const statusBadge = {
+      scheduled: <Badge variant="secondary" className={statusClasses.scheduled}>Scheduled</Badge>,
+      pending: <Badge variant="secondary" className={statusClasses.pending}>Pending</Badge>,
+      published: <Badge variant="default" className={statusClasses.published}>Published</Badge>,
+      failed: <Badge variant="destructive">Failed</Badge>
+    };
+
+    return (
+      <Card key={post.id} className="p-6 hover:shadow-md transition-shadow">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            {statusBadge[status]}
+            {post.article_type && (
+              <Badge variant="outline">
+                {ARTICLE_TYPE_LABELS[post.article_type]?.emoji} {ARTICLE_TYPE_LABELS[post.article_type]?.name || post.article_type}
+              </Badge>
+            )}
+          </div>
+          <h3 className="text-xl font-semibold text-foreground mb-2">
+            {post.title}
+          </h3>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+            <div className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              {status === 'scheduled' ? (
+                <span>
+                  {post.scheduled_publish_date ? 
+                    `Scheduled for ${format(parseISO(post.scheduled_publish_date), "PPP 'at' p")}` :
+                    'Not scheduled'
+                  }
+                </span>
+              ) : (
+                <span>{format(new Date(post.published_at || post.created_at), 'MMM d, yyyy')}</span>
+              )}
+            </div>
+            {post.external_post_id && (
+              <Badge variant="outline" className="text-xs">
+                External ID: {post.external_post_id}
+              </Badge>
+            )}
+          </div>
+          <div className="flex gap-2 mb-6">
+            {(status === 'scheduled' || status === 'pending' || status === 'failed') && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => handlePublishNow(post.id)}
+              >
+                {status === 'failed' ? 'Retry Publish' : 'Publish Now'}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/blog/${post.slug}`)}
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              {status === 'published' ? 'View' : 'Preview'}
+            </Button>
+          </div>
+          <div className="mt-4">
+            <KeywordPanel id={post.id} kind="blog_post" />
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   return (
     <div className="container max-w-6xl mx-auto py-12 px-4">
       <div className="flex items-center justify-between mb-8">
@@ -365,73 +441,20 @@ export default function Articles() {
         />
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Calendar className="w-6 h-6 text-purple-600" />
-          Scheduled Posts
-          <Badge variant="secondary" className="bg-purple-600 text-white">
-            {scheduledPosts.length}
-          </Badge>
-        </h2>
-        <div className="grid gap-4">
-          {scheduledPosts.length === 0 ? (
-            <Card className="p-6 text-center text-muted-foreground">
-              No scheduled posts yet
-            </Card>
-          ) : scheduledPosts.map((post) => (
-              <Card key={post.id} className="p-6 hover:shadow-md transition-shadow w-[99%] mx-auto">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="secondary" className="bg-purple-600 text-white">Scheduled</Badge>
-                      {post.article_type && (
-                        <Badge variant="outline">
-                          {ARTICLE_TYPE_LABELS[post.article_type]?.emoji} {ARTICLE_TYPE_LABELS[post.article_type]?.name || post.article_type}
-                        </Badge>
-                      )}
-                    </div>
-                    <h3 className="text-xl font-semibold text-foreground mb-2">
-                      {post.title}
-                    </h3>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        <span>
-                          {post.scheduled_publish_date ? 
-                            `Scheduled for ${format(parseISO(post.scheduled_publish_date), "PPP 'at' p")}` :
-                            'Not scheduled'
-                          }
-                        </span>
-                      </div>
-                      <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
-                    </div>
-                    <div className="flex gap-2 mb-6">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handlePublishNow(post.id)}
-                      >
-                        Publish Now
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/blog/${post.slug}`)}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Preview
-                      </Button>
-                    </div>
-                    <div>
-                      <KeywordPanel id={post.id} kind="blog_post" />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))
-          }
+      {scheduledPosts.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Calendar className="w-6 h-6 text-purple-600" />
+            Scheduled Posts
+            <Badge variant="secondary" className="bg-purple-600 text-white">
+              {scheduledPosts.length}
+            </Badge>
+          </h2>
+          <div className="grid gap-4">
+            {scheduledPosts.map(post => renderPostCard(post, 'scheduled'))}
+          </div>
         </div>
-      </div>
+      )}
 
       {pendingPosts.length > 0 && (
         <div className="mb-8">
@@ -443,57 +466,7 @@ export default function Articles() {
             </Badge>
           </h2>
           <div className="grid gap-4">
-            {pendingPosts.map((post, index) => {
-              const estimatedDate = new Date();
-              estimatedDate.setDate(estimatedDate.getDate() + index);
-              
-              return (
-                <Card key={post.id} className="p-6 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variant="secondary" className="bg-blue-600 text-white">Pending</Badge>
-                        {post.article_type && (
-                          <Badge variant="outline">
-                            {ARTICLE_TYPE_LABELS[post.article_type]?.emoji} {ARTICLE_TYPE_LABELS[post.article_type]?.name || post.article_type}
-                          </Badge>
-                        )}
-                      </div>
-                      <h3 className="text-xl font-semibold text-foreground mb-2">
-                        {post.title}
-                      </h3>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          <span>Scheduled for {format(estimatedDate, 'MMM d, yyyy')}</span>
-                        </div>
-                        <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
-                      </div>
-                      <div className="flex gap-2 mt-2">
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => handlePublishNow(post.id)}
-                        >
-                          Publish Now
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => navigate(`/blog/${post.slug}`)}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          Preview
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <KeywordPanel id={post.id} kind="blog_post" />
-                  </div>
-                </Card>
-              );
-            })}
+            {pendingPosts.map(post => renderPostCard(post, 'pending'))}
           </div>
         </div>
       )}
@@ -508,46 +481,7 @@ export default function Articles() {
             </Badge>
           </h2>
           <div className="grid gap-4">
-            {publishedPosts.map((post) => (
-              <Card key={post.id} className="p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="default" className="bg-green-600">Published</Badge>
-                      {post.article_type && (
-                        <Badge variant="outline">
-                          {ARTICLE_TYPE_LABELS[post.article_type]?.emoji} {ARTICLE_TYPE_LABELS[post.article_type]?.name || post.article_type}
-                        </Badge>
-                      )}
-                    </div>
-                    <h3 className="text-xl font-semibold text-foreground mb-2">
-                      {post.title}
-                    </h3>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>Published {format(new Date(post.published_at || post.created_at), 'MMM d, yyyy')}</span>
-                      {post.external_post_id && (
-                        <Badge variant="outline" className="text-xs">
-                          External ID: {post.external_post_id}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/blog/${post.slug}`)}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        View
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <KeywordPanel id={post.id} kind="blog_post" />
-                </div>
-              </Card>
-            ))}
+            {publishedPosts.map(post => renderPostCard(post, 'published'))}
           </div>
         </div>
       )}
@@ -562,45 +496,7 @@ export default function Articles() {
             </Badge>
           </h2>
           <div className="grid gap-4">
-            {failedPosts.map((post) => (
-              <Card key={post.id} className="p-6 border-red-200 dark:border-red-900 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="destructive">Failed</Badge>
-                      {post.article_type && (
-                        <Badge variant="outline">
-                          {ARTICLE_TYPE_LABELS[post.article_type]?.emoji} {ARTICLE_TYPE_LABELS[post.article_type]?.name || post.article_type}
-                        </Badge>
-                      )}
-                    </div>
-                    <h3 className="text-xl font-semibold text-foreground mb-2">
-                      {post.title}
-                    </h3>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => handlePublishNow(post.id)}
-                    >
-                      Retry Publish
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/blog/${post.slug}`)}
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
-                      View
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
+            {failedPosts.map(post => renderPostCard(post, 'failed'))}
           </div>
         </div>
       )}

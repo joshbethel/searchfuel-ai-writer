@@ -570,9 +570,21 @@ export default function Dashboard() {
         body: { blog_post_id: postId }
       });
       
-      if (error) throw error;
+      if (error) {
+        if (error.message?.toLowerCase().includes('image') || error.message?.toLowerCase().includes('media')) {
+          console.error("Image attachment error:", error);
+          toast.error("Failed to attach images to the post. The post may still be published without images. Please try republishing.");
+          return;
+        }
+        throw error;
+      }
       
-      toast.success("Post published successfully!");
+      if (data?.warning?.includes('image')) {
+        toast.warning("Post published, but some images could not be attached. You may need to add them manually.");
+      } else {
+        toast.success("Post published successfully!");
+      }
+      
       if (blog) fetchBlogPosts(blog.id);
     } catch (error: any) {
       console.error("Publish error:", error);
@@ -804,11 +816,16 @@ export default function Dashboard() {
                 </div>
                 
                 {/* Connection Health Status */}
-                <div className="mt-4 p-3 border rounded-lg bg-muted/30">
-                  <div className="flex items-center justify-between">
+                <div className="mt-4 p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span className="text-sm font-medium">CMS Connected</span>
+                      <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                          <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border-2 border-background animate-pulse"></span>
+                        </div>
+                        <span className="text-sm font-medium">CMS Connection Status</span>
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <Button 
@@ -830,11 +847,31 @@ export default function Dashboard() {
                     </div>
                   </div>
                   
+                  {/* Connection Details */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Platform</span>
+                      <span className="text-sm font-medium">{getCMSName(blog.cms_platform)}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Posts Published</span>
+                      <span className="text-sm font-medium">{blogPosts.filter(p => p.publishing_status === 'published').length}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Last Published</span>
+                      <span className="text-sm font-medium">
+                        {blogPosts.find(p => p.publishing_status === 'published')?.published_at 
+                          ? format(new Date(blogPosts.find(p => p.publishing_status === 'published')!.published_at), 'MMM d, yyyy')
+                          : 'Never'}
+                      </span>
+                    </div>
+                  </div>
+
                   {blog.cms_platform === 'framer' && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1">
+                    <div className="mt-3 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 pt-3 border-t">
                       <AlertCircle className="w-3 h-3" />
                       Framer connections require manual verification. Test by publishing a post.
-                    </p>
+                    </div>
                   )}
             </div>
           </div>
@@ -1010,6 +1047,102 @@ export default function Dashboard() {
           </Card>
           ) : (
           <>
+            {/* Performance Metrics Overview */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+              {/* Overall Traffic */}
+              <Card className="p-6 bg-card shadow-sm">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-muted-foreground">Total Traffic</span>
+                  <span className="text-2xl font-bold mt-2">
+                    {blog?.cms_platform ? 
+                      (analytics && analytics.length > 0 
+                        ? analytics.reduce((sum, day) => sum + (day.views || 0), 0).toLocaleString()
+                        : '0')
+                      : '-'}
+                  </span>
+                  <span className="text-xs text-muted-foreground mt-1">
+                    {blog?.cms_platform 
+                      ? `Last ${dateRange}`
+                      : 'Connect CMS to view traffic'}
+                  </span>
+                </div>
+              </Card>
+
+              {/* Keyword Performance */}
+              <Card className="p-6 bg-card shadow-sm">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-muted-foreground">Avg. Keyword Position</span>
+                  <span className="text-2xl font-bold mt-2">
+                    {keywordRankings.length > 0 
+                      ? (() => {
+                          const validRankings = keywordRankings.filter(k => k.ranking_position != null && k.ranking_position > 0);
+                          return validRankings.length > 0
+                            ? Math.round(validRankings.reduce((sum, k) => sum + k.ranking_position!, 0) / validRankings.length)
+                            : '-'
+                        })()
+                      : '-'}
+                  </span>
+                  <span className="text-xs text-muted-foreground mt-1">
+                    {keywordRankings.filter(k => k.ranking_position && k.ranking_position <= 10).length} keywords in top 10
+                  </span>
+                </div>
+              </Card>
+
+              {/* Article Performance */}
+              <Card className="p-6 bg-card shadow-sm">
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-muted-foreground">Avg. Views per Article</span>
+                  <span className="text-2xl font-bold mt-2">
+                    {blog?.cms_platform ? 
+                      (blogPosts.filter(p => p.publishing_status === 'published').length > 0
+                        ? Math.round(blogPosts.reduce((sum, post) => sum + (post.views || 0), 0) / 
+                            blogPosts.filter(p => p.publishing_status === 'published').length
+                          ).toLocaleString()
+                        : '0')
+                      : '-'}
+                  </span>
+                  <span className="text-xs text-muted-foreground mt-1">
+                    {blog?.cms_platform 
+                      ? `${blogPosts.filter(p => p.publishing_status === 'published').length} published articles`
+                      : 'Connect CMS to view stats'}
+                  </span>
+                </div>
+              </Card>
+
+              {/* SEO Value */}
+              <Card className={`p-6 ${avgCpc > 0 
+                ? 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800'
+                : 'bg-card shadow-sm'}`}
+              >
+                <div className="flex flex-col">
+                  <span className={`text-sm font-medium ${avgCpc > 0 
+                    ? 'text-green-800 dark:text-green-400'
+                    : 'text-muted-foreground'}`}
+                  >
+                    Monthly SEO Value
+                  </span>
+                  <span className={`text-2xl font-bold mt-2 ${avgCpc > 0 
+                    ? 'text-green-700 dark:text-green-400'
+                    : ''}`}
+                  >
+                    {blog?.cms_platform && analytics?.length > 0 && avgCpc > 0
+                      ? `$${Math.round(avgCpc * analytics.reduce((sum, day) => sum + (day.views || 0), 0)).toLocaleString()}`
+                      : '-'}
+                  </span>
+                  <span className={`text-xs mt-1 ${avgCpc > 0 
+                    ? 'text-green-600 dark:text-green-500'
+                    : 'text-muted-foreground'}`}
+                  >
+                    {blog?.cms_platform
+                      ? avgCpc > 0
+                        ? `Based on ${dateRange} traffic`
+                        : 'Add keywords to calculate value'
+                      : 'Connect CMS to view value'}
+                  </span>
+                </div>
+              </Card>
+            </div>
+
             {/* Analytics Section - Total Visits and Visits by Blog Posts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Traffic Chart */}
@@ -1120,6 +1253,154 @@ export default function Dashboard() {
                       No published posts yet
                     </div>
                   )}
+                </div>
+              </Card>
+            </div>
+
+            {/* Detailed Performance Metrics */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Article Performance Details */}
+              <Card className="p-6 bg-card shadow-sm">
+                <h3 className="text-lg font-semibold text-foreground mb-2">Article Performance</h3>
+                <p className="text-sm text-muted-foreground mb-4">Content engagement and traffic analysis</p>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <div>
+                      <span className="text-sm font-medium">Most Viewed Article</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {blog?.cms_platform 
+                          ? (blogPosts
+                              .filter(p => p.publishing_status === 'published')
+                              .sort((a, b) => (b.views || 0) - (a.views || 0))[0]?.title 
+                            || 'No published articles')
+                          : 'Connect CMS to view stats'}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="ml-2">
+                      {blog?.cms_platform 
+                        ? (blogPosts
+                            .filter(p => p.publishing_status === 'published')
+                            .sort((a, b) => (b.views || 0) - (a.views || 0))[0]?.views?.toLocaleString() 
+                          || '0') + ' views'
+                        : '-'}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <div>
+                      <span className="text-sm font-medium">Latest Article</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {blogPosts.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())[0]?.title || 'No data'}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="ml-2">
+                      {blogPosts.length > 0 
+                        ? format(new Date(blogPosts.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())[0].published_at), 'MMM d')
+                        : '-'}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <div>
+                      <span className="text-sm font-medium">Publishing Frequency</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">Last 30 days</p>
+                    </div>
+                    <Badge variant="secondary" className="ml-2">
+                      {blogPosts.filter(post => {
+                        const postDate = new Date(post.published_at);
+                        const thirtyDaysAgo = new Date();
+                        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                        return postDate >= thirtyDaysAgo;
+                      }).length} posts
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2">
+                    <div>
+                      <span className="text-sm font-medium">Article Types</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">Most common format</p>
+                    </div>
+                    <Badge variant="outline" className="ml-2">
+                      {(() => {
+                        const types = blogPosts
+                          .map(post => post.article_type)
+                          .filter(Boolean)
+                          .reduce((acc, type) => {
+                            acc[type!] = (acc[type!] || 0) + 1;
+                            return acc;
+                          }, {} as Record<string, number>);
+                        const mostCommon = Object.entries(types).sort((a, b) => b[1] - a[1])[0];
+                        return mostCommon ? `${ARTICLE_TYPE_LABELS[mostCommon[0]]?.emoji} ${ARTICLE_TYPE_LABELS[mostCommon[0]]?.name}` : 'No data';
+                      })()}
+                    </Badge>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Keyword Performance Details */}
+              <Card className="p-6 bg-card shadow-sm">
+                <h3 className="text-lg font-semibold text-foreground mb-2">Keyword Performance</h3>
+                <p className="text-sm text-muted-foreground mb-4">SEO and ranking analysis</p>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <div>
+                      <span className="text-sm font-medium">Best Ranking Keyword</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {keywordRankings.sort((a, b) => (a.ranking_position || 100) - (b.ranking_position || 100))[0]?.keyword || 'No data'}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="ml-2">
+                      Position #{keywordRankings.sort((a, b) => (a.ranking_position || 100) - (b.ranking_position || 100))[0]?.ranking_position || '-'}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <div>
+                      <span className="text-sm font-medium">Highest Search Volume</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {keywordRankings.sort((a, b) => b.search_volume - a.search_volume)[0]?.keyword || 'No data'}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="ml-2">
+                      {keywordRankings.sort((a, b) => b.search_volume - a.search_volume)[0]?.search_volume.toLocaleString() || '0'}/mo
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <div>
+                      <span className="text-sm font-medium">Top 10 Rankings</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">Position 1-10</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="ml-2">
+                        {keywordRankings.filter(k => k.ranking_position && k.ranking_position <= 10).length}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        of {keywordRankings.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2">
+                    <div>
+                      <span className="text-sm font-medium">Search Intent</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">Most common type</p>
+                    </div>
+                    <Badge variant="outline" className="capitalize ml-2">
+                      {(() => {
+                        const intents = keywordRankings
+                          .map(k => k.intent)
+                          .filter(Boolean)
+                          .reduce((acc, intent) => {
+                            acc[intent!] = (acc[intent!] || 0) + 1;
+                            return acc;
+                          }, {} as Record<string, number>);
+                        return Object.entries(intents).sort((a, b) => b[1] - a[1])[0]?.[0] || 'No data';
+                      })()}
+                    </Badge>
+                  </div>
                 </div>
               </Card>
             </div>

@@ -227,7 +227,8 @@ async function publishToWordPress(blog: any, post: any): Promise<string> {
     content: post.content,
     excerpt: post.excerpt || "",
     status: "publish",
-    featured_media: featuredImageId, // Add featured image if available
+    featured_media: featuredImageId, // WordPress REST API field for featured image
+    featured_image: featuredImageId, // Alternative field some WordPress installs use
     meta: {
       _yoast_wpseo_title: post.meta_title || post.title, // For Yoast SEO
       _yoast_wpseo_metadesc: post.meta_description || post.excerpt || "", // For Yoast SEO
@@ -301,20 +302,55 @@ async function publishToWordPress(blog: any, post: any): Promise<string> {
 
 async function uploadShopifyImage(blog: any, imageUrl: string): Promise<string | null> {
   try {
-    // Fetch the image
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+    console.log("Attempting to upload image to Shopify:", imageUrl);
+
+    // First validate the image URL
+    if (!imageUrl.startsWith('http')) {
+      console.error("Invalid image URL format:", imageUrl);
+      return null;
     }
 
+    // Fetch the image with timeout
+    console.log("Fetching image content...");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    const imageResponse = await fetch(imageUrl, { 
+      signal: controller.signal 
+    }).finally(() => clearTimeout(timeoutId));
+
+    if (!imageResponse.ok) {
+      console.error(`Failed to fetch image: ${imageResponse.status} - ${imageResponse.statusText}`);
+      return null;
+    }
+
+    // Validate content type
+    const contentType = imageResponse.headers.get('content-type');
+    if (!contentType || !contentType.startsWith('image/')) {
+      console.error("Invalid content type for image:", contentType);
+      return null;
+    }
+
+    // Get file extension from content type
+    const ext = contentType.split('/')[1] || 'jpg';
+
     // Convert image to base64
+    console.log("Converting image to base64...");
     const imageBuffer = await imageResponse.arrayBuffer();
     const base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
 
     // Upload to Shopify
     const credentials = blog.cms_credentials;
-    const apiUrl = `${blog.cms_site_url}/admin/api/2024-01/articles/images.json`;
+    if (!credentials || !credentials.access_token) {
+      console.error("Missing Shopify credentials");
+      return null;
+    }
 
+    // Ensure URL is properly formatted
+    const baseUrl = blog.cms_site_url.replace(/\/$/, '');
+    const apiUrl = `${baseUrl}/admin/api/2024-01/articles/images.json`;
+
+    console.log("Uploading to Shopify...");
     const uploadResponse = await fetch(apiUrl, {
       method: "POST",
       headers: {
@@ -324,20 +360,35 @@ async function uploadShopifyImage(blog: any, imageUrl: string): Promise<string |
       body: JSON.stringify({
         image: {
           attachment: base64Image,
-          filename: `featured-image-${Date.now()}.jpg`
+          filename: `featured-image-${Date.now()}.${ext}`
         }
       })
     });
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
-      throw new Error(`Shopify image upload failed: ${uploadResponse.status} - ${errorText}`);
+      console.error("Shopify upload failed:", {
+        status: uploadResponse.status,
+        statusText: uploadResponse.statusText,
+        error: errorText
+      });
+      return null;
     }
 
     const responseData = await uploadResponse.json();
+    if (!responseData.image || !responseData.image.attachment) {
+      console.error("Invalid response from Shopify:", responseData);
+      return null;
+    }
+
+    console.log("Successfully uploaded image to Shopify");
     return responseData.image.attachment;
   } catch (error) {
-    console.error("Error uploading image to Shopify:", error);
+    console.error("Error uploading image to Shopify:", {
+      error: error.message,
+      stack: error.stack,
+      imageUrl
+    });
     return null;
   }
 }
@@ -372,7 +423,9 @@ async function uploadWordPressMedia(blog: any, imageUrl: string): Promise<number
   }
 
   const imageBuffer = await imageResponse.arrayBuffer();
-  const filename = `featured-image-${Date.now()}.jpg`;
+  // Get the file extension from the URL or default to jpg
+  const fileExtension = imageUrl.split('.').pop()?.toLowerCase() || 'jpg';
+  const filename = `featured-image-${Date.now()}.${fileExtension}`;
 
   // Upload to WordPress
   const baseUrl = blog.cms_site_url.replace(/\/$/, '');
@@ -380,11 +433,18 @@ async function uploadWordPressMedia(blog: any, imageUrl: string): Promise<number
   const authHeader = `Basic ${btoa(`${username}:${password}`)}`;
 
   console.log("Uploading to WordPress media library:", mediaUrl);
+  console.log("Image filename:", filename);
+  
+  // Determine content type based on file extension
+  const contentType = fileExtension === 'png' ? 'image/png' : 
+                     fileExtension === 'gif' ? 'image/gif' : 
+                     'image/jpeg';
+
   const uploadResponse = await fetch(mediaUrl, {
     method: "POST",
     headers: {
       "Authorization": authHeader,
-      "Content-Type": "image/jpeg",
+      "Content-Type": contentType,
       "Content-Disposition": `attachment; filename=${filename}`
     },
     body: imageBuffer
@@ -395,7 +455,17 @@ async function uploadWordPressMedia(blog: any, imageUrl: string): Promise<number
     throw new Error(`WordPress media upload failed: ${uploadResponse.status} - ${errorText}`);
   }
 
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(`WordPress media upload failed (${uploadResponse.status}): ${errorText}`);
+  }
+
   const mediaData = await uploadResponse.json();
+  console.log("WordPress media upload response:", mediaData);
+
+  if (!mediaData.id) {
+    throw new Error("WordPress media upload succeeded but no media ID was returned");
+  }
   console.log("Media upload successful. ID:", mediaData.id);
   
   return mediaData.id;
@@ -491,16 +561,78 @@ async function publishToShopify(blog: any, post: any): Promise<string> {
   
   // First, handle the featured image if available
   let imageId = null;
+  let imageWarning = null;
   if (post.featured_image) {
     try {
       imageId = await uploadShopifyImage(blog, post.featured_image);
-      console.log(`Successfully uploaded image to Shopify. Image ID: ${imageId}`);
+      if (imageId) {
+        console.log(`Successfully uploaded image to Shopify. Image ID: ${imageId}`);
+      } else {
+        imageWarning = "Featured image could not be uploaded to Shopify";
+        console.warn(imageWarning);
+      }
     } catch (error) {
       console.error("Failed to upload image to Shopify:", error);
+      imageWarning = "Error uploading featured image to Shopify";
     }
   }
 
-  const apiUrl = `${blog.cms_site_url}/admin/api/2024-01/blogs/${credentials.blog_id}/articles.json`;
+  // Validate and format the site URL
+  if (!blog.cms_site_url.startsWith('https://')) {
+    blog.cms_site_url = 'https://' + blog.cms_site_url.replace(/^http:\/\//, '');
+  }
+  blog.cms_site_url = blog.cms_site_url.replace(/\/$/, '');
+
+  console.log("Starting Shopify publish process...");
+  console.log("Store URL:", blog.cms_site_url);
+  
+  // First, verify store access
+  const shopUrl = `${blog.cms_site_url}/admin/api/2024-01/shop.json`;
+  const shopResponse = await fetch(shopUrl, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": credentials.access_token,
+    }
+  });
+
+  if (!shopResponse.ok) {
+    const shopError = await shopResponse.text();
+    console.error("Shopify shop access error:", {
+      status: shopResponse.status,
+      error: shopError,
+      url: shopUrl
+    });
+    throw new Error(`Cannot access Shopify store: ${shopResponse.status} - ${shopError}`);
+  }
+
+  // Get the list of blogs
+  console.log("Fetching Shopify blogs...");
+  const blogsUrl = `${blog.cms_site_url}/admin/api/2024-01/blogs.json`;
+  const blogsResponse = await fetch(blogsUrl, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": credentials.access_token,
+    }
+  });
+
+  if (!blogsResponse.ok) {
+    const blogsError = await blogsResponse.text();
+    console.error("Shopify blogs fetch error:", {
+      status: blogsResponse.status,
+      error: blogsError,
+      url: blogsUrl
+    });
+    throw new Error(`Failed to fetch Shopify blogs: ${blogsResponse.status} - ${blogsError}`);
+  }
+
+  const blogsData = await blogsResponse.json();
+  if (!blogsData.blogs || blogsData.blogs.length === 0) {
+    throw new Error("No blogs found in your Shopify store. Please create a blog first.");
+  }
+
+  // Use the first blog if blog_id is not specified
+  const blogId = credentials.blog_id || blogsData.blogs[0].id;
+  const apiUrl = `${blog.cms_site_url}/admin/api/2024-01/blogs/${blogId}/articles.json`;
 
   const articleData: any = {
     article: {
@@ -530,23 +662,67 @@ async function publishToShopify(blog: any, post: any): Promise<string> {
     articleData.article.image = { attachment: imageId };
   }
 
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": credentials.access_token,
-    },
-    body: JSON.stringify(articleData),
+  console.log("Publishing article to Shopify...", {
+    url: apiUrl,
+    title: post.title,
+    blogId: blogId
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Shopify API error: ${response.status} - ${errorText}`);
-  }
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": credentials.access_token,
+      },
+      body: JSON.stringify(articleData),
+    });
 
-  const data = await response.json();
-  console.log(`Published to Shopify: ${data.article.id}`);
-  return data.article.id.toString();
+    const responseText = await response.text();
+    console.log("Shopify API response:", {
+      status: response.status,
+      body: responseText
+    });
+
+    if (!response.ok) {
+      throw new Error(`Shopify API error (${response.status}): ${responseText}`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`Invalid JSON response from Shopify: ${responseText}`);
+    }
+
+    if (!data.article || !data.article.id) {
+      throw new Error(`Unexpected Shopify response format: ${JSON.stringify(data)}`);
+    }
+
+    console.log(`Successfully published to Shopify:`, {
+      articleId: data.article.id,
+      title: data.article.title,
+      url: data.article.url,
+      imageStatus: imageWarning ? 'warning' : 'success'
+    });
+
+    // Return ID and include warning if image upload failed
+    if (imageWarning) {
+      return {
+        id: data.article.id.toString(),
+        warning: imageWarning
+      };
+    }
+    
+    return data.article.id.toString();
+  } catch (error: any) {
+    console.error("Error publishing to Shopify:", {
+      error: error.message,
+      stack: error.stack,
+      articleData: articleData
+    });
+    throw error;
+  }
 }
 
 async function publishToHubSpot(blog: any, post: any): Promise<string> {

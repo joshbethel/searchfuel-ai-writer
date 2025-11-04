@@ -134,6 +134,14 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
           username: connectionData.username,
           password: connectionData.password,
         };
+      } else if (selectedPlatform === "shopify") {
+        if (!connectionData.accessToken) {
+          toast.error("Please provide your Shopify Admin API access token");
+          return;
+        }
+        credentials = {
+          access_token: connectionData.accessToken
+        };
       } else {
         credentials = {
           apiKey: connectionData.apiKey,
@@ -325,30 +333,35 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
           {selectedPlatform === "shopify" && (
             <>
               <div>
-                <Label htmlFor="apiKey">API Key *</Label>
+                <Label htmlFor="accessToken">Admin API Access Token *</Label>
                 <Input
-                  id="apiKey"
+                  id="accessToken"
                   type="password"
-                  placeholder="Enter your Shopify API key"
-                  value={connectionData.apiKey}
-                  onChange={(e) => setConnectionData({ ...connectionData, apiKey: e.target.value })}
+                  placeholder="Enter your Admin API access token"
+                  value={connectionData.accessToken}
+                  onChange={(e) => setConnectionData({ ...connectionData, accessToken: e.target.value })}
                   className="mt-1"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Get this from Shopify Admin → Apps → Develop apps → Create an app → API credentials
+                </p>
               </div>
-              <div>
-                <Label htmlFor="apiSecret">API Secret *</Label>
-                <Input
-                  id="apiSecret"
-                  type="password"
-                  placeholder="Enter your Shopify API secret"
-                  value={connectionData.apiSecret}
-                  onChange={(e) => setConnectionData({ ...connectionData, apiSecret: e.target.value })}
-                  className="mt-1"
-                />
+              <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-foreground mb-2">How to get your access token:</h4>
+                <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
+                  <li>Go to Shopify admin → Apps → Develop apps</li>
+                  <li>Click "Create an app"</li>
+                  <li>Name it (e.g., "SearchFuel Integration")</li>
+                  <li>Under "Configure Admin API access", enable:
+                    <ul className="list-disc list-inside ml-4 mt-1">
+                      <li>read_content, write_content (for blog posts)</li>
+                      <li>read_files, write_files (for images)</li>
+                    </ul>
+                  </li>
+                  <li>Install the app in your store</li>
+                  <li>Copy the "Admin API access token"</li>
+                </ol>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Create a private app in Shopify admin to get API credentials
-              </p>
             </>
           )}
 
