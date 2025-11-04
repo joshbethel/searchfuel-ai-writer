@@ -415,16 +415,39 @@ async function uploadWordPressMedia(blog: any, imageUrl: string): Promise<number
     throw new Error("WordPress credentials missing");
   }
 
-  // First, fetch the image data
-  console.log("Fetching image from URL:", imageUrl);
-  const imageResponse = await fetch(imageUrl);
-  if (!imageResponse.ok) {
-    throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+  // Handle image data - could be base64 data URL or regular URL
+  let imageBuffer: ArrayBuffer;
+  console.log("Processing image:", imageUrl.substring(0, 100));
+  
+  if (imageUrl.startsWith('data:')) {
+    // It's a base64 data URL
+    console.log("Decoding base64 image data");
+    const base64Data = imageUrl.split(',')[1];
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    imageBuffer = bytes.buffer;
+  } else {
+    // It's a regular URL, fetch it
+    console.log("Fetching image from URL");
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch image: ${imageResponse.status}`);
+    }
+    imageBuffer = await imageResponse.arrayBuffer();
   }
-
-  const imageBuffer = await imageResponse.arrayBuffer();
-  // Get the file extension from the URL or default to jpg
-  const fileExtension = imageUrl.split('.').pop()?.toLowerCase() || 'jpg';
+  // Get the file extension from the image data
+  let fileExtension = 'jpg'; // default
+  if (imageUrl.startsWith('data:image/')) {
+    // Extract format from data URL (e.g., data:image/png;base64,...)
+    const match = imageUrl.match(/data:image\/(\w+);/);
+    if (match) fileExtension = match[1];
+  } else {
+    // Extract from URL
+    fileExtension = imageUrl.split('.').pop()?.toLowerCase() || 'jpg';
+  }
   const filename = `featured-image-${Date.now()}.${fileExtension}`;
 
   // Upload to WordPress
@@ -453,11 +476,6 @@ async function uploadWordPressMedia(blog: any, imageUrl: string): Promise<number
   if (!uploadResponse.ok) {
     const errorText = await uploadResponse.text();
     throw new Error(`WordPress media upload failed: ${uploadResponse.status} - ${errorText}`);
-  }
-
-  if (!uploadResponse.ok) {
-    const errorText = await uploadResponse.text();
-    throw new Error(`WordPress media upload failed (${uploadResponse.status}): ${errorText}`);
   }
 
   const mediaData = await uploadResponse.json();
