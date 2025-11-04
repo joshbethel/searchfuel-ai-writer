@@ -72,7 +72,7 @@ serve(async (req) => {
       const chunk = chunks[chunkIndex];
       console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length} with ${chunk.length} keywords`);
       
-      const response = await fetch('https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live', {
+      const response = await fetch('https://api.dataforseo.com/v3/keywords_data/google/search_volume/live', {
         method: 'POST',
         headers: {
           'Authorization': 'Basic ' + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`),
@@ -80,10 +80,7 @@ serve(async (req) => {
         },
         body: JSON.stringify([{
           location_name: "United States",
-          keywords: chunk,
-          include_serp_info: false,
-          include_seed_keyword: true,
-          include_clickstream_data: true
+          keywords: chunk
         }])
       })
 
@@ -104,17 +101,20 @@ serve(async (req) => {
 
       interface DataForSEOResult {
         keyword: string;
+        // Fields for search_volume endpoint
+        search_volume?: number;
+        cpc?: number;
+        competition_level?: string | number;
+        monthly_searches?: MonthlySearch[];
+        // Optional fields from other endpoints (kept for flexibility)
+        keyword_difficulty?: number;
+        competition?: number | string;
         keyword_info?: {
           search_volume?: number;
           cpc?: number;
-          competition?: number;
+          competition?: number | string;
           monthly_searches?: MonthlySearch[];
         };
-        search_volume?: number;
-        keyword_difficulty?: number;
-        competition?: number;
-        cpc?: number;
-        monthly_searches?: MonthlySearch[];
         title?: string;
         description?: string;
       }
@@ -138,13 +138,13 @@ serve(async (req) => {
             const keyword = result.keyword.toLowerCase();
             
             // Extract data from either direct fields or keyword_info object
-            const searchVolume = result.keyword_info?.search_volume || result.search_volume;
-            const cpc = result.keyword_info?.cpc || result.cpc;
-            const competition: any = result.keyword_info?.competition || result.competition;
-            const monthlySearches = result.keyword_info?.monthly_searches || result.monthly_searches;
+            const searchVolume = result.search_volume ?? result.keyword_info?.search_volume;
+            const cpc = result.cpc ?? result.keyword_info?.cpc;
+            const competition: any = result.competition_level ?? result.competition ?? result.keyword_info?.competition;
+            const monthlySearches = result.monthly_searches ?? result.keyword_info?.monthly_searches;
             
             // Convert competition level to numeric difficulty (0-100)
-            let difficulty = result.keyword_difficulty || 50; // default to medium
+            let difficulty = result.keyword_difficulty ?? 50; // default to medium
             if (competition && typeof competition === 'string') {
               const compLower = competition.toLowerCase();
               if (compLower === 'low') difficulty = 25;
