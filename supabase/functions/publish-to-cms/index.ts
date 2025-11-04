@@ -167,6 +167,29 @@ serve(async (req: any) => {
   }
 });
 
+// Helper function to extract actual content from JSON-wrapped content
+function extractContent(rawContent: string): string {
+  if (!rawContent) return '';
+  
+  // Check if content is wrapped in ```json code blocks
+  if (rawContent.trim().startsWith('```json')) {
+    try {
+      // Extract JSON from code blocks
+      const jsonMatch = rawContent.match(/```json\s*\n([\s\S]*?)\n```/);
+      if (jsonMatch && jsonMatch[1]) {
+        const parsed = JSON.parse(jsonMatch[1]);
+        // Return the content field from the JSON
+        return parsed.content || rawContent;
+      }
+    } catch (e) {
+      console.error('Failed to parse JSON content:', e);
+    }
+  }
+  
+  // If not JSON-wrapped, return as is
+  return rawContent;
+}
+
 async function publishToWordPress(blog: any, post: any): Promise<string> {
   console.log(`Starting WordPress publishing for post: ${post.title}`);
   
@@ -221,10 +244,14 @@ async function publishToWordPress(blog: any, post: any): Promise<string> {
   console.log(`WordPress API URL: ${apiUrl}`);
   console.log(`Using username: ${username}`);
 
+  // Extract actual content from JSON-wrapped format
+  const actualContent = extractContent(post.content);
+  console.log(`Content extracted, length: ${actualContent.length} characters`);
+
   // Prepare post data with meta fields
   const postData = {
     title: post.title,
-    content: post.content,
+    content: actualContent,
     excerpt: post.excerpt || "",
     status: "publish",
     featured_media: featuredImageId, // WordPress REST API field for featured image
