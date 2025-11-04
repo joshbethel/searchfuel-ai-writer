@@ -12,15 +12,29 @@ const corsHeaders = {
   'Vary': 'Origin, Access-Control-Request-Headers',
 };
 
-// Expanded stopwords + generic terms to filter out
+// Comprehensive stopwords list - common words to filter out
 const STOPWORDS = new Set([
-  'the','and','a','an','in','on','for','with','to','of','is','are','was','were','it','this','that','by','from','as','at','or','be','we','you','your','our',
-  'has','have','had','will','can','may','more','most','some','such','very','than','then','these','those','into','over','only','also','other','any','all'
+  'the','and','a','an','in','on','for','with','to','of','is','are','was','were','it','this','that',
+  'by','from','as','at','or','be','we','you','your','our','their','them','they','he','she','i',
+  'me','my','mine','his','her','hers','its','us','ours','theirs','will','would','should','could',
+  'can','may','might','must','shall','do','does','did','have','has','had','am','been','being',
+  'into','through','during','before','after','above','below','up','down','out','off','over','under',
+  'again','further','then','once','here','there','when','where','why','how','all','both','each',
+  'few','more','most','other','some','such','no','nor','not','only','own','same','so','than',
+  'too','very','s','t','just','now','get','got','also','even','well','back','new','way','see',
+  'make','take','come','go','know','think','say','tell','give','use','find','want','look','work',
+  'feel','try','leave','call','put','mean','keep','let','begin','seem','help','show','need','move',
+  'one','two','three','every','much','many','lot','lots','bit','piece','part','end','start',
+  'page','post','article','blog','site','website','today','yesterday','tomorrow','day','week','month','year'
 ]);
 
-// Generic words to deprioritize (too broad for good ranking)
+// Generic/broad terms to deprioritize for better keyword specificity
 const GENERIC_TERMS = new Set([
-  'services','parts','material','production','system','process','quality','time','work','way','things','people','years','today'
+  'things','something','anything','everything','nothing','stuff','item','items','thing',
+  'guide','tips','ways','steps','methods','strategies','techniques','approaches','solutions',
+  'best','top','great','good','better','essential','important','key','main','major','primary',
+  'complete','comprehensive','ultimate','definitive','perfect','excellent','amazing','awesome',
+  'services','parts','material','production','system','process','quality','time','work','people','years'
 ]);
 
 function normalizeText(text: string) {
@@ -48,29 +62,36 @@ function extractHeadings(html: string): string[] {
 }
 
 function getNgrams(tokens: string[], n: number) {
+  if (n < 1) return [];
   const out: string[] = [];
+  
   for (let i = 0; i + n <= tokens.length; i++) {
     const slice = tokens.slice(i, i + n);
     const phrase = slice.join(' ');
     
-    // Skip phrases with too many stopwords
+    // Skip if too many stopwords (stricter filtering)
     const stopwordCount = slice.filter(t => STOPWORDS.has(t)).length;
-    if (stopwordCount >= Math.ceil(n / 2)) continue;
+    if (stopwordCount > Math.floor(n / 2)) continue;
     
-    // Skip if starts or ends with stopword
-    if (STOPWORDS.has(slice[0]) || STOPWORDS.has(slice[slice.length - 1])) continue;
+    // Skip if too many generic terms
+    const genericCount = slice.filter(t => GENERIC_TERMS.has(t)).length;
+    if (genericCount > 1) continue;
     
-    // For longer phrases (3+ words), require at least one meaningful term
+    // Skip if any token is too short
+    if (slice.some(t => t.length < 2)) continue;
+    
+    // Skip if starts or ends with stopword or generic term (stronger filter)
+    if (STOPWORDS.has(slice[0]) || STOPWORDS.has(slice[n - 1])) continue;
+    if (GENERIC_TERMS.has(slice[0]) || GENERIC_TERMS.has(slice[n - 1])) continue;
+    
+    // For longer phrases (3+ words), require meaningful specific terms
     if (n >= 3) {
       const hasSpecificTerm = slice.some(t => !GENERIC_TERMS.has(t) && !STOPWORDS.has(t) && t.length > 4);
       if (!hasSpecificTerm) continue;
     }
     
-    // For 2-word phrases, both words should be meaningful
-    if (n === 2) {
-      const bothMeaningful = slice.every(t => !STOPWORDS.has(t) && t.length > 2);
-      if (!bothMeaningful) continue;
-    }
+    // Skip phrases that are too long (suggests low quality)
+    if (phrase.length > 50) continue;
     
     out.push(phrase);
   }
@@ -98,6 +119,15 @@ function isQualityKeyword(keyword: string): boolean {
   
   // 5+ word phrases are too long, but allow if very specific
   return wordCount === 5 && words.every(w => !STOPWORDS.has(w));
+}
+
+// Helper: Calculate Jaccard similarity between two keywords (0-1 range)
+function calculateSimilarity(a: string, b: string): number {
+  const wordsA = new Set(a.toLowerCase().split(' '));
+  const wordsB = new Set(b.toLowerCase().split(' '));
+  const intersection = new Set([...wordsA].filter(x => wordsB.has(x)));
+  const union = new Set([...wordsA, ...wordsB]);
+  return intersection.size / union.size;
 }
 
 serve(async (req) => {
@@ -222,22 +252,36 @@ serve(async (req) => {
       candidates.push({ keyword: kw, score: freq * 4.5, source: 'body' });
     }
 
-    // ===== Strategic placement boosts =====
+    // ===== Strategic placement boosts (improved weighting) =====
+    const titleTokens = new Set(titleNorm.split(' ').filter(Boolean));
+    const headingTokens = new Set(headingsText.split(' ').filter(Boolean));
+    const firstParaTokens = new Set(firstPara.split(' ').filter(Boolean));
+    
     for (const c of candidates) {
-      // Title keywords get massive boost
+      const kwTokens = c.keyword.split(' ');
+      
+      // TITLE: Most important signal - exact match gets highest boost
       if (titleNorm.includes(c.keyword)) {
-        c.score *= 4.5;
+        c.score *= 5.0;  // Full phrase in title
+        c.source = 'title';
+      } else if (kwTokens.some(t => titleTokens.has(t))) {
+        c.score *= 3.0;  // Partial match in title
         c.source = 'title';
       }
-      // Heading keywords get strong boost
+      // HEADINGS: Strong signal of topic importance
       else if (headingsText.includes(c.keyword)) {
-        c.score *= 3.5;
+        c.score *= 3.5;  // Full phrase in heading
+        c.source = 'heading';
+      } else if (kwTokens.some(t => headingTokens.has(t))) {
+        c.score *= 2.2;  // Partial match in heading
         c.source = 'heading';
       }
-      // First paragraph gets good boost
+      // FIRST PARAGRAPH: Good signal for main topic
       else if (firstPara.includes(c.keyword)) {
-        c.score *= 2.5;
+        c.score *= 2.0;  // Full phrase in intro
         c.source = 'intro';
+      } else if (kwTokens.some(t => firstParaTokens.has(t))) {
+        c.score *= 1.5;  // Partial match in intro
       }
     }
 
@@ -315,10 +359,17 @@ serve(async (req) => {
             }
           }
           
-          // Filter to only quality, rankable keywords
+          // Filter to only quality, rankable keywords with deduplication
+          const seenSimilar = new Set<string>();
           const qualityKeywords = topCandidates.filter((kw: any) => {
             // First check: is it structurally a quality keyword?
             if (!isQualityKeyword(kw.keyword)) return false;
+            
+            // Check for similarity with already-selected keywords
+            for (const seen of seenSimilar) {
+              const similarity = calculateSimilarity(kw.keyword, seen);
+              if (similarity > 0.75) return false;  // Too similar, skip
+            }
             
             // If has SEO stats, apply stricter filters
             if (kw.seoStats) {
@@ -332,6 +383,7 @@ serve(async (req) => {
               if (kw.seoStats.intent === 'navigational' && kw.seoStats.searchVolume < 500) return false;
             }
             
+            seenSimilar.add(kw.keyword);
             return true;
           });
           
@@ -357,8 +409,8 @@ serve(async (req) => {
             return b.score - a.score;
           });
           
-          // Take top 25 diverse keywords
-          extracted = qualityKeywords.slice(0, 25);
+          // Take top 30 diverse, high-quality keywords (increased coverage)
+          extracted = qualityKeywords.slice(0, 30);
           
           // Normalize scores to 0-1 range
           const maxScore = extracted[0]?.score || 1;
