@@ -389,38 +389,6 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                     </tbody>
                   </table>
                 </div>
-
-                {keywords.map((k) => k.seoStats?.trendsData && k.seoStats.trendsData.length > 0 && (
-                  <div key={k.keyword} className="mt-4 p-4 border rounded-lg bg-card/50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-sm font-medium">{k.keyword}</span>
-                      <span className="text-xs text-muted-foreground">Search Volume Trend</span>
-                    </div>
-                    <div className="flex items-end gap-1 h-12">
-                      {k.seoStats.trendsData.map((month, i) => {
-                        const maxVolume = Math.max(...k.seoStats!.trendsData!.map(m => m.volume));
-                        const height = `${(month.volume / maxVolume * 100)}%`;
-                        return (
-                          <TooltipProvider key={i}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div 
-                                  className="flex-1 bg-blue-500/20 hover:bg-blue-500/30 transition-colors rounded-t"
-                                  style={{ height }}
-                                />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">
-                                  {month.month}: {month.volume.toLocaleString()} searches
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
               </div>
 
               {/* Topics Section */}

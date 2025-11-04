@@ -60,10 +60,16 @@ function getNgrams(tokens: string[], n: number) {
     // Skip if starts or ends with stopword
     if (STOPWORDS.has(slice[0]) || STOPWORDS.has(slice[slice.length - 1])) continue;
     
-    // For longer phrases (3-4 words), prefer those with at least one specific term
+    // For longer phrases (3+ words), require at least one meaningful term
     if (n >= 3) {
-      const hasSpecificTerm = slice.some(t => !GENERIC_TERMS.has(t) && !STOPWORDS.has(t) && t.length > 3);
+      const hasSpecificTerm = slice.some(t => !GENERIC_TERMS.has(t) && !STOPWORDS.has(t) && t.length > 4);
       if (!hasSpecificTerm) continue;
+    }
+    
+    // For 2-word phrases, both words should be meaningful
+    if (n === 2) {
+      const bothMeaningful = slice.every(t => !STOPWORDS.has(t) && t.length > 2);
+      if (!bothMeaningful) continue;
     }
     
     out.push(phrase);
@@ -71,18 +77,27 @@ function getNgrams(tokens: string[], n: number) {
   return out;
 }
 
-// Check if keyword is SEO-worthy based on metrics
-function isRankableKeyword(keyword: string, stats: any): boolean {
-  // Must have some search volume
-  if (!stats?.searchVolume || stats.searchVolume < 100) return false;
+// Check if keyword is SEO-worthy based on structure and potential
+function isQualityKeyword(keyword: string): boolean {
+  const words = keyword.split(' ');
+  const wordCount = words.length;
   
-  // Prefer lower difficulty (easier to rank)
-  if (stats.keywordDifficulty && stats.keywordDifficulty > 70) return false;
+  // Prefer 2-4 word phrases (long-tail sweet spot)
+  if (wordCount >= 2 && wordCount <= 4) return true;
   
-  // Prefer commercial/informational intent over navigational
-  if (stats.intent === 'navigational' && stats.searchVolume < 1000) return false;
+  // Single words must be:
+  // - Not generic
+  // - At least 5 characters
+  // - Not a stopword
+  if (wordCount === 1) {
+    return !GENERIC_TERMS.has(keyword) && 
+           !STOPWORDS.has(keyword) && 
+           keyword.length >= 5 &&
+           /^[a-z]+$/.test(keyword);
+  }
   
-  return true;
+  // 5+ word phrases are too long, but allow if very specific
+  return wordCount === 5 && words.every(w => !STOPWORDS.has(w));
 }
 
 serve(async (req) => {
@@ -162,18 +177,19 @@ serve(async (req) => {
     // ===== Build candidate keywords with frequency scoring =====
     const candidates: Array<{ keyword: string; score: number; source: string }> = [];
 
-    // 1. Unigrams - only meaningful, non-generic words
+    // 1. Unigrams - only high-quality single words
     const unigramFreq: Record<string, number> = {};
     for (const tok of filteredTokens) {
-      if (GENERIC_TERMS.has(tok) || tok.length < 5) continue;
-      if (!/^[a-z]+$/.test(tok)) continue; // Skip numbers/special chars
+      if (GENERIC_TERMS.has(tok) || tok.length < 6) continue; // Stricter: 6+ chars
+      if (!/^[a-z]+$/.test(tok)) continue;
       unigramFreq[tok] = (unigramFreq[tok] || 0) + 1;
     }
     for (const [kw, freq] of Object.entries(unigramFreq)) {
-      candidates.push({ keyword: kw, score: freq * 0.3, source: 'body' });
+      // Lower weight for single words to prioritize phrases
+      candidates.push({ keyword: kw, score: freq * 0.25, source: 'body' });
     }
 
-    // 2. Bigrams - valuable for SEO
+    // 2. Bigrams - BEST for SEO (sweet spot for ranking)
     const bigrams = getNgrams(filteredTokens, 2);
     const bigramFreq: Record<string, number> = {};
     for (const bg of bigrams) {
@@ -181,21 +197,22 @@ serve(async (req) => {
     }
     for (const [kw, freq] of Object.entries(bigramFreq)) {
       const hasGeneric = kw.split(' ').some(w => GENERIC_TERMS.has(w));
-      const scoreMultiplier = hasGeneric ? 1.2 : 2.5;
+      // Heavy boost for 2-word phrases without generic terms
+      const scoreMultiplier = hasGeneric ? 1.5 : 3.5;
       candidates.push({ keyword: kw, score: freq * scoreMultiplier, source: 'body' });
     }
 
-    // 3. Trigrams - excellent for long-tail SEO
+    // 3. Trigrams - excellent for specific long-tail
     const trigrams = getNgrams(filteredTokens, 3);
     const trigramFreq: Record<string, number> = {};
     for (const tg of trigrams) {
       trigramFreq[tg] = (trigramFreq[tg] || 0) + 1;
     }
     for (const [kw, freq] of Object.entries(trigramFreq)) {
-      candidates.push({ keyword: kw, score: freq * 3.5, source: 'body' });
+      candidates.push({ keyword: kw, score: freq * 4.0, source: 'body' });
     }
 
-    // 4. 4-grams - very specific long-tail keywords
+    // 4. 4-grams - very specific long-tail (use sparingly)
     const fourgrams = getNgrams(filteredTokens, 4);
     const fourgramFreq: Record<string, number> = {};
     for (const fg of fourgrams) {
@@ -298,32 +315,50 @@ serve(async (req) => {
             }
           }
           
-          // Filter to only rankable keywords with good metrics
-          const rankableKeywords = topCandidates.filter((kw: any) => {
-            // Keep keywords with SEO stats that pass rankability check
-            if (kw.seoStats && isRankableKeyword(kw.keyword, kw.seoStats)) return true;
+          // Filter to only quality, rankable keywords
+          const qualityKeywords = topCandidates.filter((kw: any) => {
+            // First check: is it structurally a quality keyword?
+            if (!isQualityKeyword(kw.keyword)) return false;
             
-            // Keep multi-word keywords even without stats (likely long-tail)
-            if (kw.keyword.split(' ').length >= 2) return true;
+            // If has SEO stats, apply stricter filters
+            if (kw.seoStats) {
+              // Must have minimum search volume
+              if (!kw.seoStats.searchVolume || kw.seoStats.searchVolume < 50) return false;
+              
+              // Prefer lower difficulty (if available)
+              if (kw.seoStats.keywordDifficulty && kw.seoStats.keywordDifficulty > 80) return false;
+              
+              // Avoid pure navigational with low volume
+              if (kw.seoStats.intent === 'navigational' && kw.seoStats.searchVolume < 500) return false;
+            }
             
-            // Single words must have stats or be very specific
-            return kw.keyword.length > 6;
+            return true;
           });
           
-          // Re-sort by enhanced scores, prioritizing longer phrases
-          rankableKeywords.sort((a: any, b: any) => {
+          // Re-sort by enhanced scores, prioritizing quality long-tail keywords
+          qualityKeywords.sort((a: any, b: any) => {
             const aWords = a.keyword.split(' ').length;
             const bWords = b.keyword.split(' ').length;
             
-            // Prefer 2-4 word phrases over single words
-            if (aWords >= 2 && aWords <= 4 && bWords === 1) return -1;
-            if (bWords >= 2 && bWords <= 4 && aWords === 1) return 1;
+            // Strongly prefer 2-3 word phrases (SEO sweet spot)
+            if (aWords >= 2 && aWords <= 3 && bWords === 1) return -1;
+            if (bWords >= 2 && bWords <= 3 && aWords === 1) return 1;
+            
+            // Within same word count, prefer keywords with better metrics
+            if (aWords === bWords && a.seoStats && b.seoStats) {
+              // Calculate ranking potential score
+              const aRankScore = (a.seoStats.searchVolume || 0) / Math.max(1, a.seoStats.keywordDifficulty || 50);
+              const bRankScore = (b.seoStats.searchVolume || 0) / Math.max(1, b.seoStats.keywordDifficulty || 50);
+              if (Math.abs(aRankScore - bRankScore) > 10) {
+                return bRankScore - aRankScore;
+              }
+            }
             
             return b.score - a.score;
           });
           
-          // Take top 20 keywords
-          extracted = rankableKeywords.slice(0, 20);
+          // Take top 25 diverse keywords
+          extracted = qualityKeywords.slice(0, 25);
           
           // Normalize scores to 0-1 range
           const maxScore = extracted[0]?.score || 1;
