@@ -29,7 +29,12 @@ function normalizeText(text: string) {
 function getNgrams(tokens: string[], n: number) {
   const out: string[] = [];
   for (let i = 0; i + n <= tokens.length; i++) {
-    out.push(tokens.slice(i, i + n).join(' '));
+    const phrase = tokens.slice(i, i + n).join(' ');
+    // Skip phrases with too many stopwords
+    const stopwordCount = tokens.slice(i, i + n).filter(t => STOPWORDS.has(t)).length;
+    if (stopwordCount < n / 2) {
+      out.push(phrase);
+    }
   }
   return out;
 }
@@ -96,61 +101,151 @@ serve(async (req) => {
     }
 
     const normalizedContent = normalizeText((title + ' ' + content).slice(0, 20000));
-    const tokens = normalizedContent.split(' ').filter(Boolean).filter(t => !STOPWORDS.has(t) && t.length > 1);
+    const allTokens = normalizedContent.split(' ').filter(Boolean);
+    const tokens = allTokens.filter(t => !STOPWORDS.has(t) && t.length > 2);
 
     const freq: Record<string, number> = {};
+    
+    // Count unigrams with better filtering
     for (const unigram of tokens) {
+      // Skip pure numbers and single characters
+      if (!/^[a-z]+$/.test(unigram) || unigram.length < 3) continue;
       freq[unigram] = (freq[unigram] || 0) + 1;
     }
 
+    // Extract bigrams and trigrams for more context
     const bigrams = getNgrams(tokens, 2);
     for (const bigram of bigrams) {
-      freq[bigram] = (freq[bigram] || 0) + 2;
+      if (bigram.length > 5) { // Ensure meaningful phrases
+        freq[bigram] = (freq[bigram] || 0) + 3; // Higher weight for phrases
+      }
+    }
+    
+    const trigrams = getNgrams(tokens, 3);
+    for (const trigram of trigrams) {
+      if (trigram.length > 10) { // Ensure meaningful longer phrases
+        freq[trigram] = (freq[trigram] || 0) + 4; // Even higher weight for longer phrases
+      }
     }
 
+    // Boost title keywords significantly
     const normalizedTitle = normalizeText(title);
-    const titleTokens = new Set(normalizedTitle.split(' ').filter(Boolean));
+    const titleTokens = new Set(normalizedTitle.split(' ').filter(Boolean).filter(t => !STOPWORDS.has(t)));
     for (const t of titleTokens) {
-      if (freq[t]) freq[t] = freq[t] * 1.5;
+      if (freq[t]) freq[t] = freq[t] * 2.5; // Stronger boost for title keywords
+    }
+    
+    // Boost keywords that appear in first paragraph (more relevant)
+    const firstPara = normalizedContent.split('.')[0] || '';
+    const firstParaTokens = new Set(firstPara.split(' ').filter(Boolean).filter(t => !STOPWORDS.has(t)));
+    for (const t of firstParaTokens) {
+      if (freq[t]) freq[t] = freq[t] * 1.3;
     }
 
+    // Create array and sort by score with diversity
     const items = Object.entries(freq).map(([keyword, count]) => ({ keyword, score: count }));
     items.sort((a, b) => b.score - a.score);
 
-    const top = items.slice(0, 15);
+    // Keep top 20 for better coverage
+    const top = items.slice(0, 20);
     const maxScore = top[0]?.score || 1;
-    const extracted = top.map((it) => ({ keyword: it.keyword, score: Math.round((it.score / maxScore) * 100) / 100, source: titleTokens.has(it.keyword) ? 'title' : 'body' }));
+    
+    // Filter out very similar keywords to ensure diversity
+    const extracted: any[] = [];
+    const seenWords = new Set<string>();
+    
+    for (const it of top) {
+      const words = it.keyword.split(' ');
+      const mainWord = words[0];
+      
+      // Skip if we already have a very similar keyword
+      if (seenWords.has(mainWord) && words.length === 1) continue;
+      
+      words.forEach(w => seenWords.add(w));
+      extracted.push({ 
+        keyword: it.keyword, 
+        score: Math.round((it.score / maxScore) * 100) / 100, 
+        source: titleTokens.has(it.keyword) ? 'title' : 'body' 
+      });
+      
+      if (extracted.length >= 15) break;
+    }
 
+    // Generate diverse recommended topics with better templates
+    const topicTemplates = [
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)}: Complete Guide for 2024`,
+      (kw: string) => `How to Master ${kw.charAt(0).toUpperCase() + kw.slice(1)}`,
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)}: Best Practices and Tips`,
+      (kw: string) => `Understanding ${kw.charAt(0).toUpperCase() + kw.slice(1)}: A Deep Dive`,
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)} Explained: What You Need to Know`,
+      (kw: string) => `Top Strategies for ${kw.charAt(0).toUpperCase() + kw.slice(1)}`
+    ];
+    
     const recommended = extracted.slice(0, 6).map((k: any, i: number) => ({
-      topic: `${k.keyword.charAt(0).toUpperCase() + k.keyword.slice(1)}: A Practical Guide`,
-      score: k.score * (1 - i * 0.05),
-      reason: `High relevance based on post content and title`
+      topic: topicTemplates[i % topicTemplates.length](k.keyword),
+      score: k.score * (1 - i * 0.04),
+      reason: `High search potential and relevance to your content`
     }));
 
-    // Try to enrich using keywords table
+    // Fetch SEO data from DataForSEO for all extracted keywords
     try {
-      const keywordNames = top.map((t) => t.keyword);
+      const keywordNames = extracted.map((ex: any) => ex.keyword);
+      
       if (keywordNames.length > 0) {
-        const { data: kwData } = await supabase
-          .from('keywords')
-          .select('keyword,difficulty')
-          .in('keyword', keywordNames);
-
-        const diffMap: Record<string, number | null> = {};
-        for (const k of kwData || []) {
-          diffMap[k.keyword.toLowerCase()] = k.difficulty ?? null;
-        }
-
-        for (const ex of extracted) {
-          const d = diffMap[ex.keyword.toLowerCase()];
-          if (d !== null && d !== undefined) {
-            const boost = 1 + (1 - Math.min(100, d) / 100) * 0.15;
-            ex.score = Math.round(ex.score * boost * 100) / 100;
+        console.log('Fetching SEO data for keywords:', keywordNames);
+        
+        // Call the fetch-seo-data function
+        const seoResponse = await fetch(`${SUPABASE_URL}/functions/v1/fetch-seo-data`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          },
+          body: JSON.stringify({ keywords: keywordNames })
+        });
+        
+        if (seoResponse.ok) {
+          const seoData = await seoResponse.json();
+          console.log('Received SEO data:', Object.keys(seoData).length, 'keywords');
+          
+          // Enrich extracted keywords with SEO data
+          for (const ex of extracted) {
+            const stats = seoData[ex.keyword.toLowerCase()];
+            if (stats) {
+              ex.seoStats = {
+                searchVolume: stats.searchVolume || 0,
+                keywordDifficulty: stats.keywordDifficulty || 0,
+                cpc: stats.cpc || 0,
+                competition: stats.competition || 0,
+                intent: stats.intent || 'informational',
+                trendsData: stats.trendsData || []
+              };
+              
+              // Boost score based on search volume and low difficulty
+              if (stats.searchVolume > 0) {
+                const volumeBoost = Math.log10(stats.searchVolume + 1) / 5; // Logarithmic boost
+                const difficultyPenalty = (stats.keywordDifficulty || 50) / 200; // Penalty for high difficulty
+                ex.score = Math.round((ex.score * (1 + volumeBoost - difficultyPenalty)) * 100) / 100;
+              }
+            }
           }
+          
+          // Re-sort by enhanced scores
+          extracted.sort((a: any, b: any) => b.score - a.score);
+          
+          // Also enrich recommended topics
+          for (const rec of recommended) {
+            const baseKw = extracted.find((ex: any) => rec.topic.toLowerCase().includes(ex.keyword.toLowerCase()));
+            if (baseKw?.seoStats) {
+              (rec as any).seoStats = baseKw.seoStats;
+            }
+          }
+        } else {
+          console.warn('SEO data fetch failed:', await seoResponse.text());
         }
       }
     } catch (err) {
-      console.warn('Could not fetch keyword difficulties for enrichment:', err);
+      console.warn('Could not fetch SEO data for enrichment:', err);
     }
 
     // Update DB rows if ids provided. If the DB is missing the JSONB columns

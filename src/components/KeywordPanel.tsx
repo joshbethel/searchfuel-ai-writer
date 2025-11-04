@@ -779,7 +779,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
     }
   }
 
-  // Lightweight client-side extractor fallback (rule-based: unigrams + bigrams, stopwords, title boost)
+  // Lightweight client-side extractor fallback (rule-based: unigrams + bigrams + trigrams, stopwords, title boost)
   function clientExtract(text: string, title = ''): ExtractedData {
     // Comprehensive stopwords list
     const stopwords = new Set([
@@ -814,6 +814,20 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       
       return true;
     };
+    
+    // Helper to generate n-grams with stopword filtering
+    const getNgrams = (tokens: string[], n: number): string[] => {
+      const out: string[] = [];
+      for (let i = 0; i + n <= tokens.length; i++) {
+        const phrase = tokens.slice(i, i + n).join(' ');
+        const stopwordCount = tokens.slice(i, i + n).filter(t => stopwords.has(t)).length;
+        // Skip if too many stopwords
+        if (stopwordCount < n / 2 && phrase.length > 5) {
+          out.push(phrase);
+        }
+      }
+      return out;
+    };
 
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
     const ntext = normalize(text);
@@ -823,155 +837,95 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       .filter(isValidKeyword);
 
     const counts = new Map<string, number>();
-    for (const w of words) counts.set(w, (counts.get(w) || 0) + 1);
+    
+    // Count unigrams
+    for (const w of words) {
+      if (w.length >= 3) {
+        counts.set(w, (counts.get(w) || 0) + 1);
+      }
+    }
 
-    // Extract and score bigrams and trigrams
+    // Extract and score bigrams and trigrams with higher weights
     for (let n = 2; n <= 3; n++) {
-      for (let i = 0; i + n <= words.length; i++) {
-        const phrase = words.slice(i, i + n).join(' ');
-        // Check if phrase makes sense (no stopwords at start/end)
-        if (!stopwords.has(words[i]) && !stopwords.has(words[i + n - 1])) {
-          counts.set(phrase, (counts.get(phrase) || 0) + n); // Boost multi-word phrases
-        }
+      const ngrams = getNgrams(words, n);
+      for (const phrase of ngrams) {
+        counts.set(phrase, (counts.get(phrase) || 0) + (n + 1)); // Boost multi-word phrases
       }
     }
 
     const titleNorm = normalize(title);
+    const titleWords = new Set(titleNorm.split(' ').filter(Boolean).filter(w => !stopwords.has(w)));
+    
+    // Boost title keywords significantly
+    for (const w of titleWords) {
+      if (counts.has(w)) {
+        counts.set(w, counts.get(w)! * 2.5);
+      }
+    }
+    
+    // Boost first paragraph keywords (more relevant)
+    const firstPara = ntext.split('.')[0] || '';
+    const firstParaWords = new Set(firstPara.split(' ').filter(Boolean).filter(w => !stopwords.has(w)));
+    for (const w of firstParaWords) {
+      if (counts.has(w)) {
+        counts.set(w, counts.get(w)! * 1.3);
+      }
+    }
 
     // Calculate TF-IDF like scoring
     const totalWords = words.length;
     const entries = Array.from(counts.entries())
-      .map(([keyword, cnt]) => {
-        let score = cnt;
+      .map(([kw, freq]) => {
+        // Calculate term frequency
+        const tf = freq / Math.max(1, totalWords);
         
-        // Boost factors
-        if (titleNorm && titleNorm.includes(keyword)) score *= 1.5; // Title presence boost
-        if (keyword.includes(' ')) score *= 1.2; // Multi-word phrase boost
-        if (/^[a-z]/.test(keyword)) score *= 1.1; // Start with letter boost
+        // Penalize very common words slightly
+        const idf = Math.log((totalWords + 1) / (freq + 1));
         
-        // Normalize by length to prevent long phrases from dominating
-        score = score / Math.sqrt(keyword.split(' ').length);
-        
-        // Normalize by document length
-        score = score / Math.sqrt(totalWords);
-        
-        return { keyword, score };
+        const score = tf * (1 + idf * 0.3); // Blend frequency with rarity
+        return { keyword: kw, score, freq };
       })
-      .filter(({ keyword, score }) => {
-        // Additional quality filters
-        if (score < 0.01) return false; // Remove very low scoring keywords
-        if (keyword.split(' ').length > 4) return false; // Max 4 words per phrase
-        return true;
-      });
+      .sort((a, b) => b.score - a.score);
 
-    entries.sort((a, b) => b.score - a.score);
-
-    // Take top keywords but ensure we don't include substrings of higher-ranked keywords
-    const filteredEntries = entries.filter(({ keyword }, i) => {
-      const isSubstring = entries
-        .slice(0, i)
-        .some(({ keyword: higherKeyword }) => 
-          higherKeyword.includes(keyword) || keyword.includes(higherKeyword)
-        );
-      return !isSubstring;
-    });
-
-    const top = filteredEntries.slice(0, 15); // Reduce to top 15
-    const maxScore = Math.max(...top.map(e => e.score));
-
-    const keywords: ExtractedData['keywords'] = top.map(k => {
-      // Get context for the keyword
-      const keywordContext = getKeywordContext(text, k.keyword);
-      
-      return {
-        keyword: k.keyword,
-        score: +(k.score / maxScore).toFixed(3),
-        source: 'local',
-      };
-    });
-
-    // Group similar keywords and combine their scores
-    const groupedTopics = new Map<string, { score: number; variations: string[]; contexts: string[] }>();
+    // Filter for diversity
+    const selected: KeywordItem[] = [];
+    const seenWords = new Set<string>();
     
-    keywords.forEach(k => {
-      // Find if this keyword belongs to an existing group
-      let added = false;
-      for (const [mainTopic, group] of groupedTopics.entries()) {
-        if (areKeywordsSimilar(k.keyword, mainTopic)) {
-          group.score += k.score;
-          group.variations.push(k.keyword);
-          added = true;
-          break;
-        }
-      }
+    for (const entry of entries) {
+      const words = entry.keyword.split(' ');
+      const mainWord = words[0];
       
-      if (!added) {
-        groupedTopics.set(k.keyword, {
-          score: k.score,
-          variations: [k.keyword],
-          contexts: [getKeywordContext(text, k.keyword)]
-        });
-      }
-    });
-
-    // Convert groups to topics with engaging titles
-    const generateTopicTitle = (keyword: string, context: string): string => {
-      const words = keyword.toLowerCase().split(' ');
-      const isService = words.includes('service') || words.includes('services');
-      const isGuide = words.includes('guide') || words.includes('tutorial') || words.includes('how');
-      const isList = words.includes('types') || words.includes('examples') || words.includes('ways');
-      const isComparison = words.includes('vs') || words.includes('versus') || words.includes('compared');
+      // Skip if very similar keyword already selected
+      if (seenWords.has(mainWord) && words.length === 1) continue;
       
-      // Remove common words from keyword for cleaner incorporation
-      const cleanKeyword = keyword
-        .replace(/\b(service|services|guide|tutorial|how|to|types|of|ways|examples)\b/gi, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+      words.forEach(w => seenWords.add(w));
+      
+      selected.push({
+        keyword: entry.keyword,
+        score: Math.min(1, entry.score),
+        source: titleWords.has(entry.keyword) ? 'title' : 'body'
+      });
+      
+      if (selected.length >= 15) break;
+    }
 
-      // Generate engaging titles based on context and keyword type
-      if (isService) {
-        return `Complete Guide to ${cleanKeyword} Services`;
-      } else if (isGuide) {
-        return `How to Master ${cleanKeyword}: Expert Tips`;
-      } else if (isList) {
-        return `Top Benefits of ${cleanKeyword} Explained`;
-      } else if (isComparison) {
-        const [first, , second] = cleanKeyword.split(' ');
-        return `${first} vs ${second}: Which is Better?`;
-      } else {
-        // Generate different title patterns
-        const patterns = [
-          `Essential Guide to ${cleanKeyword}`,
-          `Understanding ${cleanKeyword}: A Comprehensive Overview`,
-          `${cleanKeyword} Mastery: Tips and Best Practices`,
-          `Maximizing Results with ${cleanKeyword}`,
-          `${cleanKeyword}: Expert Insights and Strategies`,
-          `The Ultimate Guide to ${cleanKeyword}`,
-          `Everything You Need to Know About ${cleanKeyword}`,
-          `Exploring the Benefits of ${cleanKeyword}`
-        ];
-        
-        // Use keyword hash to consistently select same pattern for same keyword
-        const hash = Array.from(keyword).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0);
-        return patterns[Math.abs(hash) % patterns.length];
-      }
-    };
+    // Generate diverse recommended topics
+    const topicTemplates = [
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)}: Complete Guide for 2024`,
+      (kw: string) => `How to Master ${kw.charAt(0).toUpperCase() + kw.slice(1)}`,
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)}: Best Practices and Tips`,
+      (kw: string) => `Understanding ${kw.charAt(0).toUpperCase() + kw.slice(1)}: A Deep Dive`,
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)} Explained: What You Need to Know`,
+      (kw: string) => `Top Strategies for ${kw.charAt(0).toUpperCase() + kw.slice(1)}`
+    ];
+    
+    const topics: TopicItem[] = selected.slice(0, 6).map((k, i) => ({
+      topic: topicTemplates[i % topicTemplates.length](k.keyword),
+      score: k.score * (1 - i * 0.04),
+      reason: 'High search potential and relevance to your content'
+    }));
 
-    const topics: ExtractedData['topics'] = Array.from(groupedTopics.entries())
-      .map(([topic, group]) => {
-        const cleanContext = group.contexts[0]?.replace(/[#*\n]/g, '').trim() || '';
-        return {
-          topic: generateTopicTitle(topic, cleanContext),
-          score: Math.min(1, group.score), // Cap at 1
-          reason: group.variations.length > 1
-            ? `Based on key themes: ${group.variations.slice(0, 2).join(', ')}`
-            : cleanContext ? `Popular topic in your content` : 'Recommended topic based on industry trends'
-        };
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6) // Limit to top 6 for better focus
-
-    return { keywords, topics };
+    return { keywords: selected, topics };
   }
 
   // Helper function to get context for a keyword

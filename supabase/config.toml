@@ -23,10 +23,6 @@ verify_jwt = false
 
 [functions.proxy-extract]
 verify_jwt = true
-[functions.proxy-extract.cors]
-allowed_origins = ["http://localhost:8080", "http://localhost:3000"]
 
 [functions.fetch-seo-data]
 verify_jwt = true
-[functions.fetch-seo-data.cors]
-allowed_origins = ["http://localhost:8080", "http://localhost:3000"]
