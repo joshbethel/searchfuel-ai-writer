@@ -250,14 +250,14 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse table-fixed">
                     <colgroup>
-                      <col className="w-[18%]" /> {/* Keyword */}
-                      <col className="w-[8%]" />  {/* Relevance */}
-                      <col className="w-[11%]" /> {/* Monthly Volume */}
-                      <col className="w-[11%]" /> {/* Difficulty */}
-                      <col className="w-[11%]" /> {/* CPC */}
-                      <col className="w-[11%]" /> {/* Competition */}
-                      <col className="w-[11%]" /> {/* Intent */}
-                      <col className="w-[19%]" /> {/* Actions */}
+                      <col className="w-[20%]" /> {/* Keyword */}
+                      <col className="w-[10%]" /> {/* Relevance */}
+                      <col className="w-[13%]" /> {/* Monthly Volume */}
+                      <col className="w-[12%]" /> {/* Difficulty */}
+                      <col className="w-[12%]" /> {/* CPC */}
+                      <col className="w-[11%]" /> {/* Trend */}
+                      <col className="w-[12%]" /> {/* Intent */}
+                      <col className="w-[10%]" /> {/* Actions */}
                     </colgroup>
                     <thead>
                       <tr className="border-b-2 border-border">
@@ -266,7 +266,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                         <th className="py-3 px-4 text-left text-sm font-semibold text-muted-foreground">Monthly Volume</th>
                         <th className="py-3 px-4 text-left text-sm font-semibold text-muted-foreground">Difficulty</th>
                         <th className="py-3 px-4 text-left text-sm font-semibold text-muted-foreground">CPC</th>
-                        <th className="py-3 px-4 text-left text-sm font-semibold text-muted-foreground">Competition</th>
+                        <th className="py-3 px-4 text-left text-sm font-semibold text-muted-foreground">Trend</th>
                         <th className="py-3 px-4 text-left text-sm font-semibold text-muted-foreground">Intent</th>
                         <th className="py-3 px-4 text-left text-sm font-semibold text-muted-foreground">Actions</th>
                       </tr>
@@ -297,8 +297,8 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                             <div className="flex items-center gap-2">
                               <Target className="w-4 h-4 text-orange-500" />
                               <span className="text-sm font-medium">
-                                {k.seoStats?.keywordDifficulty 
-                                  ? `${k.seoStats.keywordDifficulty}%` 
+                                {k.seoStats?.keywordDifficulty !== undefined && k.seoStats?.keywordDifficulty !== null
+                                  ? `${k.seoStats.keywordDifficulty}`
                                   : 'N/A'
                                 }
                               </span>
@@ -316,15 +316,41 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                             </div>
                           </td>
                           <td className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <BarChart3 className="w-4 h-4 text-purple-500" />
-                              <span className="text-sm font-medium">
-                                {k.seoStats?.competition 
-                                  ? `${(k.seoStats.competition * 100).toFixed(0)}%`
-                                  : 'N/A'
-                                }
-                              </span>
-                            </div>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-2 cursor-help">
+                                    <TrendingUp className="w-4 h-4 text-blue-500" />
+                                    <span className="text-sm font-medium">
+                                      {k.seoStats?.trendsData && k.seoStats.trendsData.length > 0
+                                        ? (() => {
+                                            const recent = k.seoStats.trendsData.slice(0, 3);
+                                            const older = k.seoStats.trendsData.slice(-3);
+                                            const recentAvg = recent.reduce((sum, t) => sum + t.volume, 0) / recent.length;
+                                            const olderAvg = older.reduce((sum, t) => sum + t.volume, 0) / older.length;
+                                            const change = ((recentAvg - olderAvg) / olderAvg) * 100;
+                                            return change > 10 ? '↗️ Rising' : change < -10 ? '↘️ Falling' : '→ Stable';
+                                          })()
+                                        : 'N/A'
+                                      }
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                {k.seoStats?.trendsData && k.seoStats.trendsData.length > 0 && (
+                                  <TooltipContent>
+                                    <div className="space-y-1">
+                                      <p className="font-semibold">12-Month Trend</p>
+                                      {k.seoStats.trendsData.slice(0, 6).map((t, i) => (
+                                        <div key={i} className="flex justify-between gap-4 text-xs">
+                                          <span>Month {t.month}:</span>
+                                          <span className="font-medium">{t.volume.toLocaleString()}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            </TooltipProvider>
                           </td>
                           <td className="py-3 px-4">
                             {k.seoStats?.intent && (
