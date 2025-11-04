@@ -88,7 +88,7 @@ serve(async (req) => {
       
       console.log('DataForSEO response status:', data.status_code);
       
-      if (data.status_code !== 200) {
+      if (data.status_code !== 20000) {
         console.error('DataForSEO API Error:', data.status_message);
         // Continue with empty results instead of failing completely
         continue;
