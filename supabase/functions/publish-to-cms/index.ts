@@ -559,35 +559,28 @@ async function publishToWebflow(blog: any, post: any): Promise<string> {
 async function publishToShopify(blog: any, post: any): Promise<string> {
   const credentials = blog.cms_credentials;
   
-  // First, handle the featured image if available
-  let imageId = null;
-  let imageWarning = null;
-  if (post.featured_image) {
-    try {
-      imageId = await uploadShopifyImage(blog, post.featured_image);
-      if (imageId) {
-        console.log(`Successfully uploaded image to Shopify. Image ID: ${imageId}`);
-      } else {
-        imageWarning = "Featured image could not be uploaded to Shopify";
-        console.warn(imageWarning);
-      }
-    } catch (error) {
-      console.error("Failed to upload image to Shopify:", error);
-      imageWarning = "Error uploading featured image to Shopify";
-    }
+  if (!credentials || !credentials.access_token) {
+    throw new Error("Shopify access token not found");
   }
 
   // Validate and format the site URL
-  if (!blog.cms_site_url.startsWith('https://')) {
-    blog.cms_site_url = 'https://' + blog.cms_site_url.replace(/^http:\/\//, '');
+  let siteUrl = blog.cms_site_url || "";
+  if (!siteUrl) {
+    throw new Error("Shopify site URL not configured");
   }
-  blog.cms_site_url = blog.cms_site_url.replace(/\/$/, '');
+  
+  if (!siteUrl.startsWith('https://')) {
+    siteUrl = 'https://' + siteUrl.replace(/^http:\/\//, '');
+  }
+  siteUrl = siteUrl.replace(/\/$/, '');
 
   console.log("Starting Shopify publish process...");
-  console.log("Store URL:", blog.cms_site_url);
+  console.log("Store URL:", siteUrl);
   
   // First, verify store access
-  const shopUrl = `${blog.cms_site_url}/admin/api/2024-01/shop.json`;
+  const shopUrl = `${siteUrl}/admin/api/2024-01/shop.json`;
+  console.log("Verifying shop access:", shopUrl);
+  
   const shopResponse = await fetch(shopUrl, {
     headers: {
       "Content-Type": "application/json",
@@ -605,9 +598,11 @@ async function publishToShopify(blog: any, post: any): Promise<string> {
     throw new Error(`Cannot access Shopify store: ${shopResponse.status} - ${shopError}`);
   }
 
+  console.log("Shop access verified successfully");
+
   // Get the list of blogs
   console.log("Fetching Shopify blogs...");
-  const blogsUrl = `${blog.cms_site_url}/admin/api/2024-01/blogs.json`;
+  const blogsUrl = `${siteUrl}/admin/api/2024-01/blogs.json`;
   const blogsResponse = await fetch(blogsUrl, {
     headers: {
       "Content-Type": "application/json",
@@ -626,13 +621,38 @@ async function publishToShopify(blog: any, post: any): Promise<string> {
   }
 
   const blogsData = await blogsResponse.json();
+  console.log("Shopify blogs data:", JSON.stringify(blogsData, null, 2));
+  
   if (!blogsData.blogs || blogsData.blogs.length === 0) {
-    throw new Error("No blogs found in your Shopify store. Please create a blog first.");
+    throw new Error("No blogs found in your Shopify store. Please create a blog in your Shopify admin first.");
   }
 
   // Use the first blog if blog_id is not specified
   const blogId = credentials.blog_id || blogsData.blogs[0].id;
-  const apiUrl = `${blog.cms_site_url}/admin/api/2024-01/blogs/${blogId}/articles.json`;
+  console.log("Using blog ID:", blogId);
+  console.log("Available blogs:", blogsData.blogs.map((b: any) => ({ id: b.id, title: b.title })));
+  
+  if (!blogId) {
+    throw new Error("Could not determine blog ID from Shopify response");
+  }
+
+  const apiUrl = `${siteUrl}/admin/api/2024-01/blogs/${blogId}/articles.json`;
+  console.log("Publishing to URL:", apiUrl);
+
+  // Handle featured image if available
+  let imageUrl = null;
+  if (post.featured_image) {
+    try {
+      // Shopify can use external images directly
+      const imageResponse = await fetch(post.featured_image, { method: 'HEAD' });
+      if (imageResponse.ok) {
+        imageUrl = post.featured_image;
+        console.log("Using featured image URL:", imageUrl);
+      }
+    } catch (error) {
+      console.error("Error checking featured image:", error);
+    }
+  }
 
   const articleData: any = {
     article: {
@@ -657,9 +677,9 @@ async function publishToShopify(blog: any, post: any): Promise<string> {
     }
   };
 
-  // Add image if we successfully uploaded one
-  if (imageId) {
-    articleData.article.image = { attachment: imageId };
+  // Add image URL if we have one
+  if (imageUrl) {
+    articleData.article.image = { src: imageUrl };
   }
 
   console.log("Publishing article to Shopify...", {
