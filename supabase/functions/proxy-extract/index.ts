@@ -69,29 +69,46 @@ function getNgrams(tokens: string[], n: number) {
     const slice = tokens.slice(i, i + n);
     const phrase = slice.join(' ');
     
-    // Skip if too many stopwords (stricter filtering)
+    // Minimum phrase length requirement (stricter for quality)
+    if (phrase.length < 8) continue;
+    
+    // Skip if too many stopwords (even stricter)
     const stopwordCount = slice.filter(t => STOPWORDS.has(t)).length;
-    if (stopwordCount > Math.floor(n / 2)) continue;
+    if (n === 2 && stopwordCount > 0) continue; // Bigrams: no stopwords
+    if (n >= 3 && stopwordCount > 1) continue;  // Longer: max 1 stopword
     
-    // Skip if too many generic terms
+    // Skip if any generic terms for bigrams, max 1 for longer
     const genericCount = slice.filter(t => GENERIC_TERMS.has(t)).length;
-    if (genericCount > 1) continue;
+    if (n === 2 && genericCount > 0) continue;
+    if (n >= 3 && genericCount > 1) continue;
     
-    // Skip if any token is too short
-    if (slice.some(t => t.length < 2)) continue;
+    // Each token must be meaningful length
+    if (slice.some(t => t.length < 3)) continue;
     
-    // Skip if starts or ends with stopword or generic term (stronger filter)
+    // Cannot start or end with stopword or generic term
     if (STOPWORDS.has(slice[0]) || STOPWORDS.has(slice[n - 1])) continue;
     if (GENERIC_TERMS.has(slice[0]) || GENERIC_TERMS.has(slice[n - 1])) continue;
     
-    // For longer phrases (3+ words), require meaningful specific terms
+    // Require at least one substantial word (5+ chars)
+    const hasSubstantialWord = slice.some(t => 
+      !GENERIC_TERMS.has(t) && 
+      !STOPWORDS.has(t) && 
+      t.length >= 5
+    );
+    if (!hasSubstantialWord) continue;
+    
+    // For 3+ word phrases, require at least TWO specific terms
     if (n >= 3) {
-      const hasSpecificTerm = slice.some(t => !GENERIC_TERMS.has(t) && !STOPWORDS.has(t) && t.length > 4);
-      if (!hasSpecificTerm) continue;
+      const specificTerms = slice.filter(t => 
+        !GENERIC_TERMS.has(t) && 
+        !STOPWORDS.has(t) && 
+        t.length > 3
+      );
+      if (specificTerms.length < 2) continue;
     }
     
-    // Skip phrases that are too long (suggests low quality)
-    if (phrase.length > 50) continue;
+    // Skip phrases that are too long or have too many words
+    if (phrase.length > 45 || n > 4) continue;
     
     out.push(phrase);
   }
@@ -103,22 +120,41 @@ function isQualityKeyword(keyword: string): boolean {
   const words = keyword.split(' ');
   const wordCount = words.length;
   
-  // Prefer 2-4 word phrases (long-tail sweet spot)
-  if (wordCount >= 2 && wordCount <= 4) return true;
+  // Minimum length requirements (stricter)
+  if (keyword.length < 8) return false;
   
-  // Single words must be:
-  // - Not generic
-  // - At least 5 characters
-  // - Not a stopword
-  if (wordCount === 1) {
-    return !GENERIC_TERMS.has(keyword) && 
-           !STOPWORDS.has(keyword) && 
-           keyword.length >= 5 &&
-           /^[a-z]+$/.test(keyword);
+  // Require 2-4 word phrases (NO single words)
+  if (wordCount < 2 || wordCount > 4) return false;
+  
+  // Each word must be meaningful
+  if (words.some(w => w.length < 3)) return false;
+  
+  // Must have at least one substantial word (6+ chars)
+  const hasSubstantialWord = words.some(w => 
+    w.length >= 6 && 
+    !GENERIC_TERMS.has(w) && 
+    !STOPWORDS.has(w)
+  );
+  if (!hasSubstantialWord) return false;
+  
+  // Cannot start or end with generic/stopword
+  if (STOPWORDS.has(words[0]) || STOPWORDS.has(words[words.length - 1])) return false;
+  if (GENERIC_TERMS.has(words[0]) || GENERIC_TERMS.has(words[words.length - 1])) return false;
+  
+  // For 3+ words, need at least 2 specific meaningful terms
+  if (wordCount >= 3) {
+    const specificWords = words.filter(w => 
+      !GENERIC_TERMS.has(w) && 
+      !STOPWORDS.has(w) && 
+      w.length >= 4
+    );
+    if (specificWords.length < 2) return false;
   }
   
-  // 5+ word phrases are too long, but allow if very specific
-  return wordCount === 5 && words.every(w => !STOPWORDS.has(w));
+  // Reject if mostly numbers or special patterns
+  if (!/^[a-z\s]+$/.test(keyword)) return false;
+  
+  return true;
 }
 
 // Helper: Calculate Jaccard similarity between two keywords (0-1 range)
@@ -133,13 +169,9 @@ function calculateSimilarity(a: string, b: string): number {
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('', { 
+    return new Response(null, { 
       status: 204, 
-      headers: {
-        ...corsHeaders,
-        'Access-Control-Allow-Origin': '*', // Allow all origins in development
-        'Access-Control-Allow-Headers': req.headers.get('access-control-request-headers') || '*'
-      }
+      headers: corsHeaders
     });
   }
 
@@ -207,17 +239,7 @@ serve(async (req) => {
     // ===== Build candidate keywords with frequency scoring =====
     const candidates: Array<{ keyword: string; score: number; source: string }> = [];
 
-    // 1. Unigrams - only high-quality single words
-    const unigramFreq: Record<string, number> = {};
-    for (const tok of filteredTokens) {
-      if (GENERIC_TERMS.has(tok) || tok.length < 6) continue; // Stricter: 6+ chars
-      if (!/^[a-z]+$/.test(tok)) continue;
-      unigramFreq[tok] = (unigramFreq[tok] || 0) + 1;
-    }
-    for (const [kw, freq] of Object.entries(unigramFreq)) {
-      // Lower weight for single words to prioritize phrases
-      candidates.push({ keyword: kw, score: freq * 0.25, source: 'body' });
-    }
+    // Skip unigrams entirely - only use multi-word phrases
 
     // 2. Bigrams - BEST for SEO (sweet spot for ranking)
     const bigrams = getNgrams(filteredTokens, 2);
@@ -226,10 +248,10 @@ serve(async (req) => {
       bigramFreq[bg] = (bigramFreq[bg] || 0) + 1;
     }
     for (const [kw, freq] of Object.entries(bigramFreq)) {
-      const hasGeneric = kw.split(' ').some(w => GENERIC_TERMS.has(w));
-      // Heavy boost for 2-word phrases without generic terms
-      const scoreMultiplier = hasGeneric ? 1.5 : 3.5;
-      candidates.push({ keyword: kw, score: freq * scoreMultiplier, source: 'body' });
+      // Only accept high-quality bigrams (already filtered in getNgrams)
+      if (kw.length >= 8) {
+        candidates.push({ keyword: kw, score: freq * 5.0, source: 'body' });
+      }
     }
 
     // 3. Trigrams - excellent for specific long-tail
@@ -239,7 +261,9 @@ serve(async (req) => {
       trigramFreq[tg] = (trigramFreq[tg] || 0) + 1;
     }
     for (const [kw, freq] of Object.entries(trigramFreq)) {
-      candidates.push({ keyword: kw, score: freq * 4.0, source: 'body' });
+      if (kw.length >= 10) {
+        candidates.push({ keyword: kw, score: freq * 8.0, source: 'body' });
+      }
     }
 
     // 4. 4-grams - very specific long-tail (use sparingly)
@@ -249,7 +273,9 @@ serve(async (req) => {
       fourgramFreq[fg] = (fourgramFreq[fg] || 0) + 1;
     }
     for (const [kw, freq] of Object.entries(fourgramFreq)) {
-      candidates.push({ keyword: kw, score: freq * 4.5, source: 'body' });
+      if (kw.length >= 12) {
+        candidates.push({ keyword: kw, score: freq * 10.0, source: 'body' });
+      }
     }
 
     // ===== Strategic placement boosts (improved weighting) =====
@@ -373,8 +399,8 @@ serve(async (req) => {
             
             // If has SEO stats, apply stricter filters
             if (kw.seoStats) {
-              // Must have minimum search volume
-              if (!kw.seoStats.searchVolume || kw.seoStats.searchVolume < 50) return false;
+              // Must have minimum search volume (stricter)
+              if (!kw.seoStats.searchVolume || kw.seoStats.searchVolume < 100) return false;
               
               // Prefer lower difficulty (if available)
               if (kw.seoStats.keywordDifficulty && kw.seoStats.keywordDifficulty > 80) return false;
