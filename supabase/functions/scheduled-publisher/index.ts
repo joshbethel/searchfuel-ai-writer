@@ -1,5 +1,5 @@
 /// <reference path="../deps.d.ts" />
-/// <reference path="../deno.d.ts" />
+
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from '@supabase/supabase-js';

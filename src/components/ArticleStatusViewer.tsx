@@ -28,12 +28,24 @@ export function ArticleStatusViewer({ articleId }: { articleId: string }) {
     try {
       const { data, error } = await supabase
         .from("articles")
-        .select("id, publishing_status, scheduled_for, last_published_at, external_post_id, external_post_url")
+        .select("id, status, updated_at")
         .eq("id", articleId)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
-      setStatus(data as ArticleStatus);
+      if (data) {
+        const mapped: ArticleStatus = {
+          id: data.id,
+          publishing_status: data.status === 'published' ? 'published' : (data.status === 'draft' ? 'pending' : (data.status || 'pending')),
+          scheduled_for: null,
+          last_published_at: null,
+          external_post_id: null,
+          external_post_url: null,
+        };
+        setStatus(mapped);
+      } else {
+        setStatus(null);
+      }
     } catch (error: any) {
       console.error("Error fetching status:", error);
       toast.error("Failed to load article status");
@@ -48,10 +60,7 @@ export function ArticleStatusViewer({ articleId }: { articleId: string }) {
       const { error } = await supabase
         .from("articles")
         .update({ 
-          publishing_status: 'pending',
-          external_post_id: null,
-          external_post_url: null,
-          last_published_at: null
+          status: 'draft'
         })
         .eq("id", articleId);
 

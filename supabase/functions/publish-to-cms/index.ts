@@ -572,7 +572,16 @@ async function publishToShopify(blog: any, post: any): Promise<string> {
   if (!siteUrl.startsWith('https://')) {
     siteUrl = 'https://' + siteUrl.replace(/^http:\/\//, '');
   }
-  siteUrl = siteUrl.replace(/\/$/, '');
+  // Normalize domain: remove trailing slash and any /admin path
+  siteUrl = siteUrl.replace(/\/$/, '').replace(/\/admin(?:\/.*)?$/, '');
+  // Prefer myshopify.com domain if provided in credentials
+  const shopDomain = credentials.shop_domain || credentials.shop || credentials.store_domain;
+  if (shopDomain && !shopDomain.includes('://')) {
+    siteUrl = `https://${shopDomain.replace(/\/$/, '')}`;
+  }
+  if (!siteUrl.includes('myshopify.com')) {
+    console.warn('Shopify Admin API typically requires the myshopify.com domain. Current siteUrl:', siteUrl);
+  }
 
   console.log("Starting Shopify publish process...");
   console.log("Store URL:", siteUrl);
@@ -719,21 +728,11 @@ async function publishToShopify(blog: any, post: any): Promise<string> {
       throw new Error(`Unexpected Shopify response format: ${JSON.stringify(data)}`);
     }
 
-    console.log(`Successfully published to Shopify:`, {
+    console.log('Successfully published to Shopify:', {
       articleId: data.article.id,
       title: data.article.title,
-      url: data.article.url,
-      imageStatus: imageWarning ? 'warning' : 'success'
+      url: data.article.url
     });
-
-    // Return ID and include warning if image upload failed
-    if (imageWarning) {
-      return {
-        id: data.article.id.toString(),
-        warning: imageWarning
-      };
-    }
-    
     return data.article.id.toString();
   } catch (error: any) {
     console.error("Error publishing to Shopify:", {

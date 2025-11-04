@@ -65,9 +65,10 @@ serve(async (req) => {
 
     const baseUrl = `${blog.cms_site_url}/wp-json/wp/v2`;
     const credentials = blog.cms_credentials || {};
-    const authHeader = credentials.apiKey 
-      ? { 'Authorization': `Bearer ${credentials.apiKey}` }
-      : {};
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (credentials.apiKey) {
+      headers['Authorization'] = `Bearer ${credentials.apiKey}`;
+    }
 
     let endpoint = '';
 
@@ -96,10 +97,7 @@ serve(async (req) => {
 
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeader,
-      },
+      headers,
       body: JSON.stringify(updateData),
     });
 
