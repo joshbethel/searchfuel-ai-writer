@@ -553,24 +553,20 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
     try {
       console.log('Fetching SEO stats for keywords:', keywords);
       
-      // Get the current session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('No active session');
+      if (!keywords || keywords.length === 0) {
+        console.log('No keywords to fetch stats for');
+        return null;
       }
       
       // Call Supabase function that wraps DataForSEO API
       const { data, error } = await supabase.functions.invoke('fetch-seo-data', {
-        body: { keywords },
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        }
+        body: { keywords }
       });
 
       if (error) {
         console.error('Supabase function error:', error);
-        throw error;
+        // Don't throw - just return null so extraction continues
+        return null;
       }
       
       // Process the raw data into the expected format

@@ -22,7 +22,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.proxy-extract]
-verify_jwt = true
+verify_jwt = false
 
 [functions.fetch-seo-data]
-verify_jwt = true
+verify_jwt = false

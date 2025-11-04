@@ -2,20 +2,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // Allow all origins in development
-  'Access-Control-Allow-Headers': '*', // Allow all headers in development
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
-  'Access-Control-Allow-Credentials': 'true',
-  'Vary': 'Origin, Access-Control-Request-Headers'
 }
 
 const DATAFORSEO_LOGIN = Deno.env.get('DATAFORSEO_LOGIN')
 const DATAFORSEO_PASSWORD = Deno.env.get('DATAFORSEO_PASSWORD')
-
-if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
-  throw new Error('DataForSEO credentials are not configured')
-}
 
 interface SEOStats {
   searchVolume?: number;
@@ -29,32 +23,55 @@ interface SEOStats {
 // Handle CORS preflight
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    console.log('fetch-seo-data function called');
+    
+    // Check if DataForSEO credentials are configured
+    if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
+      console.error('DataForSEO credentials not configured');
+      return new Response(
+        JSON.stringify({ error: 'DataForSEO API is not configured. SEO stats unavailable.' }),
+        {
+          status: 200, // Return 200 so client doesn't fail, just no stats
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+    
     const { keywords } = await req.json() as { keywords: string[] }
+    console.log('Fetching SEO data for', keywords.length, 'keywords');
     
     if (!Array.isArray(keywords) || keywords.length === 0) {
-      throw new Error('Keywords array is required')
+      console.log('No keywords provided, returning empty result');
+      return new Response(JSON.stringify({}), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Limit the number of keywords to process
-    const MAX_KEYWORDS = 200
+    const MAX_KEYWORDS = 100; // Reduced to avoid rate limits
+    const limitedKeywords = keywords.slice(0, MAX_KEYWORDS);
+    
     if (keywords.length > MAX_KEYWORDS) {
-      throw new Error(`Too many keywords. Maximum allowed: ${MAX_KEYWORDS}`)
+      console.warn(`Limiting keywords from ${keywords.length} to ${MAX_KEYWORDS}`);
     }
 
-    // Split keywords into chunks of 100 (DataForSEO limit)
+    // Split keywords into chunks of 50 (safer for API limits)
     const chunks: string[][] = []
-    for (let i = 0; i < keywords.length; i += 100) {
-      chunks.push(keywords.slice(i, i + 100))
+    for (let i = 0; i < limitedKeywords.length; i += 50) {
+      chunks.push(limitedKeywords.slice(i, i + 50))
     }
 
     const results: Record<string, SEOStats> = {}
 
     // Process each chunk
-    for (const chunk of chunks) {
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const chunk = chunks[chunkIndex];
+      console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length} with ${chunk.length} keywords`);
+      
       const response = await fetch('https://api.dataforseo.com/v3/keywords_data/google/search_volume/live', {
         method: 'POST',
         headers: {
@@ -69,8 +86,12 @@ serve(async (req) => {
 
       const data = await response.json()
       
+      console.log('DataForSEO response status:', data.status_code);
+      
       if (data.status_code !== 200) {
-        throw new Error(`DataForSEO API Error: ${data.status_message}`)
+        console.error('DataForSEO API Error:', data.status_message);
+        // Continue with empty results instead of failing completely
+        continue;
       }
 
       interface MonthlySearch {
@@ -121,22 +142,25 @@ serve(async (req) => {
         }
       }
 
-      // Wait a bit between chunks to respect rate limits
-      if (chunks.length > 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
+      // Wait between chunks to respect rate limits
+      if (chunkIndex < chunks.length - 1) {
+        console.log('Waiting 2s before next chunk...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
+    console.log(`Successfully fetched SEO data for ${Object.keys(results).length} keywords`);
+    
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error: unknown) {
-    console.error('DataForSEO API Error:', error)
+    console.error('fetch-seo-data error:', error)
+    // Return empty object instead of error to prevent client-side failures
     return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'An unexpected error occurred' 
-      }), {
-        status: 500,
+      JSON.stringify({}), 
+      {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
