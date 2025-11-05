@@ -1050,7 +1050,29 @@ export default function Dashboard() {
         </Card>
       )}
 
-        {/* Analytics / No Site Connected */}
+        {/* No CMS Disconnected Notice */}
+        {blog && !blog.cms_platform && (
+          <Card className="p-6 mb-6 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                <Unplug className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-foreground mb-1">
+                  CMS Disconnected
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Your CMS is disconnected. Viewing historical data from all your published articles.
+                </p>
+              </div>
+              <Button onClick={() => setShowOnboarding(true)} size="sm">
+                Connect New CMS
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Analytics / No Data */}
         {!blog ? (
           <Card className="p-12 text-center bg-card shadow-sm">
             <div className="max-w-md mx-auto">
@@ -1077,19 +1099,15 @@ export default function Dashboard() {
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-muted-foreground">Total Traffic</span>
                   <span className="text-2xl font-bold mt-2">
-                    {blog?.cms_platform ? 
-                      (() => {
-                        const analyticsViews = analytics?.reduce((sum, day) => sum + (day.views || 0), 0) || 0;
-                        const postViews = blogPosts.reduce((sum, post) => sum + (post.views || 0), 0);
-                        const totalViews = analyticsViews > 0 ? analyticsViews : postViews;
-                        return totalViews.toLocaleString();
-                      })()
-                      : '-'}
+                    {(() => {
+                      const analyticsViews = analytics?.reduce((sum, day) => sum + (day.views || 0), 0) || 0;
+                      const postViews = blogPosts.reduce((sum, post) => sum + (post.views || 0), 0);
+                      const totalViews = analyticsViews > 0 ? analyticsViews : postViews;
+                      return totalViews > 0 ? totalViews.toLocaleString() : '0';
+                    })()}
                   </span>
                   <span className="text-xs text-muted-foreground mt-1">
-                    {blog?.cms_platform 
-                      ? `Last ${dateRange}`
-                      : 'Connect CMS to view traffic'}
+                    Last {dateRange}
                   </span>
                 </div>
               </Card>
@@ -1119,21 +1137,17 @@ export default function Dashboard() {
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-muted-foreground">Avg. Views per Article</span>
                   <span className="text-2xl font-bold mt-2">
-                    {blog?.cms_platform ? 
-                      (() => {
-                        const publishedPosts = blogPosts.filter(p => p.publishing_status === 'published');
-                        if (publishedPosts.length === 0) return '0';
-                        
-                        const totalViews = blogPosts.reduce((sum, post) => sum + (post.views || 0), 0);
-                        const avgViews = Math.round(totalViews / publishedPosts.length);
-                        return avgViews.toLocaleString();
-                      })()
-                      : '-'}
+                    {(() => {
+                      const publishedPosts = blogPosts.filter(p => p.publishing_status === 'published');
+                      if (publishedPosts.length === 0) return '0';
+                      
+                      const totalViews = blogPosts.reduce((sum, post) => sum + (post.views || 0), 0);
+                      const avgViews = Math.round(totalViews / publishedPosts.length);
+                      return avgViews.toLocaleString();
+                    })()}
                   </span>
                   <span className="text-xs text-muted-foreground mt-1">
-                    {blog?.cms_platform 
-                      ? `${blogPosts.filter(p => p.publishing_status === 'published').length} published articles`
-                      : 'Connect CMS to view stats'}
+                    {blogPosts.filter(p => p.publishing_status === 'published').length} published articles
                   </span>
                 </div>
               </Card>
@@ -1154,7 +1168,7 @@ export default function Dashboard() {
                     ? 'text-green-700 dark:text-green-400'
                     : ''}`}
                   >
-                    {blog?.cms_platform && avgCpc > 0
+                    {avgCpc > 0
                       ? (() => {
                           const analyticsViews = analytics?.reduce((sum, day) => sum + (day.views || 0), 0) || 0;
                           const postViews = blogPosts.reduce((sum, post) => sum + (post.views || 0), 0);
@@ -1168,11 +1182,9 @@ export default function Dashboard() {
                     ? 'text-green-600 dark:text-green-500'
                     : 'text-muted-foreground'}`}
                   >
-                    {blog?.cms_platform
-                      ? avgCpc > 0
-                        ? `Based on ${dateRange} traffic`
-                        : 'Add keywords to calculate value'
-                      : 'Connect CMS to view value'}
+                    {avgCpc > 0
+                      ? `Based on ${dateRange} traffic`
+                      : 'Add keywords to calculate value'}
                   </span>
                 </div>
               </Card>
