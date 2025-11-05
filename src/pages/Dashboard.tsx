@@ -910,31 +910,6 @@ export default function Dashboard() {
         </Button>
       </div>
         </Card>
-      ) : blog ? (
-        <Card className="p-6 mb-6 bg-card shadow-sm border-dashed">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-lg font-semibold text-foreground">Website Not Connected</h3>
-                  <Badge variant="outline" className="text-muted-foreground">
-                    Disconnected
-                  </Badge>
-                </div>
-              </div>
-            </div>
-            <Button 
-              variant="default"
-              size="sm"
-              onClick={() => setShowOnboarding(true)}
-            >
-              Connect CMS
-            </Button>
-          </div>
-        </Card>
       ) : null}
 
       {/* Article Queue Section - Shows pending articles for approval */}
