@@ -383,6 +383,49 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
             </div>
           )}
 
+          {selectedPlatform === "framer" && (
+            <>
+              <div>
+                <Label htmlFor="apiKey">Collection ID *</Label>
+                <Input
+                  id="apiKey"
+                  type="text"
+                  placeholder="Enter your Framer CMS Collection ID"
+                  value={connectionData.apiKey}
+                  onChange={(e) => setConnectionData({ ...connectionData, apiKey: e.target.value })}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Found in Framer → CMS → Your Collection → Settings → Collection ID
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="accessToken">API Token *</Label>
+                <Input
+                  id="accessToken"
+                  type="password"
+                  placeholder="Enter your Framer API Token"
+                  value={connectionData.accessToken}
+                  onChange={(e) => setConnectionData({ ...connectionData, accessToken: e.target.value })}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Generate from Framer → Settings → API → Create New Token with CMS access
+                </p>
+              </div>
+              <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-foreground mb-2">Quick Setup:</h4>
+                <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
+                  <li>Open Framer → Settings → API</li>
+                  <li>Click "Create New Token" and enable CMS access</li>
+                  <li>Copy the API Token</li>
+                  <li>Go to CMS → Select your collection → Settings</li>
+                  <li>Copy the Collection ID</li>
+                </ol>
+              </div>
+            </>
+          )}
+
           {/* Connection Steps Info */}
           <div className="bg-accent/5 border border-accent/20 rounded-lg p-4 mb-4">
             <h4 className="text-sm font-semibold text-foreground mb-2">Connection Steps:</h4>
