@@ -13,10 +13,17 @@ This guide explains how to automatically connect your Framer CMS to the blog aut
 ### Step 1: Get Your API Token
 
 1. Log into your [Framer Account](https://www.framer.com/)
-2. Go to **Settings** → **API**
-3. Click **Generate New Token**
-4. Give it a descriptive name (e.g., "Blog Automation")
-5. Copy the token immediately (you won't be able to see it again)
+2. Open your **Workspace Settings** (click on workspace name in top left)
+3. Look for **Integrations**, **API**, or **Developers** section
+4. Click **Create API Token** or **Generate Token**
+5. Enable **CMS Read** and **CMS Write** permissions
+6. Give it a descriptive name (e.g., "Blog Automation")
+7. Copy the token immediately (you won't be able to see it again)
+
+**Alternative locations to check:**
+- Project Settings → API
+- Workspace Dashboard → Integrations
+- Account Settings → Developer Settings
 
 ### Step 2: Get Your Collection ID
 

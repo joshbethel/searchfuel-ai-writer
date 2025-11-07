@@ -410,17 +410,18 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Generate from Framer → Settings → API → Create New Token with CMS access
+                  Generate from Workspace Settings → Integrations/API → Create Token (enable CMS permissions)
                 </p>
               </div>
               <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-foreground mb-2">Quick Setup:</h4>
                 <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
-                  <li>Open Framer → Settings → API</li>
-                  <li>Click "Create New Token" and enable CMS access</li>
-                  <li>Copy the API Token</li>
-                  <li>Go to CMS → Select your collection → Settings</li>
-                  <li>Copy the Collection ID</li>
+                  <li>Click your workspace name (top left in Framer)</li>
+                  <li>Look for Workspace Settings → Integrations or API section</li>
+                  <li>Create an API Token with CMS read/write permissions</li>
+                  <li>Copy the generated token</li>
+                  <li>In your project: CMS → Select collection → Settings</li>
+                  <li>Copy the Collection ID from collection settings</li>
                 </ol>
               </div>
             </>
