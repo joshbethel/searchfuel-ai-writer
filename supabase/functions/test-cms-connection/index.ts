@@ -127,17 +127,46 @@ serve(async (req: Request) => {
         break;
 
       case "framer":
-        // Test Framer site accessibility
+        // Test Framer CMS API connection
+        // Framer requires: API Token (accessToken) and Collection ID (apiKey)
         try {
-          const response = await fetch(siteUrl);
+          if (!apiKey || !accessToken) {
+            success = false;
+            error = "Framer CMS requires both Collection ID and API Token";
+            break;
+          }
+
+          // Test connection by attempting to fetch collection items
+          // Format: https://api.framer.com/v1/collections/{collectionId}/items
+          const collectionApiUrl = `https://api.framer.com/v1/collections/${apiKey}/items`;
+          
+          console.log(`Testing Framer CMS connection for collection: ${apiKey}`);
+          
+          const response = await fetch(collectionApiUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
           success = response.ok;
-          if (success) {
-            error = "Site accessible. Note: Framer API integration requires Framer Pro plan and may need manual setup.";
+          
+          if (!success) {
+            const errorText = await response.text();
+            if (response.status === 401) {
+              error = "Invalid Framer API token. Please verify your token in Framer settings.";
+            } else if (response.status === 404) {
+              error = "Collection ID not found. Please verify your Collection ID in Framer CMS.";
+            } else {
+              error = `Framer API error (${response.status}): ${errorText}`;
+            }
           } else {
-            error = "Cannot access site. Check URL and ensure site is published.";
+            console.log("Successfully connected to Framer CMS collection");
           }
         } catch (e) {
-          error = "Failed to access Framer site. Verify the URL is correct.";
+          success = false;
+          error = `Failed to connect to Framer API: ${e.message}`;
         }
         break;
 

@@ -104,6 +104,11 @@ serve(async (req: any) => {
         publishSuccess = true;
         break;
 
+      case "framer":
+        externalPostId = await publishToFramer(blog, post);
+        publishSuccess = true;
+        break;
+
       default:
         throw new Error(`Unsupported CMS platform: ${blog.cms_platform}`);
     }
@@ -886,4 +891,70 @@ async function publishToRestAPI(blog: any, post: any): Promise<string> {
   const data = await response.json();
   console.log(`Published to REST API: ${credentials.endpoint_url}`);
   return data.id || data._id || "published";
+}
+
+async function publishToFramer(blog: any, post: any): Promise<string> {
+  console.log(`Starting Framer CMS publishing for post: ${post.title}`);
+  
+  const credentials = blog.cms_credentials;
+  
+  if (!credentials || !credentials.access_token || !credentials.collection_id) {
+    throw new Error("Framer CMS credentials (API token and Collection ID) are required");
+  }
+
+  // Extract markdown content
+  const markdownContent = extractContent(post.content);
+  
+  // Framer CMS API endpoint
+  const apiUrl = `https://api.framer.com/v1/collections/${credentials.collection_id}/items`;
+  
+  console.log(`Framer API URL: ${apiUrl}`);
+  
+  // Prepare the item data for Framer CMS
+  const itemData = {
+    fieldData: {
+      title: post.title,
+      slug: post.slug,
+      content: markdownContent,
+      excerpt: post.excerpt || "",
+      metaTitle: post.meta_title || post.title,
+      metaDescription: post.meta_description || post.excerpt || "",
+      publishedAt: new Date().toISOString(),
+      featuredImage: post.featured_image || "",
+    },
+    isDraft: false, // Publish immediately
+  };
+
+  console.log("Publishing to Framer CMS...");
+  
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${credentials.access_token}`,
+    },
+    body: JSON.stringify(itemData),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Framer CMS API Error:", {
+      status: response.status,
+      statusText: response.statusText,
+      body: errorText
+    });
+    
+    if (response.status === 401) {
+      throw new Error("Framer authentication failed - please reconnect your Framer CMS");
+    } else if (response.status === 404) {
+      throw new Error("Framer Collection not found - verify your Collection ID");
+    } else {
+      throw new Error(`Framer API error (${response.status}): ${errorText}`);
+    }
+  }
+
+  const data = await response.json();
+  console.log(`Successfully published to Framer CMS. Item ID: ${data.id}`);
+  
+  return data.id.toString();
 }
