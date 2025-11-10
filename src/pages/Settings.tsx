@@ -39,9 +39,9 @@ export default function Settings() {
         .from('subscriptions')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      if (error) {
         console.error('Error fetching subscription:', error);
       } else {
         setSubscription(data || null);
@@ -64,7 +64,7 @@ export default function Settings() {
           .from("blogs")
           .select("id")
           .eq("user_id", currentUser.id)
-          .single()
+          .maybeSingle()
           .then(({ data }) => {
             if (data) setBlogId(data.id);
           });
