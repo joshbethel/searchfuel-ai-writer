@@ -5,14 +5,31 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 // CORS handling with allowed origins
 const allowedOrigins = [
   "https://searchfuel-ai-writer.lovable.app",
+  "https://preview--searchfuel-ai-writer.lovable.app",
+  "https://ef7316e9-181c-4379-9b43-1c52f85bdf75.lovableproject.com",
   "http://localhost:5173",
   "http://localhost:3000",
 ];
 
+function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) return false;
+  
+  // Normalize origin by removing trailing slash
+  const normalizedOrigin = origin.replace(/\/$/, '');
+  
+  // Check exact matches
+  if (allowedOrigins.includes(normalizedOrigin)) return true;
+  
+  // Allow Lovable preview domains (*.lovableproject.com)
+  if (normalizedOrigin.endsWith('.lovableproject.com')) return true;
+  
+  return false;
+}
+
 function getCorsHeaders(origin: string | null) {
-  const isAllowed = origin && allowedOrigins.includes(origin);
+  const isAllowed = isOriginAllowed(origin);
   return {
-    "Access-Control-Allow-Origin": isAllowed ? origin : "null",
+    "Access-Control-Allow-Origin": isAllowed ? origin! : "null",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400"
@@ -24,7 +41,10 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(origin);
 
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 200,
+      headers: corsHeaders 
+    });
   }
 
   // User authentication
