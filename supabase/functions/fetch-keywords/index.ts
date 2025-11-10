@@ -153,7 +153,7 @@ serve(async (req) => {
     // Get user's subscription to check limit
     const { data: subscription } = await supabase
       .from('subscriptions')
-      .select('plan_name, keywords_count')
+      .select('id, plan_name, keywords_count')
       .eq('user_id', user.id)
       .eq('status', 'active')
       .single();
