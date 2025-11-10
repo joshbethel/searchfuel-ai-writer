@@ -42,12 +42,114 @@ export default function Settings() {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching subscription:', error);
+        // PGRST205 = table doesn't exist - table needs to be created via migration
+        if (error.code === 'PGRST205') {
+          console.warn('Subscriptions table does not exist. Please run the migration.');
+          setSubscription(null);
+          return;
+        }
+        
+        // PGRST116 = no rows found - create subscription with Stripe customer
+        if (error.code === 'PGRST116') {
+          console.log('No subscription found, creating subscription with Stripe customer for user');
+          
+          // The create-stripe-customer function will create both the Stripe customer and subscription
+          try {
+            const { data: stripeData, error: stripeError } = await supabase.functions.invoke('create-stripe-customer', {
+              body: {}
+            });
+            
+            if (stripeError) {
+              console.error('Error creating Stripe customer and subscription:', stripeError);
+              // Fallback: try creating subscription without Stripe customer
+              const { data: newSubscription, error: createError } = await supabase
+                .from('subscriptions')
+                .insert({
+                  user_id: userId,
+                  status: 'inactive',
+                  plan_name: 'free',
+                  posts_generated_count: 0,
+                  keywords_count: 0,
+                })
+                .select()
+                .single();
+              
+              if (createError && createError.code !== '23505') {
+                console.error('Error creating subscription:', createError);
+                setSubscription(null);
+              } else {
+                // Fetch the subscription (may have been created by function or our insert)
+                const { data: subscription } = await supabase
+                  .from('subscriptions')
+                  .select('*')
+                  .eq('user_id', userId)
+                  .single();
+                setSubscription(subscription || null);
+              }
+            } else {
+              console.log('Stripe customer and subscription created:', stripeData?.customer_id);
+              // Fetch the subscription that was created by the function
+              const { data: subscription } = await supabase
+                .from('subscriptions')
+                .select('*')
+                .eq('user_id', userId)
+                .single();
+              setSubscription(subscription || null);
+            }
+          } catch (stripeErr) {
+            console.error('Exception creating Stripe customer:', stripeErr);
+            // Fallback: create subscription without Stripe customer
+            const { data: newSubscription } = await supabase
+              .from('subscriptions')
+              .insert({
+                user_id: userId,
+                status: 'inactive',
+                plan_name: 'free',
+                posts_generated_count: 0,
+                keywords_count: 0,
+              })
+              .select()
+              .single();
+            setSubscription(newSubscription || null);
+          }
+        } else {
+          console.error('Error fetching subscription:', error);
+          setSubscription(null);
+        }
       } else {
-        setSubscription(data || null);
+        // Subscription exists - ensure it has a Stripe customer ID
+        if (data && !data.stripe_customer_id) {
+          console.log('Subscription exists but no Stripe customer ID, creating one...');
+          try {
+            const { data: stripeData, error: stripeError } = await supabase.functions.invoke('create-stripe-customer', {
+              body: {}
+            });
+            
+            if (!stripeError && stripeData?.customer_id) {
+              // Refresh subscription to get updated data
+              const { data: updatedSubscription } = await supabase
+                .from('subscriptions')
+                .select('*')
+                .eq('user_id', userId)
+                .single();
+              setSubscription(updatedSubscription || data);
+            } else {
+              // Use existing data even if Stripe customer creation failed
+              setSubscription(data);
+            }
+          } catch (stripeErr) {
+            console.error('Exception ensuring Stripe customer:', stripeErr);
+            // Use existing data anyway
+            setSubscription(data);
+          }
+        } else {
+          setSubscription(data || null);
+        }
       }
     } catch (error) {
       console.error('Error fetching subscription:', error);
+      // On any error, default to no subscription
+      setSubscription(null);
     } finally {
       setIsLoadingSubscription(false);
     }
