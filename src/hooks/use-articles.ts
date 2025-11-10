@@ -50,7 +50,7 @@ export function useArticles() {
         .eq("user_id", user.id)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (blogError) throw blogError;
 
