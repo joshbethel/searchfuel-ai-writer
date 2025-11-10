@@ -50,13 +50,16 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Get auth header and create Supabase client
+    // Get auth header and create Supabase clients
     const authHeader = req.headers.get('Authorization');
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: authHeader! } }
     });
+    // Service role client for subscription queries (bypasses RLS)
+    const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get user from auth
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -182,6 +185,38 @@ Return ONLY a valid JSON array of blog ideas. No markdown, no explanation, just 
       trend: null,
     }));
 
+    // Check usage limit before inserting keywords
+    const { data: canAdd, error: limitError } = await supabase
+      .rpc('can_add_keyword', { user_uuid: user.id });
+
+    if (limitError) {
+      console.error('Error checking keyword limit:', limitError);
+      throw new Error('Failed to check keyword limit');
+    }
+
+    // Check if the number of keywords to insert exceeds the limit
+    const { count: currentCount } = await supabase
+      .from('keywords')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    const currentKeywordCount = currentCount || 0;
+    const newTotalCount = keywordsToInsert.length; // Since we're replacing all
+
+    // Get user's subscription to check limit (use service role to bypass RLS)
+    const { data: subscription } = await supabaseService
+      .from('subscriptions')
+      .select('id, plan_name, keywords_count')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single();
+
+    const maxKeywords = subscription?.plan_name === 'pro' ? 100 : 10;
+
+    if (newTotalCount > maxKeywords) {
+      throw new Error(`You can only have ${maxKeywords} keywords. You're trying to add ${newTotalCount}. Please upgrade your plan or reduce the number of keywords.`);
+    }
+
     // Delete existing keywords for this user first to avoid duplicates
     await supabase
       .from('keywords')
@@ -196,6 +231,14 @@ Return ONLY a valid JSON array of blog ideas. No markdown, no explanation, just 
     if (insertError) {
       console.error('Error inserting keywords:', insertError);
       throw new Error('Failed to save keywords to database');
+    }
+
+    // Update keyword count in subscriptions table
+    if (subscription) {
+      await supabaseService
+        .from('subscriptions')
+        .update({ keywords_count: newTotalCount })
+        .eq('id', subscription.id);
     }
 
     console.log('Successfully saved keywords to database');

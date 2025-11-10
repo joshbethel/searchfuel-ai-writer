@@ -172,6 +172,33 @@ serve(async (req: Request) => {
       throw new Error("Missing required environment variables");
     }
 
+    // CRITICAL SECURITY FIX: Authenticate user first
+    const supabaseClient = createClient(
+      SUPABASE_URL,
+      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    );
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: authData, error: authError } = await supabaseClient.auth.getUser(token);
+    
+    if (authError || !authData.user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userId = authData.user.id;
+
+    // Use service role for database operations (after authentication)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Get blog ID from request or find blogs that need posts
@@ -180,19 +207,29 @@ serve(async (req: Request) => {
     let blogsToProcess = [];
 
     if (blogId) {
-      const { data } = await supabase
+      // CRITICAL SECURITY FIX: Verify blog ownership
+      const { data, error } = await supabase
         .from("blogs")
         .select("*")
         .eq("id", blogId)
+        .eq("user_id", userId) // Verify ownership
         .eq("onboarding_completed", true)
         .single();
       
-      if (data) blogsToProcess = [data];
+      if (error || !data) {
+        return new Response(
+          JSON.stringify({ error: "Blog not found or access denied" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      blogsToProcess = [data];
     } else {
-      // Find all blogs that need posts (auto-generation enabled)
+      // Find all blogs for this user that need posts (auto-generation enabled)
       const { data } = await supabase
         .from("blogs")
         .select("*")
+        .eq("user_id", userId) // Only user's blogs
         .eq("onboarding_completed", true)
         .eq("auto_post_enabled", true)
         .or(`last_post_generated_at.is.null,last_post_generated_at.lt.${new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()}`);
@@ -206,6 +243,23 @@ serve(async (req: Request) => {
 
     for (const blog of blogsToProcess) {
       try {
+        // CRITICAL: Check usage limit before generating post
+        const { data: canGenerate, error: limitError } = await supabase
+          .rpc('can_generate_post', {
+            user_uuid: userId,
+            blog_uuid: blog.id
+          });
+
+        if (limitError || !canGenerate) {
+          console.error(`Usage limit exceeded for user ${userId}, blog ${blog.id}`);
+          results.push({
+            blogId: blog.id,
+            success: false,
+            error: "You have reached your monthly post limit. Please upgrade your plan.",
+          });
+          continue;
+        }
+
         // Select article type based on blog preferences
         const articleTypes = blog.article_types || {
           listicle: true,
@@ -420,6 +474,15 @@ Format: 16:9 aspect ratio, centered single subject.`;
           .single();
 
         if (insertError) throw insertError;
+
+        // Increment usage count after successful post creation
+        const { error: usageError } = await supabase
+          .rpc('increment_post_count', { user_uuid: userId });
+
+        if (usageError) {
+          console.error('Failed to increment usage count:', usageError);
+          // Don't fail the request, but log the error
+        }
 
         // Trigger keyword extraction for the newly created post (best-effort)
         try {

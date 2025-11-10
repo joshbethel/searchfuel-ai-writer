@@ -144,6 +144,27 @@ serve(async (req) => {
 
     console.log(`Processed ${processedKeywords.length} keywords, inserting into database`);
 
+    // Check current keyword count and limit before insertion
+    const { count: currentCount } = await supabase
+      .from("keywords")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
+    // Get user's subscription to check limit
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('plan_name, keywords_count')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single();
+
+    const maxKeywords = subscription?.plan_name === 'pro' ? 100 : 10;
+    const currentKeywordCount = currentCount || 0;
+
+    // Estimate new count (upsert might not add all if duplicates exist)
+    // We'll check actual count after insertion
+    const estimatedNewCount = Math.max(currentKeywordCount, processedKeywords.length);
+
     // Insert keywords into database
     const { data: insertedKeywords, error: insertError } = await supabase
       .from("keywords")
@@ -156,6 +177,25 @@ serve(async (req) => {
     if (insertError) {
       console.error("Database insert error:", insertError);
       throw insertError;
+    }
+
+    // Check actual count after insertion
+    const { count: finalCount } = await supabase
+      .from("keywords")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
+    if (finalCount && finalCount > maxKeywords) {
+      // This shouldn't happen if limits are enforced, but log a warning
+      console.warn(`User ${user.id} has ${finalCount} keywords, exceeding limit of ${maxKeywords}`);
+    }
+
+    // Update keyword count in subscriptions table
+    if (subscription && finalCount !== null) {
+      await supabase
+        .from('subscriptions')
+        .update({ keywords_count: finalCount })
+        .eq('id', subscription.id);
     }
 
     console.log(`Successfully inserted ${insertedKeywords?.length || 0} keywords`);
