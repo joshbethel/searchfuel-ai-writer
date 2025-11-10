@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -11,33 +11,86 @@ import { User } from "@supabase/supabase-js";
 import { BacklinkSettings } from "@/components/settings/BacklinkSettings";
 import { ArticleTypeSettings } from "@/components/settings/ArticleTypeSettings";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getPlanLimits } from "@/lib/utils/subscription-limits";
+import type { Database } from "@/integrations/supabase/types";
+
+type Subscription = Database['public']['Tables']['subscriptions']['Row'];
 
 export default function Settings() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [blogId, setBlogId] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+  const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   
   const tabParam = searchParams.get('tab');
   const defaultTab = (tabParam === 'backlinks' || tabParam === 'article-types' || tabParam === 'subscription') ? tabParam : 'account';
+  const sessionId = searchParams.get('session_id');
+  const canceled = searchParams.get('canceled');
+
+  // Fetch subscription data
+  const fetchSubscription = async (userId: string) => {
+    setIsLoadingSubscription(true);
+    try {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('Error fetching subscription:', error);
+      } else {
+        setSubscription(data || null);
+      }
+    } catch (error) {
+      console.error('Error fetching subscription:', error);
+    } finally {
+      setIsLoadingSubscription(false);
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
       
       // Load user's blog
-      if (session?.user) {
+      if (currentUser) {
         supabase
           .from("blogs")
           .select("id")
-          .eq("user_id", session.user.id)
+          .eq("user_id", currentUser.id)
           .single()
           .then(({ data }) => {
             if (data) setBlogId(data.id);
           });
+
+        // Fetch subscription
+        fetchSubscription(currentUser.id);
       }
     });
   }, []);
+
+  // Handle checkout session completion
+  useEffect(() => {
+    if (sessionId && user) {
+      toast.success("Subscription activated! Welcome to Pro.");
+      fetchSubscription(user.id);
+      navigate('/settings?tab=subscription', { replace: true });
+    }
+  }, [sessionId, user, navigate]);
+
+  // Handle checkout cancellation
+  useEffect(() => {
+    if (canceled) {
+      toast.info("Checkout was canceled.");
+      navigate('/settings?tab=subscription', { replace: true });
+    }
+  }, [canceled, navigate]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -54,6 +107,69 @@ export default function Settings() {
     console.log("Delete account clicked");
     toast.info("Delete account functionality coming soon");
   };
+
+  const handleUpgradeToPro = async () => {
+    if (!user) {
+      toast.error("Please sign in to upgrade");
+      return;
+    }
+
+    setIsCreatingCheckout(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: {}
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (error: any) {
+      console.error('Error creating checkout session:', error);
+      toast.error(error.message || 'Failed to create checkout session. Please try again.');
+    } finally {
+      setIsCreatingCheckout(false);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    if (!user) {
+      toast.error("Please sign in");
+      return;
+    }
+
+    setIsOpeningPortal(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-subscription', {
+        body: {}
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        // Open Stripe Billing Portal
+        window.location.href = data.url;
+      } else {
+        throw new Error('No portal URL received');
+      }
+    } catch (error: any) {
+      console.error('Error opening billing portal:', error);
+      toast.error(error.message || 'Failed to open billing portal. Please try again.');
+    } finally {
+      setIsOpeningPortal(false);
+    }
+  };
+
+  // Get plan info
+  const planName = subscription?.plan_name || 'free';
+  const planLimits = getPlanLimits(planName);
+  const isActive = subscription?.status === 'active' || subscription?.status === 'trialing';
+  const postsUsed = subscription?.posts_generated_count || 0;
+  const keywordsUsed = subscription?.keywords_count || 0;
 
   return (
     <div className="min-h-screen bg-background p-8">
@@ -159,14 +275,85 @@ export default function Settings() {
             <CardTitle>Subscription</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Current Plan</p>
-              <p className="text-lg font-semibold">Free</p>
-            </div>
+            {isLoadingSubscription ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Current Plan</p>
+                  <p className="text-lg font-semibold capitalize">{planName}</p>
+                  {subscription && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Status: {subscription.status}
+                    </p>
+                  )}
+                </div>
+
+                {/* Usage Stats */}
+                {isActive && (
+                  <div className="space-y-3 pt-2 border-t">
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-muted-foreground">Posts Generated</span>
+                        <span>{postsUsed} / {planLimits.maxPostsPerMonth}</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-[#8B7355] h-2 rounded-full transition-all"
+                          style={{ width: `${Math.min((postsUsed / planLimits.maxPostsPerMonth) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-muted-foreground">Keywords</span>
+                        <span>{keywordsUsed} / {planLimits.maxKeywordsTotal}</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-[#8B7355] h-2 rounded-full transition-all"
+                          style={{ width: `${Math.min((keywordsUsed / planLimits.maxKeywordsTotal) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
             
-            <Button className="w-full bg-[#8B7355] hover:bg-[#8B7355]/90 text-white">
-              ↗ Upgrade to Pro
-            </Button>
+                {isActive ? (
+                  <Button 
+                    className="w-full bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+                    onClick={handleManageSubscription}
+                    disabled={isOpeningPortal}
+                  >
+                    {isOpeningPortal ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Opening...
+                      </>
+                    ) : (
+                      'Manage Subscription'
+                    )}
+                  </Button>
+                ) : (
+                  <Button 
+                    className="w-full bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+                    onClick={handleUpgradeToPro}
+                    disabled={isCreatingCheckout}
+                  >
+                    {isCreatingCheckout ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      '↗ Upgrade to Pro'
+                    )}
+                  </Button>
+                )}
+              </>
+            )}
 
             <div className="pt-4">
               <p className="text-sm font-medium mb-3">Upgrade to get:</p>
