@@ -104,6 +104,14 @@ serve(async (req) => {
         // Get plan from metadata or price ID
         const planName = getPlanName(subscription.items.data[0]);
         
+        // Log subscription period dates for debugging
+        console.log('Subscription period dates:', {
+          current_period_start: subscription.current_period_start,
+          current_period_end: subscription.current_period_end,
+          converted_start: timestampToISO(subscription.current_period_start),
+          converted_end: timestampToISO(subscription.current_period_end),
+        });
+        
         await supabase
           .from('subscriptions')
           .upsert({
@@ -128,7 +136,20 @@ serve(async (req) => {
     case 'customer.subscription.updated':
     case 'customer.subscription.paused':
     case 'customer.subscription.resumed': {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscriptionFromEvent = event.data.object as Stripe.Subscription;
+      
+      // Retrieve full subscription object from Stripe to ensure we have all fields
+      // This is especially important for period dates which might not be in the webhook payload
+      const subscription = await stripe.subscriptions.retrieve(subscriptionFromEvent.id);
+      
+      // Log subscription period dates for debugging
+      console.log(`[${event.type}] Subscription period dates:`, {
+        subscription_id: subscription.id,
+        current_period_start: subscription.current_period_start,
+        current_period_end: subscription.current_period_end,
+        converted_start: timestampToISO(subscription.current_period_start),
+        converted_end: timestampToISO(subscription.current_period_end),
+      });
       
       // Lookup by customer_id (more reliable)
       const { data: existing } = await supabase
@@ -170,10 +191,16 @@ serve(async (req) => {
         updates.keywords_count = 0;
       }
       
-      await supabase
+      const { error: updateError } = await supabase
         .from('subscriptions')
         .update(updates)
         .eq('stripe_subscription_id', subscription.id);
+      
+      if (updateError) {
+        console.error('Error updating subscription:', updateError);
+      } else {
+        console.log(`Successfully updated subscription ${subscription.id} with period dates`);
+      }
       break;
     }
     
