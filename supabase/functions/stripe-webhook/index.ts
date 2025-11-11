@@ -314,6 +314,7 @@ serve(async (req) => {
         cancel_at_period_end: boolean;
         cancel_at?: string | null;
         canceled_at?: string | null;
+        stripe_subscription_id?: string;
         posts_generated_count?: number;
         keywords_count?: number;
       } = {
