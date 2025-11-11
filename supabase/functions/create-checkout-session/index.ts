@@ -40,12 +40,15 @@ serve(async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin);
 
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { 
-      status: 200,
+      status: 204,
       headers: corsHeaders 
     });
   }
+
+  try {
 
   // User authentication
   const supabaseClient = createClient(
@@ -165,5 +168,14 @@ serve(async (req) => {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
     status: 200,
   });
+  
+  } catch (error) {
+    console.error("Error in create-checkout-session:", error);
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
 });
 
