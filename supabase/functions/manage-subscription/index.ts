@@ -71,12 +71,26 @@ serve(async (req) => {
     );
   }
 
+  // Use service role key to query subscriptions (bypasses RLS, but we've already authenticated the user)
+  const supabaseService = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  );
+
   // Get user's Stripe customer ID
-  const { data: subscription } = await supabaseClient
+  const { data: subscription, error: subscriptionError } = await supabaseService
     .from('subscriptions')
     .select('stripe_customer_id')
     .eq('user_id', data.user.id)
-    .single();
+    .maybeSingle();
+
+  if (subscriptionError) {
+    console.error('Error fetching subscription:', subscriptionError);
+    return new Response(
+      JSON.stringify({ error: "Error fetching subscription" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
 
   if (!subscription?.stripe_customer_id) {
     return new Response(
