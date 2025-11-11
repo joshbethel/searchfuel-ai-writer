@@ -142,13 +142,18 @@ serve(async (req) => {
       // This is especially important for period dates which might not be in the webhook payload
       const subscription = await stripe.subscriptions.retrieve(subscriptionFromEvent.id);
       
-      // Log subscription period dates for debugging
-      console.log(`[${event.type}] Subscription period dates:`, {
+      // Log subscription period dates and cancellation info for debugging
+      console.log(`[${event.type}] Subscription details:`, {
         subscription_id: subscription.id,
         current_period_start: subscription.current_period_start,
         current_period_end: subscription.current_period_end,
         converted_start: timestampToISO(subscription.current_period_start),
         converted_end: timestampToISO(subscription.current_period_end),
+        cancel_at: subscription.cancel_at,
+        cancel_at_converted: timestampToISO(subscription.cancel_at),
+        cancel_at_period_end: subscription.cancel_at_period_end,
+        canceled_at: subscription.canceled_at,
+        cancellation_details: subscription.cancellation_details,
       });
       
       // Lookup by customer_id (more reliable)
@@ -173,6 +178,7 @@ serve(async (req) => {
         current_period_start: string | null;
         current_period_end: string | null;
         cancel_at_period_end: boolean;
+        cancel_at: string | null;
         canceled_at: string | null;
         posts_generated_count?: number;
         keywords_count?: number;
@@ -182,8 +188,18 @@ serve(async (req) => {
         current_period_start: timestampToISO(subscription.current_period_start),
         current_period_end: timestampToISO(subscription.current_period_end),
         cancel_at_period_end: subscription.cancel_at_period_end,
+        cancel_at: timestampToISO(subscription.cancel_at),
         canceled_at: timestampToISO(subscription.canceled_at),
       };
+      
+      // Log cancellation details if present
+      if (subscription.cancellation_details) {
+        console.log(`Cancellation details for subscription ${subscription.id}:`, {
+          reason: subscription.cancellation_details.reason,
+          comment: subscription.cancellation_details.comment,
+          feedback: subscription.cancellation_details.feedback,
+        });
+      }
       
       // Reset usage if plan changed
       if (existing.plan_name !== newPlan) {
