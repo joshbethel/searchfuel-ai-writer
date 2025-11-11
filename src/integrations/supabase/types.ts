@@ -345,6 +345,7 @@ export type Database = {
           cancel_at: string | null
           cancel_at_period_end: boolean | null
           canceled_at: string | null
+          cancellation_details: Json | null
           created_at: string
           current_period_end: string | null
           current_period_start: string | null
@@ -363,6 +364,7 @@ export type Database = {
           cancel_at?: string | null
           cancel_at_period_end?: boolean | null
           canceled_at?: string | null
+          cancellation_details?: Json | null
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
@@ -381,6 +383,7 @@ export type Database = {
           cancel_at?: string | null
           cancel_at_period_end?: boolean | null
           canceled_at?: string | null
+          cancellation_details?: Json | null
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
