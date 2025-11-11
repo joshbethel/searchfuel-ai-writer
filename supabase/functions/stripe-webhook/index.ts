@@ -104,13 +104,46 @@ serve(async (req) => {
         // Get plan from metadata or price ID
         const planName = getPlanName(subscription.items.data[0]);
         
+        // Try to get period dates - check subscription items first (they're more reliable in webhook payloads)
+        // Then fallback to subscription-level fields
+        let periodStart: number | null | undefined = undefined;
+        let periodEnd: number | null | undefined = undefined;
+        
+        // First, check subscription items (they often have period info in webhook payloads)
+        if (subscription.items?.data?.length > 0) {
+          const firstItem = subscription.items.data[0] as any; // Use any to access potentially untyped fields
+          if (firstItem?.current_period_start != null && typeof firstItem.current_period_start === 'number') {
+            periodStart = firstItem.current_period_start;
+          }
+          if (firstItem?.current_period_end != null && typeof firstItem.current_period_end === 'number') {
+            periodEnd = firstItem.current_period_end;
+          }
+        }
+        
+        // Fallback: check subscription-level fields if not found in items
+        if (periodStart == null && subscription.current_period_start != null) {
+          periodStart = subscription.current_period_start;
+        }
+        if (periodEnd == null && subscription.current_period_end != null) {
+          periodEnd = subscription.current_period_end;
+        }
+        
         // Log subscription period dates for debugging
         console.log('Subscription period dates:', {
-          current_period_start: subscription.current_period_start,
-          current_period_end: subscription.current_period_end,
-          converted_start: timestampToISO(subscription.current_period_start),
-          converted_end: timestampToISO(subscription.current_period_end),
+          subscription_level_start: subscription.current_period_start,
+          subscription_level_end: subscription.current_period_end,
+          item_level_start: subscription.items?.data?.[0] ? (subscription.items.data[0] as any).current_period_start : 'N/A',
+          item_level_end: subscription.items?.data?.[0] ? (subscription.items.data[0] as any).current_period_end : 'N/A',
+          final_periodStart: periodStart,
+          final_periodEnd: periodEnd,
+          converted_start: timestampToISO(periodStart),
+          converted_end: timestampToISO(periodEnd),
         });
+        
+        // Warn if period dates are still missing
+        if (periodStart == null || periodEnd == null) {
+          console.warn(`Warning: Subscription ${subscription.id} is missing period dates. Status: ${subscription.status}`);
+        }
         
         await supabase
           .from('subscriptions')
@@ -121,8 +154,8 @@ serve(async (req) => {
             stripe_price_id: subscription.items.data[0].price.id,
             status: subscription.status,
             plan_name: planName,
-            current_period_start: timestampToISO(subscription.current_period_start),
-            current_period_end: timestampToISO(subscription.current_period_end),
+            current_period_start: timestampToISO(periodStart),
+            current_period_end: timestampToISO(periodEnd),
             posts_generated_count: 0, // Reset on new subscription
             keywords_count: 0,
           }, {
@@ -143,12 +176,15 @@ serve(async (req) => {
       const subscription = await stripe.subscriptions.retrieve(subscriptionFromEvent.id);
       
       // Log subscription period dates and cancellation info for debugging
+      const itemPeriodStart = subscription.items?.data?.[0] ? (subscription.items.data[0] as any).current_period_start : undefined;
+      const itemPeriodEnd = subscription.items?.data?.[0] ? (subscription.items.data[0] as any).current_period_end : undefined;
+      
       console.log(`[${event.type}] Subscription details:`, {
         subscription_id: subscription.id,
-        current_period_start: subscription.current_period_start,
-        current_period_end: subscription.current_period_end,
-        converted_start: timestampToISO(subscription.current_period_start),
-        converted_end: timestampToISO(subscription.current_period_end),
+        subscription_level_start: subscription.current_period_start,
+        subscription_level_end: subscription.current_period_end,
+        item_level_start: itemPeriodStart,
+        item_level_end: itemPeriodEnd,
         cancel_at: subscription.cancel_at,
         cancel_at_converted: timestampToISO(subscription.cancel_at),
         cancel_at_period_end: subscription.cancel_at_period_end,
@@ -171,26 +207,85 @@ serve(async (req) => {
       // Get plan from metadata or price ID, fallback to existing if not found
       const newPlan = getPlanName(subscription.items.data[0]) || existing.plan_name;
       
+      // Try to get period dates - check subscription items first (they're more reliable in webhook payloads)
+      // Then fallback to subscription-level fields
+      let periodStart: number | null | undefined = undefined;
+      let periodEnd: number | null | undefined = undefined;
+      
+      // First, check subscription items (they often have period info in webhook payloads)
+      if (subscription.items?.data?.length > 0) {
+        const firstItem = subscription.items.data[0] as any; // Use any to access potentially untyped fields
+        if (firstItem?.current_period_start != null && typeof firstItem.current_period_start === 'number') {
+          periodStart = firstItem.current_period_start;
+        }
+        if (firstItem?.current_period_end != null && typeof firstItem.current_period_end === 'number') {
+          periodEnd = firstItem.current_period_end;
+        }
+      }
+      
+      // Fallback: check subscription-level fields if not found in items
+      if (periodStart == null && subscription.current_period_start != null) {
+        periodStart = subscription.current_period_start;
+      }
+      if (periodEnd == null && subscription.current_period_end != null) {
+        periodEnd = subscription.current_period_end;
+      }
+      
+      // If still no period dates, preserve existing values or use null
+      const periodStartISO = timestampToISO(periodStart);
+      const periodEndISO = timestampToISO(periodEnd);
+      
+      // Log final period dates being used
+      const finalItemPeriodStart = subscription.items?.data?.[0] ? (subscription.items.data[0] as any).current_period_start : undefined;
+      console.log(`[${event.type}] Final period dates:`, {
+        periodStart,
+        periodEnd,
+        periodStartISO,
+        periodEndISO,
+        source: periodStart === finalItemPeriodStart ? 'subscription_item' : (periodStart === subscription.current_period_start ? 'subscription_level' : 'fallback'),
+      });
+      
+      // Warn if period dates are missing (shouldn't happen normally)
+      if (periodStart == null || periodEnd == null) {
+        console.warn(`Warning: Subscription ${subscription.id} is missing period dates. Status: ${subscription.status}, will preserve existing values if available.`);
+      }
+      
       // Reset usage counts if plan changed
       const updates: {
         status: string;
         plan_name: string;
-        current_period_start: string | null;
-        current_period_end: string | null;
+        current_period_start?: string | null;
+        current_period_end?: string | null;
         cancel_at_period_end: boolean;
-        cancel_at: string | null;
-        canceled_at: string | null;
+        cancel_at?: string | null;
+        canceled_at?: string | null;
         posts_generated_count?: number;
         keywords_count?: number;
       } = {
         status: subscription.status,
         plan_name: newPlan,
-        current_period_start: timestampToISO(subscription.current_period_start),
-        current_period_end: timestampToISO(subscription.current_period_end),
         cancel_at_period_end: subscription.cancel_at_period_end,
-        cancel_at: timestampToISO(subscription.cancel_at),
-        canceled_at: timestampToISO(subscription.canceled_at),
       };
+      
+      // Only update period dates if we have valid values
+      // This prevents overwriting existing valid dates with null
+      if (periodStartISO !== null) {
+        updates.current_period_start = periodStartISO;
+      }
+      if (periodEndISO !== null) {
+        updates.current_period_end = periodEndISO;
+      }
+      
+      // Update cancellation-related fields
+      const cancelAtISO = timestampToISO(subscription.cancel_at);
+      if (cancelAtISO !== null) {
+        updates.cancel_at = cancelAtISO;
+      }
+      
+      const canceledAtISO = timestampToISO(subscription.canceled_at);
+      if (canceledAtISO !== null) {
+        updates.canceled_at = canceledAtISO;
+      }
       
       // Log cancellation details if present
       if (subscription.cancellation_details) {
