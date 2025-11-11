@@ -314,6 +314,7 @@ serve(async (req) => {
         cancel_at_period_end: boolean;
         cancel_at?: string | null;
         canceled_at?: string | null;
+        cancellation_details?: any;
         stripe_subscription_id?: string;
         posts_generated_count?: number;
         keywords_count?: number;
@@ -355,13 +356,23 @@ serve(async (req) => {
       }
       // Note: We don't clear canceled_at if it's null - it's a historical record
       
-      // Log cancellation details if present
+      // Handle cancellation_details: save if present, clear if subscription is reactivated
       if (subscription.cancellation_details) {
+        // Save cancellation details as JSONB
+        updates.cancellation_details = {
+          reason: subscription.cancellation_details.reason || null,
+          comment: subscription.cancellation_details.comment || null,
+          feedback: subscription.cancellation_details.feedback || null,
+        };
+        
         console.log(`Cancellation details for subscription ${subscription.id}:`, {
           reason: subscription.cancellation_details.reason,
           comment: subscription.cancellation_details.comment,
           feedback: subscription.cancellation_details.feedback,
         });
+      } else {
+        // Clear cancellation_details if subscription was reactivated (no cancellation details)
+        updates.cancellation_details = null;
       }
       
       // Reset usage if plan changed
