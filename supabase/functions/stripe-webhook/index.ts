@@ -145,22 +145,56 @@ serve(async (req) => {
           console.warn(`Warning: Subscription ${subscription.id} is missing period dates. Status: ${subscription.status}`);
         }
         
-        await supabase
+        // Check if subscription already exists by subscription_id or customer_id
+        const { data: existingSub } = await supabase
           .from('subscriptions')
-          .upsert({
-            user_id: session.metadata?.user_id,
-            stripe_customer_id: subscription.customer as string,
-            stripe_subscription_id: subscription.id,
-            stripe_price_id: subscription.items.data[0].price.id,
-            status: subscription.status,
-            plan_name: planName,
-            current_period_start: timestampToISO(periodStart),
-            current_period_end: timestampToISO(periodEnd),
-            posts_generated_count: 0, // Reset on new subscription
-            keywords_count: 0,
-          }, {
-            onConflict: 'user_id'
-          });
+          .select('*')
+          .or(`stripe_subscription_id.eq.${subscription.id},stripe_customer_id.eq.${subscription.customer}`)
+          .maybeSingle();
+        
+        if (existingSub) {
+          // Update existing subscription - preserve existing user_id
+          console.log(`Updating existing subscription ${subscription.id} for customer ${subscription.customer} (existing user_id: ${existingSub.user_id})`);
+          await supabase
+            .from('subscriptions')
+            .update({
+              // Preserve existing user_id - don't overwrite with potentially wrong metadata
+              stripe_subscription_id: subscription.id,
+              stripe_customer_id: subscription.customer as string,
+              stripe_price_id: subscription.items.data[0].price.id,
+              status: subscription.status,
+              plan_name: planName,
+              current_period_start: timestampToISO(periodStart),
+              current_period_end: timestampToISO(periodEnd),
+              posts_generated_count: 0, // Reset on new subscription
+              keywords_count: 0,
+            })
+            .eq('id', existingSub.id);
+        } else {
+          // Create new subscription (only if user_id is provided in metadata)
+          if (!session.metadata?.user_id) {
+            console.error(`Cannot create subscription: user_id missing from session metadata for subscription ${subscription.id}`);
+            break;
+          }
+          
+          console.log(`Creating new subscription ${subscription.id} for user ${session.metadata.user_id}`);
+          await supabase
+            .from('subscriptions')
+            .upsert({
+              user_id: session.metadata.user_id,
+              stripe_customer_id: subscription.customer as string,
+              stripe_subscription_id: subscription.id,
+              stripe_price_id: subscription.items.data[0].price.id,
+              status: subscription.status,
+              plan_name: planName,
+              current_period_start: timestampToISO(periodStart),
+              current_period_end: timestampToISO(periodEnd),
+              posts_generated_count: 0, // Reset on new subscription
+              keywords_count: 0,
+            }, {
+              onConflict: 'user_id'
+            });
+        }
       }
       break;
     }
@@ -192,15 +226,36 @@ serve(async (req) => {
         cancellation_details: subscription.cancellation_details,
       });
       
-      // Lookup by customer_id (more reliable)
-      const { data: existing } = await supabase
+      // Lookup by subscription_id first (most reliable), then fallback to customer_id
+      let existing = null;
+      
+      // First try to find by subscription_id (most specific)
+      const { data: existingBySubId } = await supabase
         .from('subscriptions')
         .select('*')
-        .eq('stripe_customer_id', subscription.customer as string)
-        .single();
+        .eq('stripe_subscription_id', subscription.id)
+        .maybeSingle();
+      
+      if (existingBySubId) {
+        existing = existingBySubId;
+        console.log(`Found subscription by subscription_id: ${subscription.id}`);
+      } else {
+        // Fallback: lookup by customer_id
+        const { data: existingByCustomerId } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('stripe_customer_id', subscription.customer as string)
+          .maybeSingle();
+        
+        if (existingByCustomerId) {
+          existing = existingByCustomerId;
+          console.log(`Found subscription by customer_id: ${subscription.customer}`);
+        }
+      }
       
       if (!existing) {
-        console.warn(`No subscription found for customer ${subscription.customer}`);
+        console.warn(`No subscription found for subscription ${subscription.id} or customer ${subscription.customer}. This might be a new subscription that hasn't been processed yet.`);
+        // Don't create a new subscription here - let checkout.session.completed handle new subscriptions
         break;
       }
       
@@ -302,15 +357,19 @@ serve(async (req) => {
         updates.keywords_count = 0;
       }
       
+      // Update using the existing row's ID (most reliable)
+      // Also update stripe_subscription_id in case it changed (e.g., new subscription for same customer)
+      updates.stripe_subscription_id = subscription.id;
+      
       const { error: updateError } = await supabase
         .from('subscriptions')
         .update(updates)
-        .eq('stripe_subscription_id', subscription.id);
+        .eq('id', existing.id);
       
       if (updateError) {
-        console.error('Error updating subscription:', updateError);
+        console.error(`Error updating subscription ${subscription.id} (row id: ${existing.id}):`, updateError);
       } else {
-        console.log(`Successfully updated subscription ${subscription.id} with period dates`);
+        console.log(`Successfully updated subscription ${subscription.id} (row id: ${existing.id}) with status: ${subscription.status}`);
       }
       break;
     }
