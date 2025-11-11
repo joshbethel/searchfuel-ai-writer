@@ -29,6 +29,32 @@ function getPlanName(subscriptionItem: Stripe.SubscriptionItem): string {
   return 'pro';
 }
 
+// Helper function to safely convert Unix timestamp to ISO string
+function timestampToISO(timestamp: number | null | undefined): string | null {
+  if (timestamp == null || typeof timestamp !== 'number') {
+    return null;
+  }
+  
+  // Validate timestamp is reasonable (between 1970 and 2100)
+  if (timestamp < 0 || timestamp > 4102444800) {
+    console.warn(`Invalid timestamp value: ${timestamp}`);
+    return null;
+  }
+  
+  try {
+    const date = new Date(timestamp * 1000);
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn(`Invalid date created from timestamp: ${timestamp}`);
+      return null;
+    }
+    return date.toISOString();
+  } catch (error) {
+    console.error(`Error converting timestamp ${timestamp} to ISO:`, error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   const stripeMode = Deno.env.get("STRIPE_MODE") || "test";
   const stripeKey = stripeMode === "live" 
@@ -87,8 +113,8 @@ serve(async (req) => {
             stripe_price_id: subscription.items.data[0].price.id,
             status: subscription.status,
             plan_name: planName,
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_start: timestampToISO(subscription.current_period_start),
+            current_period_end: timestampToISO(subscription.current_period_end),
             posts_generated_count: 0, // Reset on new subscription
             keywords_count: 0,
           }, {
@@ -123,8 +149,8 @@ serve(async (req) => {
       const updates: {
         status: string;
         plan_name: string;
-        current_period_start: string;
-        current_period_end: string;
+        current_period_start: string | null;
+        current_period_end: string | null;
         cancel_at_period_end: boolean;
         canceled_at: string | null;
         posts_generated_count?: number;
@@ -132,12 +158,10 @@ serve(async (req) => {
       } = {
         status: subscription.status,
         plan_name: newPlan,
-        current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-        current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+        current_period_start: timestampToISO(subscription.current_period_start),
+        current_period_end: timestampToISO(subscription.current_period_end),
         cancel_at_period_end: subscription.cancel_at_period_end,
-        canceled_at: subscription.canceled_at 
-          ? new Date(subscription.canceled_at * 1000).toISOString() 
-          : null,
+        canceled_at: timestampToISO(subscription.canceled_at),
       };
       
       // Reset usage if plan changed
