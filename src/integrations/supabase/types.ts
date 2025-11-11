@@ -342,55 +342,55 @@ export type Database = {
       }
       subscriptions: {
         Row: {
-          id: string
-          user_id: string
-          stripe_customer_id: string | null
-          stripe_subscription_id: string | null
-          stripe_price_id: string | null
-          status: string
-          plan_name: string
-          current_period_start: string | null
-          current_period_end: string | null
           cancel_at_period_end: boolean | null
           canceled_at: string | null
-          posts_generated_count: number | null
-          keywords_count: number | null
           created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          keywords_count: number | null
+          plan_name: string
+          posts_generated_count: number | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
           updated_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          stripe_price_id?: string | null
-          status?: string
-          plan_name?: string
-          current_period_start?: string | null
-          current_period_end?: string | null
           cancel_at_period_end?: boolean | null
           canceled_at?: string | null
-          posts_generated_count?: number | null
-          keywords_count?: number | null
           created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          keywords_count?: number | null
+          plan_name?: string
+          posts_generated_count?: number | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
           updated_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          stripe_price_id?: string | null
-          status?: string
-          plan_name?: string
-          current_period_start?: string | null
-          current_period_end?: string | null
           cancel_at_period_end?: boolean | null
           canceled_at?: string | null
-          posts_generated_count?: number | null
-          keywords_count?: number | null
           created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          keywords_count?: number | null
+          plan_name?: string
+          posts_generated_count?: number | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
           updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -399,7 +399,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      can_add_keyword: { Args: { user_uuid: string }; Returns: boolean }
+      can_generate_post: {
+        Args: { blog_uuid: string; user_uuid: string }
+        Returns: boolean
+      }
+      get_user_usage: {
+        Args: { user_uuid: string }
+        Returns: {
+          keywords_count: number
+          keywords_limit: number
+          plan_name: string
+          posts_count: number
+          posts_limit: number
+          status: string
+        }[]
+      }
+      increment_keyword_count: {
+        Args: { user_uuid: string }
+        Returns: undefined
+      }
+      increment_post_count: { Args: { user_uuid: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
