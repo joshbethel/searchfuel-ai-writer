@@ -332,15 +332,27 @@ serve(async (req) => {
       }
       
       // Update cancellation-related fields
-      const cancelAtISO = timestampToISO(subscription.cancel_at);
-      if (cancelAtISO !== null) {
-        updates.cancel_at = cancelAtISO;
+      // Handle cancel_at: set if exists, clear if null (user reactivated subscription)
+      if (subscription.cancel_at != null) {
+        const cancelAtISO = timestampToISO(subscription.cancel_at);
+        if (cancelAtISO !== null) {
+          updates.cancel_at = cancelAtISO;
+        }
+      } else {
+        // Clear cancel_at if subscription was reactivated (cancel_at is null)
+        // This happens when a scheduled cancellation is canceled
+        updates.cancel_at = null;
       }
       
-      const canceledAtISO = timestampToISO(subscription.canceled_at);
-      if (canceledAtISO !== null) {
-        updates.canceled_at = canceledAtISO;
+      // Handle canceled_at: set if exists (historical record - don't clear)
+      // canceled_at is a historical timestamp and should remain even if subscription is reactivated
+      if (subscription.canceled_at != null) {
+        const canceledAtISO = timestampToISO(subscription.canceled_at);
+        if (canceledAtISO !== null) {
+          updates.canceled_at = canceledAtISO;
+        }
       }
+      // Note: We don't clear canceled_at if it's null - it's a historical record
       
       // Log cancellation details if present
       if (subscription.cancellation_details) {
