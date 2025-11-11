@@ -2,6 +2,33 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
+// Helper function to determine plan name from subscription item
+function getPlanName(subscriptionItem: Stripe.SubscriptionItem): string {
+  // First, try to get from price metadata (preferred)
+  if (subscriptionItem.price?.metadata?.plan) {
+    return subscriptionItem.price.metadata.plan;
+  }
+  
+  // Fallback: try plan metadata (legacy)
+  if (subscriptionItem.plan?.metadata?.plan) {
+    return subscriptionItem.plan.metadata.plan;
+  }
+  
+  // Fallback: check if this is a known pro price ID
+  const stripeMode = Deno.env.get("STRIPE_MODE") || "test";
+  const proPriceId = stripeMode === "live"
+    ? Deno.env.get("STRIPE_PRICE_LIVE")
+    : Deno.env.get("STRIPE_PRICE_TEST");
+  
+  const priceId = subscriptionItem.price?.id || subscriptionItem.plan?.id;
+  if (priceId && proPriceId && priceId === proPriceId) {
+    return 'pro';
+  }
+  
+  // Default to 'pro' for any paid subscription (since free plan doesn't use Stripe)
+  return 'pro';
+}
+
 serve(async (req) => {
   const stripeMode = Deno.env.get("STRIPE_MODE") || "test";
   const stripeKey = stripeMode === "live" 
@@ -48,8 +75,8 @@ serve(async (req) => {
         const subscriptionId = session.subscription as string;
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
         
-        // Get plan from metadata (if available) or default to 'pro'
-        const planName = subscription.items.data[0].plan?.metadata?.plan || 'pro';
+        // Get plan from metadata or price ID
+        const planName = getPlanName(subscription.items.data[0]);
         
         await supabase
           .from('subscriptions')
@@ -89,11 +116,20 @@ serve(async (req) => {
         break;
       }
       
-      // Get plan from metadata (if available) or use existing
-      const newPlan = subscription.items.data[0].plan?.metadata?.plan || existing.plan_name;
+      // Get plan from metadata or price ID, fallback to existing if not found
+      const newPlan = getPlanName(subscription.items.data[0]) || existing.plan_name;
       
       // Reset usage counts if plan changed
-      const updates: any = {
+      const updates: {
+        status: string;
+        plan_name: string;
+        current_period_start: string;
+        current_period_end: string;
+        cancel_at_period_end: boolean;
+        canceled_at: string | null;
+        posts_generated_count?: number;
+        keywords_count?: number;
+      } = {
         status: subscription.status,
         plan_name: newPlan,
         current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
