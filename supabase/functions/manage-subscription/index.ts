@@ -118,11 +118,28 @@ serve(async (req) => {
       apiVersion: "2025-08-27.basil",
     });
 
+    // Get optional portal configuration ID from environment
+    // Default to the test configuration if not set in environment
+    const portalConfigId = stripeMode === "live"
+      ? Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID_LIVE")
+      : Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID_TEST") || "bpc_1SS5wABOgvRSvvOEDfDbuZMC";
+
     // Create portal session
-    const session = await stripe.billingPortal.sessions.create({
+    const portalSessionParams: {
+      customer: string;
+      return_url: string;
+      configuration?: string;
+    } = {
       customer: subscription.stripe_customer_id,
       return_url: `${origin || 'https://searchfuel-ai-writer.lovable.app'}/settings?tab=subscription`,
-    });
+    };
+
+    // Add configuration if provided
+    if (portalConfigId) {
+      portalSessionParams.configuration = portalConfigId;
+    }
+
+    const session = await stripe.billingPortal.sessions.create(portalSessionParams);
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -130,10 +147,31 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Error in manage-subscription:", error);
-    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    
+    // Handle Stripe-specific errors
+    let errorMessage = "Internal server error";
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      
+      // Check if it's a Stripe portal configuration error
+      const errorWithType = error as Error & { type?: string };
+      const isPortalConfigError = 
+        error.message.includes("No configuration provided") || 
+        error.message.includes("default configuration has not been created") ||
+        (errorWithType.type === "StripeInvalidRequestError" && 
+        error.message.includes("configuration"));
+      
+      if (isPortalConfigError) {
+        errorMessage = "Billing portal is not configured. Please set up the customer portal in your Stripe dashboard at https://dashboard.stripe.com/test/settings/billing/portal (for test mode) or https://dashboard.stripe.com/settings/billing/portal (for live mode).";
+        statusCode = 400;
+      }
+    }
+    
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: statusCode, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
