@@ -195,78 +195,16 @@ export default function Articles() {
       if (error) throw error;
       
       if (data?.success) {
-        toast.success("Article generated successfully!");
         if (scheduleDate) {
-          console.log('Response data:', data);
-          // Extract post ID from the response
-          const postId = data.results?.[0]?.postId;
-          
-          if (!postId) {
-            console.error('No post ID found in response:', data);
-            toast.error('Failed to schedule: Could not find the post ID');
-            return;
-          }
-          
-          // Log the post ID we found
-          console.log('Found post ID:', postId);
-          
-          console.log('Scheduling post for:', scheduleDate, 'Post ID:', postId);
-          
-          // First verify the post exists
-          const { data: existingPost, error: checkError } = await supabase
-            .from("blog_posts")
-            .select("id")
-            .eq("id", postId)
-            .single();
-            
-          if (checkError || !existingPost) {
-            console.error('Post not found:', checkError || 'No post with this ID');
-            toast.error('Failed to schedule: Post not found');
-            return;
-          }
-          
-          // Update the scheduling info
-          const { data: updateData, error: updateError } = await supabase
-            .from("blog_posts")
-            .update({
-              scheduled_publish_date: scheduleDate.toISOString(),
-              publishing_status: 'pending'  // Use 'pending' status for scheduled posts
-            })
-            .eq("id", postId)
-            .select()
-            .single();
-            
-          if (updateError) {
-            console.error('Failed to update scheduling:', updateError);
-            toast.error('Failed to schedule post: ' + updateError.message);
-          } else {
-            console.log('Updated post data:', updateData);
-            
-            if (!updateData) {
-              console.error('No data returned after update');
-              toast.error('Failed to confirm scheduling update');
-              return;
-            }
-            
-            toast.success(`Article scheduled for publication on ${format(scheduleDate, "PPP 'at' p")}`);
-            
-            // Immediately refresh the articles list
-            await fetchArticles();
-            
-            // Double-check the updated article
-            const updatedArticle = articles.find(a => a.id === postId);
-            console.log('Updated article state:', {
-              id: postId,
-              status: updatedArticle?.publishing_status,
-              scheduledDate: updatedArticle?.scheduled_publish_date
-            });
-          }
-          
+          toast.success(`Article scheduled for publication on ${format(scheduleDate, "PPP 'at' p")}`);
         } else if (data.results?.[0]?.success) {
+          toast.success("Article generated successfully!");
           toast.info("Article published to WordPress!");
         } else {
+          toast.success("Article generated successfully!");
           toast.warning(`Article created but publishing failed: ${data.results?.[0]?.error}`);
         }
+        await fetchArticles();
       } else {
         toast.warning("Article generation completed with issues");
       }
@@ -274,7 +212,13 @@ export default function Articles() {
       await fetchArticles();
     } catch (error: any) {
       console.error('Article generation error:', error);
-      toast.error(error.message || "Failed to generate article");
+      
+      // Check if it's a limit exceeded error
+      if (error?.context?.body?.code === 'LIMIT_EXCEEDED') {
+        toast.error(error.context.body.error || "You have reached your monthly post limit. Please upgrade your plan.");
+      } else {
+        toast.error(error.message || "Failed to generate article");
+      }
     } finally {
       setIsGeneratingArticle(false);
     }

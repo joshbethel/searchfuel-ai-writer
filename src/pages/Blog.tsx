@@ -41,6 +41,7 @@ export default function Blog() {
 
   const fetchPosts = async () => {
     try {
+      // Fetch all published posts from all blogs
       const { data, error } = await supabase
         .from("blog_posts")
         .select("id, title, excerpt, slug, published_at, featured_image, article_type, publishing_status, external_post_id, blog_id")
