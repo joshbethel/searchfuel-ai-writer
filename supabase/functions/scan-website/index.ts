@@ -61,13 +61,11 @@ serve(async (req) => {
     // Service role client for subscription queries (bypasses RLS)
     const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user from auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      throw new Error('Unauthorized');
-    }
-
-    console.log('Scanning website:', url);
+    // Try to get user from auth (optional for public scans)
+    const { data: { user } } = await supabase.auth.getUser();
+    const isAuthenticated = !!user;
+    
+    console.log('Scanning website:', url, isAuthenticated ? 'with authenticated user' : 'as public user');
 
     // Fetch the actual website content
     let websiteContent = '';
@@ -173,203 +171,210 @@ Return ONLY a valid JSON array of blog ideas. No markdown, no explanation, just 
 
     console.log('Successfully generated blog ideas:', ideasWithIds.length);
 
-    // Save keywords to database
-    const keywordsToInsert = ideasWithIds.map((idea: any) => ({
-      user_id: user.id,
-      keyword: idea.keyword,
-      intent: idea.intent,
-      search_volume: 0, // Default value, can be updated later with real data
-      cpc: 0, // Default value, can be updated later with real data
-      difficulty: null,
-      competition: null,
-      trend: null,
-    }));
-
-    // Check usage limit before inserting keywords
-    const { data: canAdd, error: limitError } = await supabase
-      .rpc('can_add_keyword', { user_uuid: user.id });
-
-    if (limitError) {
-      console.error('Error checking keyword limit:', limitError);
-      throw new Error('Failed to check keyword limit');
-    }
-
-    // Check if the number of keywords to insert exceeds the limit
-    const { count: currentCount } = await supabase
-      .from('keywords')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id);
-
-    const currentKeywordCount = currentCount || 0;
-    const newTotalCount = keywordsToInsert.length; // Since we're replacing all
-
-    // Get user's subscription to check limit (use service role to bypass RLS)
-    const { data: subscription } = await supabaseService
-      .from('subscriptions')
-      .select('id, plan_name, keywords_count')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .single();
-
-    const maxKeywords = subscription?.plan_name === 'pro' ? 100 : 10;
-
-    if (newTotalCount > maxKeywords) {
-      throw new Error(`You can only have ${maxKeywords} keywords. You're trying to add ${newTotalCount}. Please upgrade your plan or reduce the number of keywords.`);
-    }
-
-    // Delete existing keywords for this user first to avoid duplicates
-    await supabase
-      .from('keywords')
-      .delete()
-      .eq('user_id', user.id);
-
-    // Insert new keywords
-    const { error: insertError } = await supabase
-      .from('keywords')
-      .insert(keywordsToInsert);
-
-    if (insertError) {
-      console.error('Error inserting keywords:', insertError);
-      throw new Error('Failed to save keywords to database');
-    }
-
-    // Update keyword count in subscriptions table
-    if (subscription) {
-      await supabaseService
-        .from('subscriptions')
-        .update({ keywords_count: newTotalCount })
-        .eq('id', subscription.id);
-    }
-
-    console.log('Successfully saved keywords to database');
-
-    // Now fetch real keyword metrics from DataForSEO
-    try {
-      const keywords = ideasWithIds.map((idea: any) => idea.keyword);
+    // Only save to database if user is authenticated
+    if (isAuthenticated && user) {
+      console.log('Saving keywords to database for authenticated user');
       
-      console.log('Fetching keyword metrics from DataForSEO for:', keywords);
+      // Save keywords to database
+      const keywordsToInsert = ideasWithIds.map((idea: any) => ({
+        user_id: user.id,
+        keyword: idea.keyword,
+        intent: idea.intent,
+        search_volume: 0, // Default value, can be updated later with real data
+        cpc: 0, // Default value, can be updated later with real data
+        difficulty: null,
+        competition: null,
+        trend: null,
+      }));
 
-      const DATAFORSEO_LOGIN = Deno.env.get('DATAFORSEO_LOGIN');
-      const DATAFORSEO_PASSWORD = Deno.env.get('DATAFORSEO_PASSWORD');
+      // Check usage limit before inserting keywords
+      const { data: canAdd, error: limitError } = await supabase
+        .rpc('can_add_keyword', { user_uuid: user.id });
 
-      if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
-        console.error('DataForSEO credentials not configured');
-        throw new Error('DataForSEO credentials not configured');
+      if (limitError) {
+        console.error('Error checking keyword limit:', limitError);
+        throw new Error('Failed to check keyword limit');
       }
 
-      // Call DataForSEO API
-      const authString = btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`);
-      const dataforSEOPayload = [
-        {
-          location_code: 2840,
-          language_code: 'en',
-          keywords,
-        },
-      ];
+      // Check if the number of keywords to insert exceeds the limit
+      const { count: currentCount } = await supabase
+        .from('keywords')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
 
-      const dataforSEOResponse = await fetch(
-        'https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${authString}`,
-            'Content-Type': 'application/json',
+      const currentKeywordCount = currentCount || 0;
+      const newTotalCount = keywordsToInsert.length; // Since we're replacing all
+
+      // Get user's subscription to check limit (use service role to bypass RLS)
+      const { data: subscription } = await supabaseService
+        .from('subscriptions')
+        .select('id, plan_name, keywords_count')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .single();
+
+      const maxKeywords = subscription?.plan_name === 'pro' ? 100 : 10;
+
+      if (newTotalCount > maxKeywords) {
+        throw new Error(`You can only have ${maxKeywords} keywords. You're trying to add ${newTotalCount}. Please upgrade your plan or reduce the number of keywords.`);
+      }
+
+      // Delete existing keywords for this user first to avoid duplicates
+      await supabase
+        .from('keywords')
+        .delete()
+        .eq('user_id', user.id);
+
+      // Insert new keywords
+      const { error: insertError } = await supabase
+        .from('keywords')
+        .insert(keywordsToInsert);
+
+      if (insertError) {
+        console.error('Error inserting keywords:', insertError);
+        throw new Error('Failed to save keywords to database');
+      }
+
+      // Update keyword count in subscriptions table
+      if (subscription) {
+        await supabaseService
+          .from('subscriptions')
+          .update({ keywords_count: newTotalCount })
+          .eq('id', subscription.id);
+      }
+
+      console.log('Successfully saved keywords to database');
+
+      // Now fetch real keyword metrics from DataForSEO
+      try {
+        const keywords = ideasWithIds.map((idea: any) => idea.keyword);
+        
+        console.log('Fetching keyword metrics from DataForSEO for:', keywords);
+
+        const DATAFORSEO_LOGIN = Deno.env.get('DATAFORSEO_LOGIN');
+        const DATAFORSEO_PASSWORD = Deno.env.get('DATAFORSEO_PASSWORD');
+
+        if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
+          console.error('DataForSEO credentials not configured');
+          throw new Error('DataForSEO credentials not configured');
+        }
+
+        // Call DataForSEO API
+        const authString = btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`);
+        const dataforSEOPayload = [
+          {
+            location_code: 2840,
+            language_code: 'en',
+            keywords,
           },
-          body: JSON.stringify(dataforSEOPayload),
-        }
-      );
+        ];
 
-      if (dataforSEOResponse.ok) {
-        const dataforSEOData = await dataforSEOResponse.json();
-        
-        if (dataforSEOData.status_code === 20000) {
-          console.log('Successfully fetched keyword metrics from DataForSEO');
+        const dataforSEOResponse = await fetch(
+          'https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${authString}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(dataforSEOPayload),
+          }
+        );
 
-          // Process results and update keywords
-          const tasks = dataforSEOData.tasks || [];
-          const keywordsToUpdate = [];
+        if (dataforSEOResponse.ok) {
+          const dataforSEOData = await dataforSEOResponse.json();
+          
+          if (dataforSEOData.status_code === 20000) {
+            console.log('Successfully fetched keyword metrics from DataForSEO');
 
-          for (const task of tasks) {
-            if (!task.result) continue;
+            // Process results and update keywords
+            const tasks = dataforSEOData.tasks || [];
+            const keywordsToUpdate = [];
 
-            for (const keywordData of task.result) {
-              // Determine keyword intent based on keyword content
-              let intent = 'informational';
-              const kw = keywordData.keyword.toLowerCase();
-              
-              if (kw.includes('buy') || kw.includes('price') || kw.includes('cost') || kw.includes('cheap')) {
-                intent = 'commercial';
-              } else if (kw.includes('near me') || kw.includes('how to') || kw.includes('installation')) {
-                intent = 'transactional';
-              } else if (kw.includes('best') || kw.includes('review') || kw.includes('vs')) {
-                intent = 'commercial';
-              }
+            for (const task of tasks) {
+              if (!task.result) continue;
 
-              // Calculate difficulty (0-100 scale based on competition)
-              const difficulty = keywordData.competition 
-                ? Math.round(keywordData.competition * 100) 
-                : null;
-
-              // Determine trend based on monthly searches if available
-              let trend = 'stable';
-              if (keywordData.monthly_searches && keywordData.monthly_searches.length >= 2) {
-                const recent = keywordData.monthly_searches.slice(-3);
-                const older = keywordData.monthly_searches.slice(-6, -3);
-                const recentAvg = recent.reduce((sum: number, m: any) => sum + (m.search_volume || 0), 0) / recent.length;
-                const olderAvg = older.reduce((sum: number, m: any) => sum + (m.search_volume || 0), 0) / older.length;
+              for (const keywordData of task.result) {
+                // Determine keyword intent based on keyword content
+                let intent = 'informational';
+                const kw = keywordData.keyword.toLowerCase();
                 
-                if (recentAvg > olderAvg * 1.1) trend = 'up';
-                else if (recentAvg < olderAvg * 0.9) trend = 'down';
+                if (kw.includes('buy') || kw.includes('price') || kw.includes('cost') || kw.includes('cheap')) {
+                  intent = 'commercial';
+                } else if (kw.includes('near me') || kw.includes('how to') || kw.includes('installation')) {
+                  intent = 'transactional';
+                } else if (kw.includes('best') || kw.includes('review') || kw.includes('vs')) {
+                  intent = 'commercial';
+                }
+
+                // Calculate difficulty (0-100 scale based on competition)
+                const difficulty = keywordData.competition 
+                  ? Math.round(keywordData.competition * 100) 
+                  : null;
+
+                // Determine trend based on monthly searches if available
+                let trend = 'stable';
+                if (keywordData.monthly_searches && keywordData.monthly_searches.length >= 2) {
+                  const recent = keywordData.monthly_searches.slice(-3);
+                  const older = keywordData.monthly_searches.slice(-6, -3);
+                  const recentAvg = recent.reduce((sum: number, m: any) => sum + (m.search_volume || 0), 0) / recent.length;
+                  const olderAvg = older.reduce((sum: number, m: any) => sum + (m.search_volume || 0), 0) / older.length;
+                  
+                  if (recentAvg > olderAvg * 1.1) trend = 'up';
+                  else if (recentAvg < olderAvg * 0.9) trend = 'down';
+                }
+
+                keywordsToUpdate.push({
+                  user_id: user.id,
+                  keyword: keywordData.keyword,
+                  search_volume: keywordData.search_volume || 0,
+                  cpc: keywordData.cpc || 0,
+                  competition: keywordData.competition || null,
+                  difficulty,
+                  intent,
+                  trend,
+                  location_code: 2840,
+                  language_code: 'en',
+                });
               }
-
-              keywordsToUpdate.push({
-                user_id: user.id,
-                keyword: keywordData.keyword,
-                search_volume: keywordData.search_volume || 0,
-                cpc: keywordData.cpc || 0,
-                competition: keywordData.competition || null,
-                difficulty,
-                intent,
-                trend,
-                location_code: 2840,
-                language_code: 'en',
-              });
             }
-          }
 
-          // Update keywords with real data
-          if (keywordsToUpdate.length > 0) {
-            const { error: updateError } = await supabase
-              .from('keywords')
-              .upsert(keywordsToUpdate, {
-                onConflict: 'user_id,keyword,location_code',
-                ignoreDuplicates: false,
-              });
+            // Update keywords with real data
+            if (keywordsToUpdate.length > 0) {
+              const { error: updateError } = await supabase
+                .from('keywords')
+                .upsert(keywordsToUpdate, {
+                  onConflict: 'user_id,keyword,location_code',
+                  ignoreDuplicates: false,
+                });
 
-            if (updateError) {
-              console.error('Error updating keywords with metrics:', updateError);
-            } else {
-              console.log(`Successfully updated ${keywordsToUpdate.length} keywords with real metrics`);
+              if (updateError) {
+                console.error('Error updating keywords with metrics:', updateError);
+              } else {
+                console.log(`Successfully updated ${keywordsToUpdate.length} keywords with real metrics`);
+              }
             }
+          } else {
+            console.error('DataForSEO API error:', dataforSEOData.status_message);
           }
         } else {
-          console.error('DataForSEO API error:', dataforSEOData.status_message);
+          const errorText = await dataforSEOResponse.text();
+          const statusCode = dataforSEOResponse.status;
+          
+          if (statusCode === 402) {
+            console.error('DataForSEO API - Payment Required (402). Keyword metrics will show default values.');
+            console.log('Keywords saved without metrics. DataForSEO account needs funding for full data.');
+          } else {
+            console.error('DataForSEO API request failed:', statusCode, errorText);
+          }
         }
-      } else {
-        const errorText = await dataforSEOResponse.text();
-        const statusCode = dataforSEOResponse.status;
-        
-        if (statusCode === 402) {
-          console.error('DataForSEO API - Payment Required (402). Keyword metrics will show default values.');
-          console.log('Keywords saved without metrics. DataForSEO account needs funding for full data.');
-        } else {
-          console.error('DataForSEO API request failed:', statusCode, errorText);
-        }
+      } catch (dataforSEOError) {
+        // Log error but don't fail the entire request
+        console.error('Error fetching keyword metrics from DataForSEO:', dataforSEOError);
+        // Keywords are already saved with default values, so continue
       }
-    } catch (dataforSEOError) {
-      // Log error but don't fail the entire request
-      console.error('Error fetching keyword metrics from DataForSEO:', dataforSEOError);
-      // Keywords are already saved with default values, so continue
+    } else {
+      console.log('Skipping database operations for unauthenticated user');
     }
 
     return new Response(
