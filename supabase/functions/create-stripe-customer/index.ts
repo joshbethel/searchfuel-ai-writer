@@ -7,6 +7,8 @@ const allowedOrigins = [
   "https://searchfuel-ai-writer.lovable.app",
   "https://preview--searchfuel-ai-writer.lovable.app",
   "https://ef7316e9-181c-4379-9b43-1c52f85bdf75.lovableproject.com",
+  "https://app.trysearchfuel.com",
+  "https://lovable.dev",
   "http://localhost:5173",
   "http://localhost:3000",
 ];
@@ -167,4 +169,6 @@ serve(async (req) => {
     });
   }
 });
+
+
 
