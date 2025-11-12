@@ -41,9 +41,29 @@ export default function Blog() {
 
   const fetchPosts = async () => {
     try {
+      // Get current user's blog
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: blog } = await supabase
+        .from("blogs")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!blog) {
+        setLoading(false);
+        return;
+      }
+
+      // Fetch all posts for this blog with status="published"
       const { data, error } = await supabase
         .from("blog_posts")
         .select("id, title, excerpt, slug, published_at, featured_image, article_type, publishing_status, external_post_id, blog_id")
+        .eq("blog_id", blog.id)
         .eq("status", "published")
         .order("published_at", { ascending: false });
 
