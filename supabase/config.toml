@@ -13,7 +13,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.test-cms-connection]
-verify_jwt = true
+verify_jwt = false
 
 [functions.fetch-keywords]
 verify_jwt = true
