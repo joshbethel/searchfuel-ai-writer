@@ -468,8 +468,8 @@ Format: 16:9 aspect ratio, centered single subject.`;
             content: processedContent,
             article_type: selectedArticleType.type,
             featured_image: featuredImage,
-            status: "published",
-            published_at: scheduledPublishDate || new Date().toISOString(),
+            status: scheduledPublishDate ? "draft" : "published",
+            published_at: scheduledPublishDate ? null : new Date().toISOString(),
             scheduled_publish_date: scheduledPublishDate || null,
             publishing_status: scheduledPublishDate ? "scheduled" : "pending",
             meta_title: postData.meta_title || postData.title,
@@ -527,15 +527,7 @@ Format: 16:9 aspect ratio, centered single subject.`;
 
         // Check if we should schedule or publish immediately
         if (scheduledPublishDate) {
-          // Schedule for later
-          console.log(`Scheduling post for ${scheduledPublishDate}`);
-          await supabase
-            .from('blog_posts')
-            .update({ 
-              publishing_status: 'scheduled',
-              scheduled_publish_date: scheduledPublishDate
-            })
-            .eq('id', post.id);
+          // Already set as scheduled in the insert above
           console.log(`Post scheduled for ${scheduledPublishDate}`);
         } else if (blog.cms_platform && blog.cms_credentials) {
           // Auto-publish to CMS immediately

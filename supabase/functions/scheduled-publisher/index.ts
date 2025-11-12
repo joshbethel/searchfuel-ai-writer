@@ -52,6 +52,7 @@ serve(async (req: Request) => {
         await supabase
           .from("blog_posts")
           .update({
+            status: "published",
             publishing_status: "published",
             published_at: new Date().toISOString(),
             scheduled_publish_date: null // Clear scheduled date after publishing
