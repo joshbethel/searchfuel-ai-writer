@@ -212,7 +212,13 @@ export default function Articles() {
       await fetchArticles();
     } catch (error: any) {
       console.error('Article generation error:', error);
-      toast.error(error.message || "Failed to generate article");
+      
+      // Check if it's a limit exceeded error
+      if (error?.context?.body?.code === 'LIMIT_EXCEEDED') {
+        toast.error(error.context.body.error || "You have reached your monthly post limit. Please upgrade your plan.");
+      } else {
+        toast.error(error.message || "Failed to generate article");
+      }
     } finally {
       setIsGeneratingArticle(false);
     }
