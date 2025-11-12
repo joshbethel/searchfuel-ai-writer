@@ -186,7 +186,22 @@ export default function Articles() {
         }
       });
       
-      if (error) throw error;
+      // Handle limit exceeded error
+      if (error) {
+        if (data?.code === 'LIMIT_EXCEEDED' || data?.error?.includes('limit')) {
+          toast.error(data.error || error.message);
+          setIsGeneratingArticle(false);
+          return;
+        }
+        throw error;
+      }
+      
+      // Also check if response contains limit error
+      if (data?.error && data.error.includes('limit')) {
+        toast.error(data.error);
+        setIsGeneratingArticle(false);
+        return;
+      }
       
       if (data?.success) {
         toast.success("Article generated successfully!");

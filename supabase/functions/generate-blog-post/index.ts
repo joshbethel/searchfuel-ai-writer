@@ -252,12 +252,17 @@ serve(async (req: Request) => {
 
         if (limitError || !canGenerate) {
           console.error(`Usage limit exceeded for user ${userId}, blog ${blog.id}`);
-          results.push({
-            blogId: blog.id,
-            success: false,
-            error: "You have reached your monthly post limit. Please upgrade your plan.",
-          });
-          continue;
+          // Return error immediately - don't generate anything
+          return new Response(
+            JSON.stringify({ 
+              error: "You have reached your monthly post limit. Please upgrade your plan.",
+              code: "LIMIT_EXCEEDED"
+            }),
+            { 
+              status: 403, 
+              headers: { ...corsHeaders, "Content-Type": "application/json" } 
+            }
+          );
         }
 
         // Select article type based on blog preferences
