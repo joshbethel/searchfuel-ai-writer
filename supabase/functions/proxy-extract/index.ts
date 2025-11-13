@@ -183,6 +183,8 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { blog_post_id, article_id, title: overrideTitle, content: overrideContent } = body;
 
+    console.log('proxy-extract called with:', { blog_post_id, article_id, hasOverrideContent: !!overrideContent, hasOverrideTitle: !!overrideTitle });
+
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -198,24 +200,61 @@ serve(async (req) => {
     let postRecord: any = null;
 
     if (blog_post_id) {
+      console.log('Fetching blog_post with id:', blog_post_id);
       const { data, error } = await supabase
         .from('blog_posts')
         .select('id, title, content, excerpt')
         .eq('id', blog_post_id)
         .single();
-      if (error) throw error;
+      
+      if (error) {
+        console.error('Error fetching blog_post:', error);
+        throw error;
+      }
+      
+      console.log('Fetched blog_post:', { 
+        id: data?.id, 
+        hasTitle: !!data?.title, 
+        hasContent: !!data?.content,
+        contentType: typeof data?.content,
+        contentLength: data?.content ? String(data.content).length : 0,
+        hasExcerpt: !!data?.excerpt 
+      });
+      
       postRecord = data;
       title = title || (data?.title || '');
-      content = content || (data?.content || data?.excerpt || '');
+      
+      // Handle content - it might be a string or object
+      let extractedContent = '';
+      if (data?.content) {
+        if (typeof data.content === 'string') {
+          extractedContent = data.content;
+        } else if (typeof data.content === 'object') {
+          // Try common content structures
+          extractedContent = data.content.content || 
+                           data.content.main_content || 
+                           data.content.body ||
+                           JSON.stringify(data.content);
+        }
+      }
+      content = content || extractedContent || data?.excerpt || '';
+      
+      console.log('After extraction:', { titleLength: title?.length, contentLength: content.length });
     }
 
     if (article_id && !postRecord) {
+      console.log('Fetching article with id:', article_id);
       const { data, error } = await supabase
         .from('articles')
         .select('id, title, content')
         .eq('id', article_id)
         .single();
-      if (error) throw error;
+      
+      if (error) {
+        console.error('Error fetching article:', error);
+        throw error;
+      }
+      
       postRecord = data;
       title = title || (data?.title || '');
       // articles.content may be JSON; try to extract string
@@ -224,6 +263,7 @@ serve(async (req) => {
     }
 
     if (!content && !title) {
+      console.error('No content or title after extraction:', { blog_post_id, article_id, postRecord: !!postRecord });
       return new Response(JSON.stringify({ error: 'No content or title provided' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
