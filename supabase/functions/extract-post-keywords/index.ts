@@ -40,7 +40,9 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { blog_post_id, content: overrideContent, title: overrideTitle } = body;
+    const { blog_post_id, article_id, content: overrideContent, title: overrideTitle } = body;
+
+    console.log('extract-post-keywords called with:', { blog_post_id, article_id, hasContent: !!overrideContent, hasTitle: !!overrideTitle });
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -57,6 +59,7 @@ serve(async (req) => {
     let postRecord: any = null;
 
     if (blog_post_id) {
+      console.log('Fetching blog_post:', blog_post_id);
       const { data, error } = await supabase
         .from('blog_posts')
         .select('id, title, content, excerpt')
@@ -64,12 +67,53 @@ serve(async (req) => {
         .single();
 
       if (error) throw error;
+      
       postRecord = data;
       title = title || (data?.title || '');
-      content = content || (data?.content || data?.excerpt || '');
+      
+      // Handle content extraction
+      let extractedContent = '';
+      if (data?.content) {
+        if (typeof data.content === 'string') {
+          extractedContent = data.content;
+        } else if (typeof data.content === 'object') {
+          extractedContent = data.content.content || data.content.main_content || data.content.body || JSON.stringify(data.content);
+        }
+      }
+      content = content || extractedContent || data?.excerpt || '';
+      
+      console.log('Blog post extracted - title:', !!title, 'content length:', content.length);
+    }
+
+    if (article_id && !postRecord) {
+      console.log('Fetching article:', article_id);
+      const { data, error } = await supabase
+        .from('articles')
+        .select('id, title, content')
+        .eq('id', article_id)
+        .single();
+
+      if (error) throw error;
+      
+      postRecord = data;
+      title = title || (data?.title || '');
+      
+      // Handle articles content extraction
+      let artContent = '';
+      if (data?.content) {
+        if (typeof data.content === 'string') {
+          artContent = data.content;
+        } else if (typeof data.content === 'object') {
+          artContent = data.content.content || data.content.main_content || JSON.stringify(data.content);
+        }
+      }
+      content = content || artContent || '';
+      
+      console.log('Article extracted - title:', !!title, 'content length:', content.length);
     }
 
     if (!content && !title) {
+      console.error('No content or title found:', { blog_post_id, article_id });
       return new Response(JSON.stringify({ error: 'No content or title provided' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -152,7 +196,6 @@ serve(async (req) => {
     }
 
     // If caller provided an article_id, update articles table as well
-    const { article_id } = body;
     if (article_id) {
       try {
         const { error: artErr } = await supabase
