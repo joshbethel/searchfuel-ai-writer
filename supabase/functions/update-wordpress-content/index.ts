@@ -103,10 +103,15 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`WordPress API error: ${response.status} - ${errorText}`);
+      
+      // Determine if we're in development mode
+      const isDevelopment = Deno.env.get("ENVIRONMENT") === "development" || 
+                            Deno.env.get("DENO_ENV") === "development";
+      
       return new Response(
         JSON.stringify({ 
           error: `Failed to update WordPress content: ${response.status}`,
-          details: errorText 
+          details: isDevelopment ? errorText : undefined
         }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -122,8 +127,15 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error("Error updating WordPress content:", error);
+    
+    // Determine if we're in development mode
+    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development" || 
+                          Deno.env.get("DENO_ENV") === "development";
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: isDevelopment ? error.message : "Internal server error. Please try again later."
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

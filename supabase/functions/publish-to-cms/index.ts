@@ -138,6 +138,7 @@ serve(async (req: any) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
+    // Log full error details server-side (safe - not exposed to client)
     console.error("Error publishing to CMS:", error);
     console.error("Error stack:", error.stack);
     
@@ -160,10 +161,16 @@ serve(async (req: any) => {
       console.error("Failed to update post status to failed:", updateError);
     }
     
+    // Determine if we're in development mode
+    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development" || 
+                          Deno.env.get("DENO_ENV") === "development";
+    
+    // Only expose detailed error information in development
+    // In production, return generic error message to prevent information disclosure
     return new Response(
       JSON.stringify({ 
-        error: error.message,
-        details: error.stack,
+        error: isDevelopment ? error.message : "Internal server error. Please try again later.",
+        details: isDevelopment ? error.stack : undefined,
         timestamp: new Date().toISOString()
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
