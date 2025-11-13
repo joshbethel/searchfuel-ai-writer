@@ -600,12 +600,43 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       // First try to call the server-side proxy function with a short timeout
       const body: any = {};
       if (kind === 'article') body.article_id = id; else body.blog_post_id = id;
+
+      // Prefetch title/content so the function always has data (prevents 400s)
+      const selectCols = (kind === 'article') ? 'title, content' : 'title, content, excerpt';
+      let overrideTitle = '';
+      let overrideContent = '';
+      try {
+        const { data: row } = await supabase
+          .from(table)
+          .select(selectCols)
+          .eq('id', id)
+          .maybeSingle();
+        if (row) {
+          // Title
+          overrideTitle = (row as any).title || '';
+          // Content extraction handling string or structured content
+          const c: any = (row as any).content;
+          if (typeof c === 'string') {
+            overrideContent = c;
+          } else if (c && typeof c === 'object') {
+            overrideContent = c.content || c.main_content || c.body || JSON.stringify(c);
+          }
+          if (!overrideContent && (row as any).excerpt) {
+            overrideContent = (row as any).excerpt;
+          }
+          if (overrideTitle) (body as any).title = overrideTitle;
+          if (overrideContent) (body as any).content = overrideContent;
+        }
+      } catch (prefetchErr) {
+        console.warn('Failed to prefetch content for extraction:', prefetchErr);
+      }
       
       console.log('Sending to extract-post-keywords:', { 
         id, 
         kind, 
         body,
-        bodyString: JSON.stringify(body)
+        hasContent: !!overrideContent,
+        hasTitle: !!overrideTitle
       });
 
       // Try invoking the function with retries
