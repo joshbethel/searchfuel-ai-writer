@@ -236,9 +236,22 @@ serve(async (req) => {
 
     console.log('Extracted keywords:', extracted.map(k => k.keyword));
 
-    // Generate recommended topics
+    // Generate recommended topics with varied, natural titles
+    const topicTemplates = [
+      (kw: string) => `How to Master ${kw.charAt(0).toUpperCase() + kw.slice(1)}`,
+      (kw: string) => `Understanding ${kw.charAt(0).toUpperCase() + kw.slice(1)}`,
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)}: Best Practices`,
+      (kw: string) => `Complete Guide to ${kw.charAt(0).toUpperCase() + kw.slice(1)}`,
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)} Strategies That Work`,
+      (kw: string) => `Getting Started with ${kw.charAt(0).toUpperCase() + kw.slice(1)}`,
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)}: Tips and Techniques`,
+      (kw: string) => `The Ultimate ${kw.charAt(0).toUpperCase() + kw.slice(1)} Resource`,
+      (kw: string) => `Essential ${kw.charAt(0).toUpperCase() + kw.slice(1)} Knowledge`,
+      (kw: string) => `${kw.charAt(0).toUpperCase() + kw.slice(1)} Made Simple`
+    ];
+    
     const recommended = extracted.slice(0, 6).map((k: any, i: number) => ({
-      topic: `${k.keyword.charAt(0).toUpperCase() + k.keyword.slice(1)}: A Comprehensive Guide`,
+      topic: topicTemplates[i % topicTemplates.length](k.keyword),
       score: k.score * (1 - i * 0.05),
       reason: `High relevance - ${k.source === 'title' ? 'appears in title' : 'found in content'}`
     }));
