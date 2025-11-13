@@ -649,9 +649,47 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
             body
           });
           
-          if (!res.error) {
-            // Success - break out of retry loop
-            return res;
+          if (!res.error && res.data) {
+            // Success - process the extracted data
+            const { extracted, recommended } = res.data;
+            
+            if (extracted && Array.isArray(extracted)) {
+              // Fetch SEO stats for the extracted keywords
+              const keywordsList = extracted.map((k: any) => k.keyword);
+              console.log('Fetching SEO stats for extracted keywords:', keywordsList);
+              
+              const seoData = await fetchSEOStats(keywordsList);
+              
+              // Enhance keywords with SEO data
+              const enhancedKeywords = extracted.map((k: any) => {
+                const stats = seoData?.[k.keyword.toLowerCase()];
+                if (!stats) return k;
+                
+                return {
+                  ...k,
+                  seoStats: {
+                    searchVolume: stats.searchVolume,
+                    keywordDifficulty: stats.keywordDifficulty,
+                    cpc: stats.cpc,
+                    competition: stats.competition,
+                    intent: stats.intent || 'informational',
+                    trendsData: stats.trendsData
+                  }
+                };
+              });
+              
+              setKeywords(enhancedKeywords);
+              toast.success('Keywords extracted and enriched with SEO data');
+            }
+            
+            if (recommended && Array.isArray(recommended)) {
+              setTopics(recommended);
+            }
+            
+            // Refresh from DB to ensure consistency
+            setTimeout(() => fetchData(), 500);
+            setIsReExtracting(false);
+            return;
           }
           
           lastError = res.error;
