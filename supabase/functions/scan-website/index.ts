@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.74.0';
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { validateUrl } from "../_shared/url-validation.ts";
 
 // Extract text content from HTML
 function extractTextFromHTML(html: string): string {
@@ -43,6 +44,22 @@ serve(async (req) => {
 
   try {
     const { url } = await req.json();
+    
+    // Validate URL to prevent SSRF attacks (with DNS resolution)
+    const urlValidation = await validateUrl(url);
+    if (!urlValidation.isValid) {
+      return new Response(
+        JSON.stringify({ 
+          error: urlValidation.error || 'Invalid URL',
+          details: 'The provided URL is not allowed for security reasons'
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     
     if (!LOVABLE_API_KEY) {
