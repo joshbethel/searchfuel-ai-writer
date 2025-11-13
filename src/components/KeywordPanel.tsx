@@ -600,6 +600,13 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       // First try to call the server-side proxy function with a short timeout
       const body: any = {};
       if (kind === 'article') body.article_id = id; else body.blog_post_id = id;
+      
+      console.log('Sending to extract-post-keywords:', { 
+        id, 
+        kind, 
+        body,
+        bodyString: JSON.stringify(body)
+      });
 
       // Try invoking the function with retries
       const maxRetries = 3;
