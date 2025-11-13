@@ -348,7 +348,10 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                             <div className="flex items-center gap-2">
                               <TrendingUp className="w-4 h-4 text-blue-500" />
                               <span className="text-sm font-medium">
-                                {k.seoStats?.searchVolume?.toLocaleString() || '0'}
+                                {k.seoStats?.searchVolume && k.seoStats.searchVolume > 0
+                                  ? k.seoStats.searchVolume.toLocaleString()
+                                  : <span className="text-muted-foreground">No data</span>
+                                }
                               </span>
                             </div>
                           </td>
@@ -356,9 +359,12 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                             <div className="flex items-center gap-2">
                               <Target className="w-4 h-4 text-orange-500" />
                               <span className="text-sm font-medium">
-                                {k.seoStats?.keywordDifficulty !== undefined && k.seoStats?.keywordDifficulty !== null
+                                {k.seoStats?.keywordDifficulty && 
+                                 k.seoStats.keywordDifficulty !== 50 && 
+                                 k.seoStats.searchVolume && 
+                                 k.seoStats.searchVolume > 0
                                   ? `${k.seoStats.keywordDifficulty}`
-                                  : 'N/A'
+                                  : <span className="text-muted-foreground">No data</span>
                                 }
                               </span>
                             </div>
@@ -367,9 +373,9 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                             <div className="flex items-center gap-2">
                               <DollarSign className="w-4 h-4 text-green-500" />
                               <span className="text-sm font-medium">
-                                {k.seoStats?.cpc 
+                                {k.seoStats?.cpc && k.seoStats.cpc > 0
                                   ? `$${k.seoStats.cpc.toFixed(2)}` 
-                                  : 'N/A'
+                                  : <span className="text-muted-foreground">No data</span>
                                 }
                               </span>
                             </div>
@@ -381,7 +387,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                                   <div className="flex items-center gap-2 cursor-help">
                                     <TrendingUp className="w-4 h-4 text-blue-500" />
                                     <span className="text-sm font-medium">
-                                      {k.seoStats?.trendsData && k.seoStats.trendsData.length > 0
+                                      {k.seoStats?.trendsData && Array.isArray(k.seoStats.trendsData) && k.seoStats.trendsData.length > 0
                                         ? (() => {
                                             const recent = k.seoStats.trendsData.slice(0, 3);
                                             const older = k.seoStats.trendsData.slice(-3);
@@ -390,12 +396,12 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                                             const change = ((recentAvg - olderAvg) / olderAvg) * 100;
                                             return change > 10 ? '↗️ Rising' : change < -10 ? '↘️ Falling' : '→ Stable';
                                           })()
-                                        : 'N/A'
+                                        : <span className="text-muted-foreground">No data</span>
                                       }
                                     </span>
                                   </div>
                                 </TooltipTrigger>
-                                {k.seoStats?.trendsData && k.seoStats.trendsData.length > 0 && (
+                                {k.seoStats?.trendsData && Array.isArray(k.seoStats.trendsData) && k.seoStats.trendsData.length > 0 && (
                                   <TooltipContent>
                                     <div className="space-y-1">
                                       <p className="font-semibold">12-Month Trend</p>
