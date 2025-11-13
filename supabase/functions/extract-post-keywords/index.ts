@@ -80,10 +80,24 @@ serve(async (req) => {
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
+    let body;
+    try {
+      body = await req.json();
+      console.log('Raw request body:', JSON.stringify(body));
+    } catch (jsonError) {
+      console.error('Failed to parse JSON body:', jsonError);
+      body = {};
+    }
+    
     const { blog_post_id, article_id, content: overrideContent, title: overrideTitle } = body;
 
-    console.log('extract-post-keywords called with:', { blog_post_id, article_id, hasContent: !!overrideContent, hasTitle: !!overrideTitle });
+    console.log('extract-post-keywords called with:', { 
+      blog_post_id, 
+      article_id, 
+      hasContent: !!overrideContent, 
+      hasTitle: !!overrideTitle,
+      bodyKeys: Object.keys(body)
+    });
 
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
