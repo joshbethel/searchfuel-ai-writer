@@ -646,11 +646,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       for (let i = 0; i < maxRetries; i++) {
         try {
           const res = await supabase.functions.invoke('extract-post-keywords', { 
-            body: JSON.stringify(body),
-            headers: {
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-              'Content-Type': 'application/json',
-            }
+            body
           });
           
           if (!res.error) {
