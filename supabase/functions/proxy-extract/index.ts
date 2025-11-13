@@ -34,7 +34,11 @@ const GENERIC_TERMS = new Set([
   'guide','tips','ways','steps','methods','strategies','techniques','approaches','solutions',
   'best','top','great','good','better','essential','important','key','main','major','primary',
   'complete','comprehensive','ultimate','definitive','perfect','excellent','amazing','awesome',
-  'services','parts','material','production','system','process','quality','time','work','people','years'
+  'services','parts','material','production','system','process','quality','time','work','people','years',
+  // Common single-word terms that should only appear in phrases
+  'calculator','investment','financial','future','management','debt','savings','planning',
+  'money','budget','loan','credit','interest','rate','account','tax','income','expense',
+  'retirement','wealth','portfolio','fund','stock','bond','insurance','mortgage','payment'
 ]);
 
 function normalizeText(text: string) {
@@ -77,10 +81,10 @@ function getNgrams(tokens: string[], n: number) {
     if (n === 2 && stopwordCount > 0) continue; // Bigrams: no stopwords
     if (n >= 3 && stopwordCount > 1) continue;  // Longer: max 1 stopword
     
-    // Skip if any generic terms for bigrams, max 1 for longer
+    // Skip if any generic terms for bigrams, allow 1 for longer
     const genericCount = slice.filter(t => GENERIC_TERMS.has(t)).length;
-    if (n === 2 && genericCount > 0) continue;
-    if (n >= 3 && genericCount > 1) continue;
+    if (n === 2 && genericCount > 1) continue; // Bigrams: max 1 generic word allowed
+    if (n >= 3 && genericCount > 2) continue;  // Longer: max 2 generic words
     
     // Each token must be meaningful length
     if (slice.some(t => t.length < 3)) continue;
@@ -249,8 +253,9 @@ serve(async (req) => {
     }
     for (const [kw, freq] of Object.entries(bigramFreq)) {
       // Only accept high-quality bigrams (already filtered in getNgrams)
-      if (kw.length >= 8) {
-        candidates.push({ keyword: kw, score: freq * 5.0, source: 'body' });
+      // Require at least 10 chars and frequency of 2+
+      if (kw.length >= 10 && freq >= 2) {
+        candidates.push({ keyword: kw, score: freq * 8.0, source: 'body' });
       }
     }
 
@@ -261,8 +266,8 @@ serve(async (req) => {
       trigramFreq[tg] = (trigramFreq[tg] || 0) + 1;
     }
     for (const [kw, freq] of Object.entries(trigramFreq)) {
-      if (kw.length >= 10) {
-        candidates.push({ keyword: kw, score: freq * 8.0, source: 'body' });
+      if (kw.length >= 12) {
+        candidates.push({ keyword: kw, score: freq * 12.0, source: 'body' });
       }
     }
 
@@ -273,8 +278,8 @@ serve(async (req) => {
       fourgramFreq[fg] = (fourgramFreq[fg] || 0) + 1;
     }
     for (const [kw, freq] of Object.entries(fourgramFreq)) {
-      if (kw.length >= 12) {
-        candidates.push({ keyword: kw, score: freq * 10.0, source: 'body' });
+      if (kw.length >= 15) {
+        candidates.push({ keyword: kw, score: freq * 15.0, source: 'body' });
       }
     }
 
