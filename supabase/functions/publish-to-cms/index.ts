@@ -12,50 +12,105 @@ serve(async (req: any) => {
   }
 
   try {
+    // CRITICAL SECURITY: Authenticate user first
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    );
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data, error: authError } = await supabaseClient.auth.getUser(token);
+    
+    if (authError || !data.user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userId = data.user.id;
+    console.log(`Authenticated user: ${userId}`);
+
     const { blog_post_id } = await req.json();
 
     if (!blog_post_id) {
-      throw new Error("blog_post_id is required");
+      return new Response(
+        JSON.stringify({ error: "blog_post_id is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log(`Publishing blog post ID: ${blog_post_id}`);
+    console.log(`Publishing blog post ID: ${blog_post_id} for user: ${userId}`);
 
+    // Use service role for database operations (after authentication)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch the blog post
+    // Fetch the blog post WITH authorization check - verify user owns the blog
+    // Use inner join to verify ownership, then fetch full blog data
     const { data: post, error: postError } = await supabase
       .from("blog_posts")
-      .select("*")
+      .select("*, blogs!inner(id, user_id)")
       .eq("id", blog_post_id)
+      .eq("blogs.user_id", userId)  // CRITICAL: Verify ownership
       .single();
 
     if (postError) {
       console.error("Error fetching post:", postError);
-      throw new Error(`Failed to fetch post: ${postError.message}`);
+      return new Response(
+        JSON.stringify({ error: "Post not found or unauthorized" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-    if (!post) throw new Error("Post not found");
+    
+    if (!post) {
+      return new Response(
+        JSON.stringify({ error: "Post not found or unauthorized" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     console.log(`Found post: ${post.title} for blog ID: ${post.blog_id}`);
 
-    // Fetch the blog with CMS credentials
+    // Now fetch the full blog data (ownership already verified above)
     const { data: blog, error: blogError } = await supabase
       .from("blogs")
       .select("*")
       .eq("id", post.blog_id)
+      .eq("user_id", userId)  // Double-check ownership
       .single();
 
     if (blogError) {
       console.error("Error fetching blog:", blogError);
-      throw new Error(`Failed to fetch blog: ${blogError.message}`);
+      return new Response(
+        JSON.stringify({ error: "Blog not found or unauthorized" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-    if (!blog) throw new Error("Blog not found");
+    
+    if (!blog) {
+      return new Response(
+        JSON.stringify({ error: "Blog not found or unauthorized" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     console.log(`Found blog: ${blog.title}, CMS: ${blog.cms_platform}, URL: ${blog.cms_site_url}`);
 
     if (!blog.cms_platform || !blog.cms_credentials) {
-      throw new Error("CMS platform or credentials not configured");
+      return new Response(
+        JSON.stringify({ error: "CMS platform or credentials not configured" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     console.log(`Publishing to ${blog.cms_platform}: ${post.title}`);
