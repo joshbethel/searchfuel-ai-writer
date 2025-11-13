@@ -132,10 +132,69 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
 
       if (error) throw error;
 
-  // Cast to any because DB type definitions may not include the new JSONB columns yet
-  const row: any = data as any;
-  setKeywords((row?.extracted_keywords || []) as KeywordItem[]);
-  setTopics((row?.recommended_topics || []) as TopicItem[]);
+      // Cast to any because DB type definitions may not include the new JSONB columns yet
+      const row: any = data as any;
+      const rawKeywords = (row?.extracted_keywords || []) as KeywordItem[];
+      const rawTopics = (row?.recommended_topics || []) as TopicItem[];
+      
+      // Fetch SEO stats for keywords and topics
+      const allTerms = [
+        ...rawKeywords.map(k => k.keyword),
+        ...rawTopics.map(t => t.topic)
+      ];
+      
+      if (allTerms.length > 0) {
+        console.log('Fetching SEO stats for loaded keywords:', allTerms);
+        const seoData = await fetchSEOStats(allTerms);
+        
+        if (seoData) {
+          // Enhance keywords with SEO data
+          const enhancedKeywords = rawKeywords.map(k => {
+            const stats = seoData[k.keyword.toLowerCase()];
+            if (!stats) return k;
+            
+            return {
+              ...k,
+              seoStats: {
+                searchVolume: stats.searchVolume,
+                keywordDifficulty: stats.keywordDifficulty,
+                cpc: stats.cpc,
+                competition: stats.competition,
+                intent: stats.intent || 'informational',
+                trendsData: stats.trendsData
+              }
+            };
+          });
+          
+          // Enhance topics with SEO data
+          const enhancedTopics = rawTopics.map(t => {
+            const stats = seoData[t.topic.toLowerCase()];
+            if (!stats) return t;
+            
+            return {
+              ...t,
+              seoStats: {
+                searchVolume: stats.searchVolume,
+                keywordDifficulty: stats.keywordDifficulty,
+                cpc: stats.cpc,
+                competition: stats.competition,
+                intent: stats.intent || 'informational',
+                trendsData: stats.trendsData
+              }
+            };
+          });
+          
+          setKeywords(enhancedKeywords);
+          setTopics(enhancedTopics);
+        } else {
+          // No SEO data available, use raw data
+          setKeywords(rawKeywords);
+          setTopics(rawTopics);
+        }
+      } else {
+        setKeywords(rawKeywords);
+        setTopics(rawTopics);
+      }
     } catch (err) {
       // capture and show a clearer error message
       // eslint-disable-next-line no-console
