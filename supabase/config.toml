@@ -24,7 +24,7 @@ verify_jwt = false
 [functions.publish-to-cms]
 verify_jwt = false
 
-[functions.proxy-extract]
+[functions.extract-post-keywords]
 verify_jwt = false
 
 [functions.fetch-seo-data]

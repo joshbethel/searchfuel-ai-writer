@@ -607,7 +607,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       
       for (let i = 0; i < maxRetries; i++) {
         try {
-          const res = await supabase.functions.invoke('proxy-extract', { 
+          const res = await supabase.functions.invoke('extract-post-keywords', { 
             body,
             headers: {
               'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
@@ -653,7 +653,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
         }
         
         // For other errors, fallback to client-side extraction
-        console.warn('proxy-extract failed, falling back to client-side extraction:', res.error);
+        console.warn('extract-post-keywords failed, falling back to client-side extraction:', res.error);
 
         // fetch content/title so we can run local extractor
         const { data: rowData, error: rowErr } = await supabase
