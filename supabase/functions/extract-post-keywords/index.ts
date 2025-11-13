@@ -9,9 +9,28 @@ const corsHeaders = {
   "Access-Control-Allow-Credentials": "true",
 };
 
-// Small stopword list for English. Expand as needed.
+// Comprehensive stopword list for English
 const STOPWORDS = new Set([
-  'the','and','a','an','in','on','for','with','to','of','is','are','was','were','it','this','that','by','from','as','at','or','be','we','you','your','our'
+  'the','and','a','an','in','on','for','with','to','of','is','are','was','were','it','this','that',
+  'by','from','as','at','or','be','we','you','your','our','their','them','they','he','she','i',
+  'me','my','mine','his','her','hers','its','us','ours','theirs','will','would','should','could',
+  'can','may','might','must','shall','do','does','did','have','has','had','am','been','being',
+  'into','through','during','before','after','above','below','up','down','out','off','over','under',
+  'again','further','then','once','here','there','when','where','why','how','all','both','each',
+  'few','more','most','other','some','such','no','nor','not','only','own','same','so','than',
+  'too','very','just','now','get','got','also','even','well','back','new','way','see',
+  'make','take','come','go','know','think','say','tell','give','use','find','want','look','work'
+]);
+
+// Generic single-word terms that should only appear in multi-word phrases
+const GENERIC_TERMS = new Set([
+  'calculator','investment','financial','future','management','debt','savings','planning',
+  'money','budget','loan','credit','interest','rate','account','tax','income','expense',
+  'retirement','wealth','portfolio','fund','stock','bond','insurance','mortgage','payment',
+  'guide','tips','ways','steps','methods','strategies','techniques','approaches','solutions',
+  'best','top','great','good','better','essential','important','key','main','major','primary',
+  'things','something','anything','everything','system','process','quality','time','people','years',
+  'project','success','team','resources','high','medium','low','priority','phase','checklist'
 ]);
 
 function normalizeText(text: string) {
@@ -27,7 +46,29 @@ function normalizeText(text: string) {
 function getNgrams(tokens: string[], n: number) {
   const out: string[] = [];
   for (let i = 0; i + n <= tokens.length; i++) {
-    out.push(tokens.slice(i, i + n).join(' '));
+    const slice = tokens.slice(i, i + n);
+    const phrase = slice.join(' ');
+    
+    // Minimum phrase length
+    if (phrase.length < 8) continue;
+    
+    // Skip if too many stopwords
+    const stopwordCount = slice.filter(t => STOPWORDS.has(t)).length;
+    if (n === 2 && stopwordCount > 0) continue; // Bigrams: no stopwords
+    if (n >= 3 && stopwordCount > 1) continue;  // Longer: max 1 stopword
+    
+    // Skip if too many generic terms
+    const genericCount = slice.filter(t => GENERIC_TERMS.has(t)).length;
+    if (n === 2 && genericCount > 1) continue; // Bigrams: max 1 generic
+    if (n >= 3 && genericCount > 2) continue;  // Longer: max 2 generic
+    
+    // Each token must be meaningful length
+    if (slice.some(t => t.length < 3)) continue;
+    
+    // Require at least one substantial word (5+ chars)
+    if (!slice.some(t => t.length >= 5 && !GENERIC_TERMS.has(t))) continue;
+    
+    out.push(phrase);
   }
   return out;
 }
@@ -117,43 +158,75 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'No content or title provided' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Build text to extract from (title weighted more later)
+    // Build text to extract from
     const normalizedContent = normalizeText((title + ' ' + content).slice(0, 20000));
-    const tokens = normalizedContent.split(' ').filter(Boolean).filter(t => !STOPWORDS.has(t) && t.length > 1);
+    const tokens = normalizedContent.split(' ').filter(Boolean).filter(t => !STOPWORDS.has(t) && t.length > 2);
 
-    // Count unigrams and bigrams
+    // Extract multi-word phrases with different weights
     const freq: Record<string, number> = {};
-
-    for (const unigram of tokens) {
-      freq[unigram] = (freq[unigram] || 0) + 1;
-    }
-
+    
+    // Bigrams (2-word phrases) - HIGHEST priority for SEO
     const bigrams = getNgrams(tokens, 2);
-    for (const bigram of bigrams) {
-      freq[bigram] = (freq[bigram] || 0) + 2; // give bigrams slightly more weight
+    for (const bg of bigrams) {
+      freq[bg] = (freq[bg] || 0) + 10; // Very high weight for quality bigrams
+    }
+    
+    // Trigrams (3-word phrases) - Excellent for long-tail
+    const trigrams = getNgrams(tokens, 3);
+    for (const tg of trigrams) {
+      freq[tg] = (freq[tg] || 0) + 15; // Even higher weight for trigrams
+    }
+    
+    // 4-grams (4-word phrases) - Very specific
+    const fourgrams = getNgrams(tokens, 4);
+    for (const fg of fourgrams) {
+      freq[fg] = (freq[fg] || 0) + 20; // Highest weight for 4-grams
     }
 
-    // Boost tokens that appear in the title
+    // Strategic placement boosts
     const normalizedTitle = normalizeText(title);
     const titleTokens = new Set(normalizedTitle.split(' ').filter(Boolean));
-    for (const t of titleTokens) {
-      if (freq[t]) freq[t] = freq[t] * 1.5;
+    
+    for (const [keyword, score] of Object.entries(freq)) {
+      // Boost if keyword appears in title
+      if (normalizedTitle.includes(keyword)) {
+        freq[keyword] = score * 5; // 5x boost for title match
+      } else if (keyword.split(' ').some(t => titleTokens.has(t))) {
+        freq[keyword] = score * 2; // 2x boost for partial title match
+      }
     }
 
-  // Create array and sort by score
-  const items = Object.entries(freq).map(([keyword, count]) => ({ keyword, score: count }));
-    items.sort((a, b) => b.score - a.score);
+    // Create array and sort by score
+    const items = Object.entries(freq).map(([keyword, count]) => ({ 
+      keyword, 
+      score: count,
+      wordCount: keyword.split(' ').length
+    }));
+    
+    // Sort by score, then by word count (prefer longer phrases)
+    items.sort((a, b) => {
+      if (Math.abs(a.score - b.score) < 5) {
+        return b.wordCount - a.wordCount; // If scores similar, prefer more words
+      }
+      return b.score - a.score;
+    });
 
-    // Keep top 15 and normalize scores to 0-1
+    // Keep top 15 and normalize scores
     const top = items.slice(0, 15);
     const maxScore = top[0]?.score || 1;
-    const extracted = top.map((it) => ({ keyword: it.keyword, score: Math.round((it.score / maxScore) * 100) / 100, source: titleTokens.has(it.keyword) ? 'title' : 'body' }));
+    const extracted = top.map((it) => ({ 
+      keyword: it.keyword, 
+      score: Math.round((it.score / maxScore) * 100) / 100, 
+      source: normalizedTitle.includes(it.keyword) ? 'title' : 'body' 
+    }));
 
-    // Generate simple recommended topics (templates)
+    console.log('Extracted keywords:', extracted.map(k => k.keyword));
+
+    // Generate recommended topics
     const recommended = extracted.slice(0, 6).map((k: any, i: number) => ({
-      topic: `${k.keyword.charAt(0).toUpperCase() + k.keyword.slice(1)}: A Practical Guide`,
+      topic: `${k.keyword.charAt(0).toUpperCase() + k.keyword.slice(1)}: A Comprehensive Guide`,
       score: k.score * (1 - i * 0.05),
-      reason: `High relevance based on post content and title`
+      reason: `High relevance - ${k.source === 'title' ? 'appears in title' : 'found in content'}`
     }));
 
     // Attempt to enrich scores using DataForSEO keywords difficulty if present
