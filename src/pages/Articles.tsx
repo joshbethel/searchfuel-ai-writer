@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { useArticles } from "@/hooks/use-articles";
 import KeywordPanel from '@/components/KeywordPanel';
 import { GenerateArticleDialog } from "@/components/GenerateArticleDialog";
+import { ArticleCalendar } from "@/components/ArticleCalendar";
+import { EditArticleDialog } from "@/components/EditArticleDialog";
 import { toast } from "sonner";
-import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar } from "lucide-react";
+import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, List } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import {
   AlertDialog,
@@ -20,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const ARTICLE_TYPE_LABELS: Record<string, { name: string; emoji: string }> = {
   how_to: { name: "How-To Guides", emoji: "📚" },
@@ -57,6 +60,8 @@ export default function Articles() {
   const { articles, isLoading, blogId, fetchArticles, setArticles } = useArticles();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
+  const [editArticleId, setEditArticleId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
   const handlePublishNow = async (postId: string) => {
     if (!blogId) return;
@@ -298,14 +303,16 @@ export default function Articles() {
             {scheduledPosts.length} scheduled · {pendingPosts.length} pending · {publishedPosts.length} published · {failedPosts.length} failed
           </p>
         </div>
-        <Button 
-          onClick={() => setShowGenerateDialog(true)}
-          disabled={isGeneratingArticle || !blogId}
-        >
-          {isGeneratingArticle && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          <FileText className="w-4 h-4 mr-2" />
-          Generate New Article
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => setShowGenerateDialog(true)}
+            disabled={isGeneratingArticle || !blogId}
+          >
+            {isGeneratingArticle && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            <FileText className="w-4 h-4 mr-2" />
+            Generate New Article
+          </Button>
+        </div>
         
         <GenerateArticleDialog
           open={showGenerateDialog}
@@ -313,7 +320,36 @@ export default function Articles() {
           onGenerate={handleGenerateArticle}
           isGenerating={isGeneratingArticle}
         />
+        
+        <EditArticleDialog
+          articleId={editArticleId}
+          open={editArticleId !== null}
+          onOpenChange={(open) => !open && setEditArticleId(null)}
+          onSaved={fetchArticles}
+        />
       </div>
+
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "calendar")} className="mb-6">
+        <TabsList>
+          <TabsTrigger value="list" className="flex items-center gap-2">
+            <List className="w-4 h-4" />
+            List View
+          </TabsTrigger>
+          <TabsTrigger value="calendar" className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            Calendar View
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="calendar" className="mt-6">
+          <ArticleCalendar
+            articles={articles}
+            onViewArticle={(id) => navigate(`/articles/${id}`)}
+            onEditArticle={setEditArticleId}
+          />
+        </TabsContent>
+
+        <TabsContent value="list" className="mt-0">
 
       <div className="mb-8">
         <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -554,6 +590,9 @@ export default function Articles() {
           </div>
         </div>
       )}
+
+        </TabsContent>
+      </Tabs>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
