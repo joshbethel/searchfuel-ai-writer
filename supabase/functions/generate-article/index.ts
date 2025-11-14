@@ -1,19 +1,31 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { 
+  generateArticleSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
 
 serve(async (req) => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { title, keyword, intent, websiteUrl } = await req.json();
+    // Validate request body with Zod schema
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(generateArticleSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
+    }
+
+    const { title, keyword, intent, websiteUrl } = validationResult.data;
     
     // Get auth token from request
     const authHeader = req.headers.get('Authorization');

@@ -1,20 +1,49 @@
 // @ts-nocheck
 // This file uses Deno runtime, not Node.js - TypeScript errors are expected
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { validateUrl } from "../_shared/url-validation.ts";
+import { 
+  testCmsConnectionSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
 
 serve(async (req: Request) => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password } = await req.json();
+    // Validate request body with Zod schema
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(testCmsConnectionSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
+    }
+
+    const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password } = validationResult.data;
+
+    // Validate siteUrl to prevent SSRF attacks (with DNS resolution)
+    if (siteUrl) {
+      const urlValidation = await validateUrl(siteUrl);
+      if (!urlValidation.isValid) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: urlValidation.error || 'Invalid site URL. The provided URL is not allowed for security reasons.'
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          }
+        );
+      }
+    }
 
     console.log(`Testing ${platform} connection for ${siteUrl}`);
 
@@ -117,6 +146,18 @@ serve(async (req: Request) => {
       case "rest_api":
         // Test custom REST API
         try {
+          // Additional validation for REST API endpoint
+          if (!siteUrl) {
+            error = "REST API endpoint URL is required";
+            break;
+          }
+          
+          const restUrlValidation = await validateUrl(siteUrl);
+          if (!restUrlValidation.isValid) {
+            error = restUrlValidation.error || "Invalid REST API endpoint URL";
+            break;
+          }
+          
           const response = await fetch(siteUrl, {
             headers: apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {},
           });

@@ -3,11 +3,12 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { 
+  generateBlogPostSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
 
 const ARTICLE_TYPE_GUIDELINES: Record<string, string> = {
   listicle: `Format as a numbered list article with 7-15 items. Structure:
@@ -159,6 +160,9 @@ function selectRandomArticleType(articleTypes: Record<string, boolean>): { type:
 }
 
 serve(async (req: Request) => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -202,7 +206,15 @@ serve(async (req: Request) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Get blog ID from request or find blogs that need posts
-    const { blogId, scheduledPublishDate } = await req.json().catch(() => ({}));
+    // Validate request body with Zod schema
+    const requestBody = await req.json().catch(() => ({}));
+    const validationResult = safeValidateRequest(generateBlogPostSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
+    }
+
+    const { blogId, scheduledPublishDate } = validationResult.data;
 
     let blogsToProcess = [];
 

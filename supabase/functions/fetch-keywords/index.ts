@@ -1,12 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { 
+  fetchKeywordsSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
 
 serve(async (req) => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin, "GET, POST, OPTIONS");
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -23,18 +27,15 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get request body
-    const { keywords, location_code = 2840, language_code = "en" } = await req.json();
-
-    if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "Keywords array is required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    // Validate request body with Zod schema
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(fetchKeywordsSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
     }
+
+    const { keywords, location_code, language_code } = validationResult.data;
 
     console.log(`Fetching data for ${keywords.length} keywords from DataForSEO`);
 

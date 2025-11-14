@@ -1,62 +1,127 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { 
+  publishToCmsSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
+import { marked } from "https://esm.sh/marked@11.1.1";
+import createDOMPurify from "https://esm.sh/dompurify@3.0.6";
+import { JSDOM } from "https://esm.sh/jsdom@23.0.1";
 
 serve(async (req: any) => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const { blog_post_id } = await req.json();
+  // Store blog_post_id for error handler access
+  let blog_post_id: string | undefined;
 
-    if (!blog_post_id) {
-      throw new Error("blog_post_id is required");
+  try {
+    // CRITICAL SECURITY: Authenticate user first
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    );
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log(`Publishing blog post ID: ${blog_post_id}`);
+    const token = authHeader.replace("Bearer ", "");
+    const { data, error: authError } = await supabaseClient.auth.getUser(token);
+    
+    if (authError || !data.user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
+    const userId = data.user.id;
+    console.log(`Authenticated user: ${userId}`);
+
+    // Validate request body with Zod schema
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(publishToCmsSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
+    }
+
+    blog_post_id = validationResult.data.blog_post_id;
+    console.log(`Publishing blog post ID: ${blog_post_id} for user: ${userId}`);
+
+    // Use service role for database operations (after authentication)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch the blog post
+    // Fetch the blog post WITH authorization check - verify user owns the blog
+    // Use inner join to verify ownership, then fetch full blog data
     const { data: post, error: postError } = await supabase
       .from("blog_posts")
-      .select("*")
+      .select("*, blogs!inner(id, user_id)")
       .eq("id", blog_post_id)
+      .eq("blogs.user_id", userId)  // CRITICAL: Verify ownership
       .single();
 
     if (postError) {
       console.error("Error fetching post:", postError);
-      throw new Error(`Failed to fetch post: ${postError.message}`);
+      return new Response(
+        JSON.stringify({ error: "Post not found or unauthorized" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-    if (!post) throw new Error("Post not found");
+    
+    if (!post) {
+      return new Response(
+        JSON.stringify({ error: "Post not found or unauthorized" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     console.log(`Found post: ${post.title} for blog ID: ${post.blog_id}`);
 
-    // Fetch the blog with CMS credentials
+    // Now fetch the full blog data (ownership already verified above)
     const { data: blog, error: blogError } = await supabase
       .from("blogs")
       .select("*")
       .eq("id", post.blog_id)
+      .eq("user_id", userId)  // Double-check ownership
       .single();
 
     if (blogError) {
       console.error("Error fetching blog:", blogError);
-      throw new Error(`Failed to fetch blog: ${blogError.message}`);
+      return new Response(
+        JSON.stringify({ error: "Blog not found or unauthorized" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-    if (!blog) throw new Error("Blog not found");
+    
+    if (!blog) {
+      return new Response(
+        JSON.stringify({ error: "Blog not found or unauthorized" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     console.log(`Found blog: ${blog.title}, CMS: ${blog.cms_platform}, URL: ${blog.cms_site_url}`);
 
     if (!blog.cms_platform || !blog.cms_credentials) {
-      throw new Error("CMS platform or credentials not configured");
+      return new Response(
+        JSON.stringify({ error: "CMS platform or credentials not configured" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     console.log(`Publishing to ${blog.cms_platform}: ${post.title}`);
@@ -139,13 +204,13 @@ serve(async (req: any) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
+    // Log full error details server-side (safe - not exposed to client)
     console.error("Error publishing to CMS:", error);
     console.error("Error stack:", error.stack);
     
     // Try to update the post status to failed if we have the blog_post_id
-    try {
-      const body = await req.clone().json();
-      if (body?.blog_post_id) {
+    if (blog_post_id) {
+      try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const supabase = createClient(supabaseUrl, supabaseKey);
@@ -155,16 +220,22 @@ serve(async (req: any) => {
           .update({
             publishing_status: "failed",
           })
-          .eq("id", body.blog_post_id);
+          .eq("id", blog_post_id);
+      } catch (updateError) {
+        console.error("Failed to update post status to failed:", updateError);
       }
-    } catch (updateError) {
-      console.error("Failed to update post status to failed:", updateError);
     }
     
+    // Determine if we're in development mode
+    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development" || 
+                          Deno.env.get("DENO_ENV") === "development";
+    
+    // Only expose detailed error information in development
+    // In production, return generic error message to prevent information disclosure
     return new Response(
       JSON.stringify({ 
-        error: error.message,
-        details: error.stack,
+        error: isDevelopment ? error.message : "Internal server error. Please try again later.",
+        details: isDevelopment ? error.stack : undefined,
         timestamp: new Date().toISOString()
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -172,44 +243,44 @@ serve(async (req: any) => {
   }
 });
 
-// Helper function to convert markdown to HTML
+// Helper function to convert markdown to HTML with XSS protection
 function markdownToHtml(markdown: string): string {
   if (!markdown) return '';
   
   // Remove first H1 if present (since title is separate)
-  let content = markdown.replace(/^#\s+.+$/m, '').trim();
+  const content = markdown.replace(/^#\s+.+$/m, '').trim();
   
-  // Convert markdown to HTML
-  // Headers
-  content = content.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  content = content.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  content = content.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  // Configure marked to be secure
+  marked.setOptions({
+    breaks: true, // Convert line breaks to <br>
+    gfm: true, // GitHub Flavored Markdown
+  });
   
-  // Bold and italic
-  content = content.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // Convert markdown to HTML using proper library
+  const html = marked.parse(content) as string;
   
-  // Links
-  content = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  // Create JSDOM window for DOMPurify (required for server-side use in Deno)
+  const window = new JSDOM('').window;
+  const DOMPurify = createDOMPurify(window as any);
   
-  // Lists - unordered
-  content = content.replace(/^\s*[-*+]\s+(.*)$/gim, '<li>$1</li>');
-  content = content.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+  // Sanitize HTML to prevent XSS attacks
+  // Only allow safe HTML tags and attributes
+  const sanitized = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li',
+      'a', 'blockquote', 'hr'
+    ],
+    ALLOWED_ATTR: ['href', 'title', 'alt'],
+    // Only allow safe URL schemes (http, https, mailto, tel)
+    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\\-]+(?:[^a-z+.\\-:]|$))/i,
+    // Remove any script tags, event handlers, etc.
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'style'],
+  });
   
-  // Lists - ordered
-  content = content.replace(/^\s*\d+\.\s+(.*)$/gim, '<li>$1</li>');
-  
-  // Paragraphs - split by double newlines
-  const paragraphs = content.split(/\n\n+/);
-  content = paragraphs.map(p => {
-    p = p.trim();
-    // Don't wrap if already has HTML tags
-    if (p.match(/^<[^>]+>/)) return p;
-    return `<p>${p.replace(/\n/g, '<br>')}</p>`;
-  }).join('\n\n');
-  
-  return content;
+  return sanitized;
 }
 
 // Helper function to extract actual content from JSON-wrapped content
