@@ -1,12 +1,13 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders } from "../_shared/cors.ts";
-import { 
-  extractPostKeywordsSchema, 
-  safeValidateRequest, 
-  createValidationErrorResponse 
-} from "../_shared/validation.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Credentials": "true",
+};
 
 // Comprehensive stopword list for English
 const STOPWORDS = new Set([
@@ -73,71 +74,38 @@ function getNgrams(tokens: string[], n: number) {
 }
 
 serve(async (req) => {
-  const origin = req.headers.get("origin");
-  const corsHeaders = getCorsHeaders(origin, "GET, POST, OPTIONS");
-
   if (req.method === 'OPTIONS') {
     // Reply to preflight with explicit allowed methods and credentials
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   try {
-    // CRITICAL SECURITY: Authenticate user first
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
-    
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
+    let body;
+    try {
+      body = await req.json();
+      console.log('Raw request body:', JSON.stringify(body));
+    } catch (jsonError) {
+      console.error('Failed to parse JSON body:', jsonError);
+      body = {};
     }
-
-    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const authHeader = req.headers.get('Authorization');
     
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "No authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: authData, error: authError } = await supabaseClient.auth.getUser(token);
-    
-    if (authError || !authData.user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const userId = authData.user.id;
-    console.log(`Authenticated user: ${userId}`);
-
-    // Validate request body with Zod schema
-    const requestBody = await req.json();
-    const validationResult = safeValidateRequest(extractPostKeywordsSchema, requestBody);
-    
-    if (!validationResult.success) {
-      return createValidationErrorResponse(validationResult, corsHeaders);
-    }
-
-    const { blog_post_id, article_id, content: overrideContent, title: overrideTitle } = validationResult.data;
+    const { blog_post_id, article_id, content: overrideContent, title: overrideTitle } = body;
 
     console.log('extract-post-keywords called with:', { 
       blog_post_id, 
       article_id, 
       hasContent: !!overrideContent, 
       hasTitle: !!overrideTitle,
-      userId
+      bodyKeys: Object.keys(body)
     });
 
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
     }
 
-    // Use service role for database operations (after authentication)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Fetch post by id or use provided content
@@ -147,20 +115,13 @@ serve(async (req) => {
 
     if (blog_post_id) {
       console.log('Fetching blog_post:', blog_post_id);
-      // CRITICAL SECURITY: Verify user owns the blog post through blog ownership
       const { data, error } = await supabase
         .from('blog_posts')
-        .select('id, title, content, excerpt, blogs!inner(user_id)')
+        .select('id, title, content, excerpt')
         .eq('id', blog_post_id)
-        .eq('blogs.user_id', userId)  // CRITICAL: Verify ownership
         .single();
 
-      if (error || !data) {
-        return new Response(
-          JSON.stringify({ error: "Post not found or unauthorized" }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      if (error) throw error;
       
       postRecord = data;
       title = title || (data?.title || '');
@@ -181,20 +142,13 @@ serve(async (req) => {
 
     if (article_id && !postRecord) {
       console.log('Fetching article:', article_id);
-      // CRITICAL SECURITY: Verify user owns the article
       const { data, error } = await supabase
         .from('articles')
-        .select('id, title, content, user_id')
+        .select('id, title, content')
         .eq('id', article_id)
-        .eq('user_id', userId)  // CRITICAL: Verify ownership
         .single();
 
-      if (error || !data) {
-        return new Response(
-          JSON.stringify({ error: "Article not found or unauthorized" }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      if (error) throw error;
       
       postRecord = data;
       title = title || (data?.title || '');

@@ -1,11 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { getCorsHeaders } from "../_shared/cors.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 serve(async (req) => {
-  const origin = req.headers.get("origin");
-  const corsHeaders = getCorsHeaders(origin, "GET, POST, OPTIONS");
-
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -107,15 +108,10 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`WordPress API error: ${response.status} - ${errorText}`);
-      
-      // Determine if we're in development mode
-      const isDevelopment = Deno.env.get("ENVIRONMENT") === "development" || 
-                            Deno.env.get("DENO_ENV") === "development";
-      
       return new Response(
         JSON.stringify({ 
           error: `Failed to fetch from WordPress: ${response.status}`,
-          details: isDevelopment ? errorText : undefined
+          details: errorText 
         }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -131,15 +127,8 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error("Error fetching WordPress data:", error);
-    
-    // Determine if we're in development mode
-    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development" || 
-                          Deno.env.get("DENO_ENV") === "development";
-    
     return new Response(
-      JSON.stringify({ 
-        error: isDevelopment ? error.message : "Internal server error. Please try again later."
-      }),
+      JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

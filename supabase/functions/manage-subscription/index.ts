@@ -124,7 +124,7 @@ serve(async (req) => {
     // Default to the test configuration if not set in environment
     const portalConfigId = stripeMode === "live"
       ? Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID_LIVE")
-      : Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID_TEST");
+      : Deno.env.get("STRIPE_PORTAL_CONFIGURATION_ID_TEST") || "bpc_1SS5wABOgvRSvvOEDfDbuZMC";
 
     // Create portal session
     const portalSessionParams: {

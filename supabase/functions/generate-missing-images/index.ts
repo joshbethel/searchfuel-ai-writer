@@ -1,42 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { getCorsHeaders } from "../_shared/cors.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 Deno.serve(async (req) => {
-  const origin = req.headers.get("origin");
-  const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
-
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // CRITICAL SECURITY: Authenticate user first (admin function)
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-    
-    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const authHeader = req.headers.get('Authorization');
-    
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "No authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: authData, error: authError } = await supabaseClient.auth.getUser(token);
-    
-    if (authError || !authData.user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const userId = authData.user.id;
-    console.log(`Authenticated user: ${userId} - Processing all posts for image regeneration`);
-
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
@@ -44,7 +19,6 @@ Deno.serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Use service role for database operations (after authentication)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     console.log('Fetching ALL blog posts to regenerate images...');
