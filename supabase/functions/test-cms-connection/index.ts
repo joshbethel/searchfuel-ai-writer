@@ -3,6 +3,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { validateUrl } from "../_shared/url-validation.ts";
+import { 
+  testCmsConnectionSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
 
 serve(async (req: Request) => {
   const origin = req.headers.get("origin");
@@ -13,7 +18,15 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password } = await req.json();
+    // Validate request body with Zod schema
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(testCmsConnectionSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
+    }
+
+    const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password } = validationResult.data;
 
     // Validate siteUrl to prevent SSRF attacks (with DNS resolution)
     if (siteUrl) {

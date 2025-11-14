@@ -2,6 +2,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { 
+  generateArticleSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
 
 serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -12,7 +17,15 @@ serve(async (req) => {
   }
 
   try {
-    const { title, keyword, intent, websiteUrl } = await req.json();
+    // Validate request body with Zod schema
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(generateArticleSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
+    }
+
+    const { title, keyword, intent, websiteUrl } = validationResult.data;
     
     // Get auth token from request
     const authHeader = req.headers.get('Authorization');

@@ -2,6 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.74.0';
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { validateUrl } from "../_shared/url-validation.ts";
+import { 
+  scanWebsiteSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
 
 // Extract text content from HTML
 function extractTextFromHTML(html: string): string {
@@ -43,7 +48,15 @@ serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
+    // Validate request body with Zod schema (format validation first)
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(scanWebsiteSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
+    }
+
+    const { url } = validationResult.data;
     
     // Validate URL to prevent SSRF attacks (with DNS resolution)
     const urlValidation = await validateUrl(url);

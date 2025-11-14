@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from "../_shared/cors.ts"
+import { 
+  fetchSeoDataSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts"
 
 const DATAFORSEO_LOGIN = Deno.env.get('DATAFORSEO_LOGIN')
 const DATAFORSEO_PASSWORD = Deno.env.get('DATAFORSEO_PASSWORD')
@@ -38,15 +43,16 @@ serve(async (req) => {
       );
     }
     
-    const { keywords } = await req.json() as { keywords: string[] }
-    console.log('Fetching SEO data for', keywords.length, 'keywords');
+    // Validate request body with Zod schema
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(fetchSeoDataSchema, requestBody);
     
-    if (!Array.isArray(keywords) || keywords.length === 0) {
-      console.log('No keywords provided, returning empty result');
-      return new Response(JSON.stringify({}), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
     }
+
+    const { keywords } = validationResult.data;
+    console.log('Fetching SEO data for', keywords.length, 'keywords');
 
     // Limit the number of keywords to process
     const MAX_KEYWORDS = 100; // Reduced to avoid rate limits

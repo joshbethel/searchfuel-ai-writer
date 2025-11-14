@@ -2,6 +2,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { 
+  publishToCmsSchema, 
+  safeValidateRequest, 
+  createValidationErrorResponse 
+} from "../_shared/validation.ts";
 
 serve(async (req: any) => {
   const origin = req.headers.get("origin");
@@ -10,6 +15,9 @@ serve(async (req: any) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Store blog_post_id for error handler access
+  let blog_post_id: string | undefined;
 
   try {
     // CRITICAL SECURITY: Authenticate user first
@@ -39,15 +47,15 @@ serve(async (req: any) => {
     const userId = data.user.id;
     console.log(`Authenticated user: ${userId}`);
 
-    const { blog_post_id } = await req.json();
-
-    if (!blog_post_id) {
-      return new Response(
-        JSON.stringify({ error: "blog_post_id is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Validate request body with Zod schema
+    const requestBody = await req.json();
+    const validationResult = safeValidateRequest(publishToCmsSchema, requestBody);
+    
+    if (!validationResult.success) {
+      return createValidationErrorResponse(validationResult, corsHeaders);
     }
 
+    blog_post_id = validationResult.data.blog_post_id;
     console.log(`Publishing blog post ID: ${blog_post_id} for user: ${userId}`);
 
     // Use service role for database operations (after authentication)
@@ -198,9 +206,8 @@ serve(async (req: any) => {
     console.error("Error stack:", error.stack);
     
     // Try to update the post status to failed if we have the blog_post_id
-    try {
-      const body = await req.clone().json();
-      if (body?.blog_post_id) {
+    if (blog_post_id) {
+      try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const supabase = createClient(supabaseUrl, supabaseKey);
@@ -210,10 +217,10 @@ serve(async (req: any) => {
           .update({
             publishing_status: "failed",
           })
-          .eq("id", body.blog_post_id);
+          .eq("id", blog_post_id);
+      } catch (updateError) {
+        console.error("Failed to update post status to failed:", updateError);
       }
-    } catch (updateError) {
-      console.error("Failed to update post status to failed:", updateError);
     }
     
     // Determine if we're in development mode
