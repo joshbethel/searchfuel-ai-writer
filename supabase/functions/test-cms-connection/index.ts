@@ -2,7 +2,6 @@
 // This file uses Deno runtime, not Node.js - TypeScript errors are expected
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { validateUrl } from "../_shared/url-validation.ts";
 import { 
   testCmsConnectionSchema, 
   safeValidateRequest, 
@@ -28,14 +27,32 @@ serve(async (req: Request) => {
 
     const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password } = validationResult.data;
 
-    // Validate siteUrl to prevent SSRF attacks (with DNS resolution)
+    // Basic URL validation for security
     if (siteUrl) {
-      const urlValidation = await validateUrl(siteUrl);
-      if (!urlValidation.isValid) {
+      try {
+        const urlObj = new URL(siteUrl);
+        // Block localhost and private IPs
+        if (urlObj.hostname === 'localhost' || 
+            urlObj.hostname === '127.0.0.1' ||
+            urlObj.hostname.startsWith('192.168.') ||
+            urlObj.hostname.startsWith('10.') ||
+            urlObj.hostname.startsWith('172.')) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'Private URLs are not allowed for security reasons.'
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400,
+            }
+          );
+        }
+      } catch (error) {
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: urlValidation.error || 'Invalid site URL. The provided URL is not allowed for security reasons.'
+            error: 'Invalid site URL format.'
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

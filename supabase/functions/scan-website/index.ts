@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.74.0';
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { validateUrl } from "../_shared/url-validation.ts";
 import { 
   scanWebsiteSchema, 
   safeValidateRequest, 
@@ -63,13 +62,22 @@ serve(async (req) => {
 
     const { url } = validationResult.data;
     
-    // Validate URL to prevent SSRF attacks (with DNS resolution)
-    const urlValidation = await validateUrl(url);
-    if (!urlValidation.isValid) {
+    // Basic URL validation (format is already checked by Zod schema)
+    try {
+      const urlObj = new URL(url);
+      // Block localhost and private IPs for security
+      if (urlObj.hostname === 'localhost' || 
+          urlObj.hostname === '127.0.0.1' ||
+          urlObj.hostname.startsWith('192.168.') ||
+          urlObj.hostname.startsWith('10.') ||
+          urlObj.hostname.startsWith('172.')) {
+        throw new Error('Private URLs are not allowed');
+      }
+    } catch (error) {
       return new Response(
         JSON.stringify({ 
-          error: urlValidation.error || 'Invalid URL',
-          details: 'The provided URL is not allowed for security reasons'
+          error: 'Invalid URL',
+          details: error instanceof Error ? error.message : 'The provided URL is not valid'
         }),
         { 
           status: 400, 
@@ -106,7 +114,7 @@ serve(async (req) => {
     };
     
     const identifier = getRateLimitIdentifier(req, user?.id);
-    const rateLimitResult = await checkRateLimit(identifier, rateLimitConfig, supabaseService);
+    const rateLimitResult = await checkRateLimit(identifier, rateLimitConfig, supabaseService as any);
     
     if (!rateLimitResult.allowed) {
       console.warn(`Rate limit exceeded for ${identifier}`);
