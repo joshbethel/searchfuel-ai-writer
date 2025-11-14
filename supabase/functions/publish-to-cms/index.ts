@@ -7,6 +7,9 @@ import {
   safeValidateRequest, 
   createValidationErrorResponse 
 } from "../_shared/validation.ts";
+import { marked } from "https://esm.sh/marked@11.1.1";
+import createDOMPurify from "https://esm.sh/dompurify@3.0.6";
+import { JSDOM } from "https://esm.sh/jsdom@23.0.1";
 
 serve(async (req: any) => {
   const origin = req.headers.get("origin");
@@ -240,44 +243,44 @@ serve(async (req: any) => {
   }
 });
 
-// Helper function to convert markdown to HTML
+// Helper function to convert markdown to HTML with XSS protection
 function markdownToHtml(markdown: string): string {
   if (!markdown) return '';
   
   // Remove first H1 if present (since title is separate)
-  let content = markdown.replace(/^#\s+.+$/m, '').trim();
+  const content = markdown.replace(/^#\s+.+$/m, '').trim();
   
-  // Convert markdown to HTML
-  // Headers
-  content = content.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  content = content.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  content = content.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  // Configure marked to be secure
+  marked.setOptions({
+    breaks: true, // Convert line breaks to <br>
+    gfm: true, // GitHub Flavored Markdown
+  });
   
-  // Bold and italic
-  content = content.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // Convert markdown to HTML using proper library
+  const html = marked.parse(content) as string;
   
-  // Links
-  content = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  // Create JSDOM window for DOMPurify (required for server-side use in Deno)
+  const window = new JSDOM('').window;
+  const DOMPurify = createDOMPurify(window as any);
   
-  // Lists - unordered
-  content = content.replace(/^\s*[-*+]\s+(.*)$/gim, '<li>$1</li>');
-  content = content.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+  // Sanitize HTML to prevent XSS attacks
+  // Only allow safe HTML tags and attributes
+  const sanitized = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li',
+      'a', 'blockquote', 'hr'
+    ],
+    ALLOWED_ATTR: ['href', 'title', 'alt'],
+    // Only allow safe URL schemes (http, https, mailto, tel)
+    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\\-]+(?:[^a-z+.\\-:]|$))/i,
+    // Remove any script tags, event handlers, etc.
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'style'],
+  });
   
-  // Lists - ordered
-  content = content.replace(/^\s*\d+\.\s+(.*)$/gim, '<li>$1</li>');
-  
-  // Paragraphs - split by double newlines
-  const paragraphs = content.split(/\n\n+/);
-  content = paragraphs.map(p => {
-    p = p.trim();
-    // Don't wrap if already has HTML tags
-    if (p.match(/^<[^>]+>/)) return p;
-    return `<p>${p.replace(/\n/g, '<br>')}</p>`;
-  }).join('\n\n');
-  
-  return content;
+  return sanitized;
 }
 
 // Helper function to extract actual content from JSON-wrapped content
