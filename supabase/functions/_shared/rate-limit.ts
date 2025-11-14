@@ -13,8 +13,8 @@ interface RateLimitResult {
 
 /**
  * Rate limiting utility for Supabase Edge Functions
- * Uses Supabase Storage (object storage) to track request counts per identifier (IP or user ID)
- * This approach doesn't require database migrations
+ * Uses database table to track request counts per identifier (IP or user ID)
+ * Requires rate_limits table (see migration: 20251114155549_create_rate_limits_table.sql)
  */
 export async function checkRateLimit(
   identifier: string,
@@ -24,57 +24,50 @@ export async function checkRateLimit(
   const { maxRequests, windowSeconds } = config;
   const now = Math.floor(Date.now() / 1000);
   const windowStart = Math.floor(now / windowSeconds) * windowSeconds;
-  const key = `rate_limit_${identifier}_${windowStart}.json`;
+  const key = `rate_limit_${identifier}_${windowStart}`;
+  const resetAt = windowStart + windowSeconds;
 
   try {
-    // Try to get current count from storage
-    const { data: fileData, error: getError } = await supabaseService
-      .storage
-      .from('rate-limits')
-      .download(key);
+    // Try to get current count from database
+    const { data: existing, error: getError } = await supabaseService
+      .from('rate_limits')
+      .select('count, reset_at')
+      .eq('key', key)
+      .single();
 
     let currentCount = 0;
-    if (!getError && fileData) {
-      try {
-        const text = await fileData.text();
-        const parsed = JSON.parse(text);
-        currentCount = parsed.count || 0;
-      } catch (parseError) {
-        console.error('Error parsing rate limit file:', parseError);
-        currentCount = 0;
-      }
+    if (!getError && existing) {
+      currentCount = existing.count || 0;
+    } else if (getError && getError.code !== 'PGRST116') {
+      // PGRST116 = not found (which is OK for new entries)
+      // Other errors should be logged but we'll fail open
+      console.error('Rate limit check error:', getError);
     }
-
-    const resetAt = windowStart + windowSeconds;
 
     if (currentCount >= maxRequests) {
       return {
         allowed: false,
         remaining: 0,
-        resetAt,
+        resetAt: existing?.reset_at || resetAt,
       };
     }
 
-    // Increment count
+    // Increment count (upsert)
     const newCount = currentCount + 1;
-    const newData = {
-      identifier,
-      count: newCount,
-      resetAt,
-      updatedAt: new Date().toISOString(),
-    };
-
-    const blob = new Blob([JSON.stringify(newData)], { type: 'application/json' });
-    const { error: uploadError } = await supabaseService
-      .storage
-      .from('rate-limits')
-      .upload(key, blob, {
-        upsert: true,
-        contentType: 'application/json',
+    const { error: upsertError } = await supabaseService
+      .from('rate_limits')
+      .upsert({
+        key,
+        identifier,
+        count: newCount,
+        reset_at: resetAt,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'key',
       });
 
-    if (uploadError) {
-      console.error('Rate limit update error:', uploadError);
+    if (upsertError) {
+      console.error('Rate limit update error:', upsertError);
       // On error, allow the request (fail open)
       return {
         allowed: true,
@@ -94,7 +87,7 @@ export async function checkRateLimit(
     return {
       allowed: true,
       remaining: maxRequests,
-      resetAt: windowStart + windowSeconds,
+      resetAt,
     };
   }
 }
