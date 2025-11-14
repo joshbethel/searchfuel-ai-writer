@@ -8,6 +8,7 @@ import { useArticles } from "@/hooks/use-articles";
 import KeywordPanel from '@/components/KeywordPanel';
 import { GenerateArticleDialog } from "@/components/GenerateArticleDialog";
 import { ArticleCalendar } from "@/components/ArticleCalendar";
+import { MonthlyCalendarView } from "@/components/MonthlyCalendarView";
 import { EditArticleDialog } from "@/components/EditArticleDialog";
 import { toast } from "sonner";
 import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, List } from "lucide-react";
@@ -342,7 +343,7 @@ export default function Articles() {
         </TabsList>
 
         <TabsContent value="calendar" className="mt-6">
-          <ArticleCalendar
+          <MonthlyCalendarView
             articles={articles}
             onViewArticle={(id) => navigate(`/articles/${id}`)}
             onEditArticle={setEditArticleId}
