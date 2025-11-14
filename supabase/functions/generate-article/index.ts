@@ -17,6 +17,37 @@ serve(async (req) => {
   }
 
   try {
+    // CRITICAL SECURITY: Authenticate user first
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+    
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
+    }
+
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const authHeader = req.headers.get('Authorization');
+    
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: authData, error: authError } = await supabaseClient.auth.getUser(token);
+    
+    if (authError || !authData.user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userId = authData.user.id;
+    console.log(`Authenticated user: ${userId} - Generating article`);
+
     // Validate request body with Zod schema
     const requestBody = await req.json();
     const validationResult = safeValidateRequest(generateArticleSchema, requestBody);
@@ -26,24 +57,6 @@ serve(async (req) => {
     }
 
     const { title, keyword, intent, websiteUrl } = validationResult.data;
-    
-    // Get auth token from request
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
-
-    // Create Supabase client and pass auth via request headers
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    );
-
-    // Get user
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      throw new Error('Unauthorized');
-    }
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     
     if (!LOVABLE_API_KEY) {
@@ -135,7 +148,7 @@ The article should be 800-1200 words, engaging, and optimized for both users and
     const { data: savedArticle, error: saveError } = await supabaseClient
       .from('articles')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         title: article.title,
         keyword: article.keyword,
         intent,
