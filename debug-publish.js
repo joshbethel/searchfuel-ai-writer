@@ -3,8 +3,15 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = 'https://qihpywleopgrlvwcffvy.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpaHB5d2xlb3Bncmx2d2NmZnZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk4NTk1MjUsImV4cCI6MjA3NTQzNTUyNX0.awC4TbT5cCScXYkq9Hbam-0B7K1TP9MibT_w86oGerk';
+// Use environment variables instead of hardcoded credentials
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Error: SUPABASE_URL and SUPABASE_ANON_KEY environment variables are required');
+  console.error('   Please set these in your .env file or export them before running this script');
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
