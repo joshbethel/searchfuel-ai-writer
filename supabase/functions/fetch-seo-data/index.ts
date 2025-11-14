@@ -6,6 +6,11 @@ import {
   safeValidateRequest, 
   createValidationErrorResponse 
 } from "../_shared/validation.ts"
+import {
+  createErrorResponse,
+  handleApiError,
+  safeGet
+} from "../_shared/error-handling.ts"
 
 const DATAFORSEO_LOGIN = Deno.env.get('DATAFORSEO_LOGIN')
 const DATAFORSEO_PASSWORD = Deno.env.get('DATAFORSEO_PASSWORD')
@@ -104,24 +109,46 @@ serve(async (req) => {
       const chunk = chunks[chunkIndex];
       console.log(`Processing chunk ${chunkIndex + 1}/${chunks.length} with ${chunk.length} keywords`);
       
-      const response = await fetch('https://api.dataforseo.com/v3/keywords_data/google/search_volume/live', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Basic ' + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`),
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify([{
-          location_name: "United States",
-          keywords: chunk
-        }])
-      })
+      let response;
+      try {
+        response = await fetch('https://api.dataforseo.com/v3/keywords_data/google/search_volume/live', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify([{
+            location_name: "United States",
+            keywords: chunk
+          }])
+        });
+      } catch (fetchError) {
+        console.error('Network error fetching SEO data:', fetchError);
+        // Continue with next chunk instead of failing completely
+        continue;
+      }
 
-      const data = await response.json()
+      if (!response.ok) {
+        console.error('DataForSEO API HTTP error:', response.status, response.statusText);
+        // Continue with next chunk instead of failing completely
+        continue;
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse DataForSEO response as JSON:', jsonError);
+        // Continue with next chunk instead of failing completely
+        continue;
+      }
       
-      console.log('DataForSEO response status:', data.status_code);
+      console.log('DataForSEO response status:', safeGet(data, 'status_code', null));
       
-      if (data.status_code !== 20000) {
-        console.error('DataForSEO API Error:', data.status_message);
+      const statusCode = safeGet(data, 'status_code', null);
+      if (statusCode !== 20000) {
+        const errorMessage = safeGet(data, 'status_message', 'Unknown error');
+        console.error('DataForSEO API Error:', errorMessage, 'Status:', statusCode);
         // Continue with empty results instead of failing completely
         continue;
       }
@@ -161,13 +188,20 @@ serve(async (req) => {
         tasks: DataForSEOTask[];
       }
 
-      // Process results
+      // Process results with null checks
       const apiData = data as DataForSEOResponse;
+      const tasks = safeGet(apiData, 'tasks', []);
       
-      if (apiData.tasks) {
-        for (const task of apiData.tasks) {
-          for (const result of task.result) {
-            const keyword = result.keyword.toLowerCase();
+      if (Array.isArray(tasks) && tasks.length > 0) {
+        for (const task of tasks) {
+          const taskResults = safeGet(task, 'result', []);
+          if (!Array.isArray(taskResults)) continue;
+          
+          for (const result of taskResults) {
+            const keywordValue = safeGet(result, 'keyword', null);
+            if (!keywordValue || typeof keywordValue !== 'string') continue;
+            
+            const keyword = keywordValue.toLowerCase();
             
             // Extract data from either direct fields or keyword_info object
             const searchVolume = result.search_volume ?? result.keyword_info?.search_volume;
@@ -215,15 +249,16 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error: unknown) {
-    console.error('fetch-seo-data error:', error)
+    console.error('Unexpected error in fetch-seo-data:', error);
     // Return empty object instead of error to prevent client-side failures
+    // This is intentional - we want to return partial results rather than fail completely
     return new Response(
       JSON.stringify({}), 
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
-    )
+    );
   }
 })
 

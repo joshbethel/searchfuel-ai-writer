@@ -11,6 +11,12 @@ import {
   getRateLimitIdentifier,
   createRateLimitResponse
 } from "../_shared/rate-limit.ts";
+import {
+  createErrorResponse,
+  handleApiError,
+  safeGet,
+  validateRequiredFields
+} from "../_shared/error-handling.ts";
 
 // Extract text content from HTML
 function extractTextFromHTML(html: string): string {
@@ -200,23 +206,64 @@ Return ONLY a valid JSON array of blog ideas. No markdown, no explanation, just 
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
-      throw new Error('Failed to analyze website');
+      return handleApiError(response, corsHeaders, 'Website analysis');
     }
 
-    const data = await response.json();
-    const content = data.choices[0].message.content;
+    // Safely parse response with null checks
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      console.error('Failed to parse AI gateway response as JSON:', jsonError);
+      return createErrorResponse(
+        jsonError,
+        500,
+        corsHeaders,
+        'Invalid response from AI service. Please try again.'
+      );
+    }
+
+    // Validate response structure with null checks
+    const content = safeGet(data, 'choices.0.message.content', null);
+    if (!content || typeof content !== 'string') {
+      console.error('Invalid AI response structure:', JSON.stringify(data, null, 2));
+      return createErrorResponse(
+        new Error('Invalid AI response structure'),
+        500,
+        corsHeaders,
+        'AI service returned an invalid response. Please try again.'
+      );
+    }
     
-    // Parse the JSON response
+    // Parse the JSON response from content
     let blogIdeas;
     try {
       // Remove markdown code blocks if present
       const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       blogIdeas = JSON.parse(cleanContent);
     } catch (parseError) {
-      console.error('Failed to parse AI response:', content);
-      throw new Error('Invalid response format from AI');
+      console.error('Failed to parse AI response JSON:', {
+        error: parseError,
+        contentPreview: content.substring(0, 200),
+        contentLength: content.length
+      });
+      return createErrorResponse(
+        parseError,
+        500,
+        corsHeaders,
+        'AI service returned invalid data format. Please try again.'
+      );
+    }
+
+    // Validate blogIdeas is an array
+    if (!Array.isArray(blogIdeas)) {
+      console.error('AI response is not an array:', typeof blogIdeas);
+      return createErrorResponse(
+        new Error('AI response is not an array'),
+        500,
+        corsHeaders,
+        'AI service returned invalid data format. Please try again.'
+      );
     }
 
     // Add unique IDs to each idea
@@ -447,13 +494,13 @@ Return ONLY a valid JSON array of blog ideas. No markdown, no explanation, just 
     );
 
   } catch (error) {
-    console.error('Error in scan-website function:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+    // Catch-all for any unexpected errors
+    console.error('Unexpected error in scan-website function:', error);
+    return createErrorResponse(
+      error,
+      500,
+      corsHeaders,
+      'An unexpected error occurred. Please try again.'
     );
   }
 });

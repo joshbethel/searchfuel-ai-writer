@@ -7,6 +7,13 @@ import {
   safeValidateRequest, 
   createValidationErrorResponse 
 } from "../_shared/validation.ts";
+import {
+  createErrorResponse,
+  handleApiError,
+  safeGet,
+  validateRequiredFields,
+  safeJsonParse
+} from "../_shared/error-handling.ts";
 
 serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -22,7 +29,12 @@ serve(async (req) => {
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
     
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
+      return createErrorResponse(
+        new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY'),
+        500,
+        corsHeaders,
+        'Server configuration error. Please contact support.'
+      );
     }
 
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -60,7 +72,12 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     
     if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+      return createErrorResponse(
+        new Error('LOVABLE_API_KEY is not configured'),
+        500,
+        corsHeaders,
+        'AI service is not available. Please contact support.'
+      );
     }
 
     console.log('Generating article for:', title);
@@ -126,20 +143,64 @@ The article should be 800-1200 words, engaging, and optimized for both users and
     if (!response.ok) {
       const errorText = await response.text();
       console.error('AI gateway error:', response.status, errorText);
-      throw new Error('Failed to generate article');
+      return handleApiError(response, corsHeaders, 'Article generation');
     }
 
-    const data = await response.json();
-    const content = data.choices[0].message.content;
+    // Safely parse response with null checks
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      console.error('Failed to parse AI gateway response as JSON:', jsonError);
+      return createErrorResponse(
+        jsonError,
+        500,
+        corsHeaders,
+        'Invalid response from AI service. Please try again.'
+      );
+    }
+
+    // Validate response structure with null checks
+    const content = safeGet(data, 'choices.0.message.content', null);
+    if (!content || typeof content !== 'string') {
+      console.error('Invalid AI response structure:', JSON.stringify(data, null, 2));
+      return createErrorResponse(
+        new Error('Invalid AI response structure'),
+        500,
+        corsHeaders,
+        'AI service returned an invalid response. Please try again.'
+      );
+    }
     
-    // Parse the JSON response
+    // Parse the JSON response from content
     let article;
     try {
       const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       article = JSON.parse(cleanContent);
     } catch (parseError) {
-      console.error('Failed to parse AI response:', content);
-      throw new Error('Invalid response format from AI');
+      console.error('Failed to parse AI response JSON:', {
+        error: parseError,
+        contentPreview: content.substring(0, 200),
+        contentLength: content.length
+      });
+      return createErrorResponse(
+        parseError,
+        500,
+        corsHeaders,
+        'AI service returned invalid data format. Please try again.'
+      );
+    }
+
+    // Validate required article fields
+    const validation = validateRequiredFields(article, ['title', 'content', 'keyword']);
+    if (!validation.valid) {
+      console.error('Article missing required fields:', validation.missing);
+      return createErrorResponse(
+        new Error(`Article missing required fields: ${validation.missing.join(', ')}`),
+        500,
+        corsHeaders,
+        'AI service returned incomplete article. Please try again.'
+      );
     }
 
     console.log('Successfully generated article');
@@ -161,16 +222,56 @@ The article should be 800-1200 words, engaging, and optimized for both users and
 
     if (saveError) {
       console.error('Failed to save article:', saveError);
-      throw new Error('Failed to save article');
+      
+      // Check for specific database errors
+      if (saveError.code === '23505') { // Unique constraint violation
+        return createErrorResponse(
+          saveError,
+          409,
+          corsHeaders,
+          'An article with this title already exists.'
+        );
+      }
+      
+      return createErrorResponse(
+        saveError,
+        500,
+        corsHeaders,
+        'Failed to save article. Please try again.'
+      );
+    }
+
+    // Validate saved article was returned
+    if (!savedArticle || !savedArticle.id) {
+      console.error('Article saved but no ID returned:', savedArticle);
+      return createErrorResponse(
+        new Error('Article saved but ID not returned'),
+        500,
+        corsHeaders,
+        'Article was created but could not be retrieved. Please try again.'
+      );
     }
 
     // Best-effort: trigger extract-post-keywords to annotate the saved article
+    // This is non-critical, so we don't fail if it errors
     try {
-      await supabaseClient.functions.invoke('extract-post-keywords', {
-        body: { article_id: savedArticle.id, title: article.title, content: article.content }
-      });
+      // Validate content exists before invoking
+      const articleContent = safeGet(article, 'content', '');
+      if (articleContent) {
+        await supabaseClient.functions.invoke('extract-post-keywords', {
+          body: { 
+            article_id: savedArticle.id, 
+            title: article.title, 
+            content: articleContent 
+          }
+        });
+      } else {
+        console.warn('Skipping extract-post-keywords: article content is empty');
+      }
     } catch (err) {
+      // Log but don't fail - this is a best-effort operation
       console.error('Failed to invoke extract-post-keywords for article:', err);
+      // Continue - article is already saved successfully
     }
 
     return new Response(
@@ -179,13 +280,13 @@ The article should be 800-1200 words, engaging, and optimized for both users and
     );
 
   } catch (error) {
-    console.error('Error in generate-article function:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+    // Catch-all for any unexpected errors
+    console.error('Unexpected error in generate-article function:', error);
+    return createErrorResponse(
+      error,
+      500,
+      corsHeaders,
+      'An unexpected error occurred. Please try again.'
     );
   }
 });
