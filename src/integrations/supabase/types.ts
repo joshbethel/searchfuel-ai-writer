@@ -340,6 +340,30 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limits: {
+        Row: {
+          count: number
+          identifier: string
+          key: string
+          reset_at: number
+          updated_at: string
+        }
+        Insert: {
+          count?: number
+          identifier: string
+          key: string
+          reset_at: number
+          updated_at?: string
+        }
+        Update: {
+          count?: number
+          identifier?: string
+          key?: string
+          reset_at?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           cancel_at: string | null
@@ -410,6 +434,7 @@ export type Database = {
         Args: { blog_uuid: string; user_uuid: string }
         Returns: boolean
       }
+      cleanup_expired_rate_limits: { Args: never; Returns: undefined }
       get_user_usage: {
         Args: { user_uuid: string }
         Returns: {
