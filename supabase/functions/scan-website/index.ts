@@ -7,6 +7,11 @@ import {
   safeValidateRequest, 
   createValidationErrorResponse 
 } from "../_shared/validation.ts";
+import {
+  checkRateLimit,
+  getRateLimitIdentifier,
+  createRateLimitResponse
+} from "../_shared/rate-limit.ts";
 
 // Extract text content from HTML
 function extractTextFromHTML(html: string): string {
@@ -94,7 +99,21 @@ serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     const isAuthenticated = !!user;
     
-    console.log('Scanning website:', url, isAuthenticated ? 'with authenticated user' : 'as public user');
+    // Rate limiting: Different limits for authenticated vs unauthenticated users
+    const rateLimitConfig = {
+      maxRequests: isAuthenticated ? 60 : 10, // 60/min for authenticated, 10/min for public
+      windowSeconds: 60, // 1 minute window
+    };
+    
+    const identifier = getRateLimitIdentifier(req, user?.id);
+    const rateLimitResult = await checkRateLimit(identifier, rateLimitConfig, supabaseService);
+    
+    if (!rateLimitResult.allowed) {
+      console.warn(`Rate limit exceeded for ${identifier}`);
+      return createRateLimitResponse(rateLimitResult.resetAt, corsHeaders);
+    }
+    
+    console.log('Scanning website:', url, isAuthenticated ? 'with authenticated user' : 'as public user', `(${rateLimitResult.remaining} requests remaining)`);
 
     // Fetch the actual website content
     let websiteContent = '';
@@ -408,7 +427,15 @@ Return ONLY a valid JSON array of blog ideas. No markdown, no explanation, just 
 
     return new Response(
       JSON.stringify({ blogIdeas: ideasWithIds }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit': rateLimitConfig.maxRequests.toString(),
+          'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
+          'X-RateLimit-Reset': rateLimitResult.resetAt.toString(),
+        } 
+      }
     );
 
   } catch (error) {
