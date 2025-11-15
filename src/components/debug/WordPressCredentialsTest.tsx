@@ -71,28 +71,6 @@ export function WordPressCredentialsTest() {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      // 🔒 Encrypt credentials before saving
-      const credentials = { username, password };
-      let encryptedCredentials: string;
-      try {
-        const { data: encryptResult, error: encryptError } = await supabase.functions.invoke(
-          'encrypt-credentials',
-          { body: { credentials } }
-        );
-        
-        if (encryptError) {
-          console.error("Encryption error:", encryptError);
-          encryptedCredentials = JSON.stringify(credentials);
-          console.warn("⚠️ Storing credentials in plaintext (encryption failed)");
-        } else {
-          encryptedCredentials = encryptResult.encrypted;
-        }
-      } catch (error) {
-        console.error("Failed to encrypt credentials:", error);
-        encryptedCredentials = JSON.stringify(credentials);
-        console.warn("⚠️ Storing credentials in plaintext (encryption unavailable)");
-      }
-
       const blogData = {
         mode: "existing_site",
         title: "WordPress Test Site",
@@ -103,7 +81,10 @@ export function WordPressCredentialsTest() {
         is_published: true,
         cms_platform: "wordpress",
         cms_site_url: formattedUrl,
-        cms_credentials: encryptedCredentials,
+        cms_credentials: {
+          username,
+          password,
+        },
       };
 
       if (existingBlog) {

@@ -151,29 +151,6 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
         };
       }
 
-      // 🔒 Encrypt credentials before saving
-      let encryptedCredentials: string;
-      try {
-        const { data: encryptResult, error: encryptError } = await supabase.functions.invoke(
-          'encrypt-credentials',
-          { body: { credentials } }
-        );
-        
-        if (encryptError) {
-          console.error("Encryption error:", encryptError);
-          // Fallback to plaintext if encryption fails (backward compatibility)
-          encryptedCredentials = JSON.stringify(credentials);
-          console.warn("⚠️ Storing credentials in plaintext (encryption failed)");
-        } else {
-          encryptedCredentials = encryptResult.encrypted;
-        }
-      } catch (error) {
-        console.error("Failed to encrypt credentials:", error);
-        // Fallback to plaintext if encryption fails (backward compatibility)
-        encryptedCredentials = JSON.stringify(credentials);
-        console.warn("⚠️ Storing credentials in plaintext (encryption unavailable)");
-      }
-
       const blogData = {
         mode: "existing_site",
         subdomain: null,
@@ -185,7 +162,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
         is_published: true,
         cms_platform: selectedPlatform,
         cms_site_url: formattedUrl,
-        cms_credentials: encryptedCredentials,
+        cms_credentials: credentials,
       };
 
       let resultData;
