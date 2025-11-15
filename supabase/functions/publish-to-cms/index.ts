@@ -309,7 +309,32 @@ function extractContent(rawContent: string): string {
 async function publishToWordPress(blog: any, post: any): Promise<string> {
   console.log(`Starting WordPress publishing for post: ${post.title}`);
   
-  const credentials = blog.cms_credentials;
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("WordPress credentials not found in database");
+  }
+  
+  let credentials: any;
+  try {
+    const { decryptCredentials } = await import("../_shared/encryption.ts");
+    const encryptedString = typeof encryptedCredentials === 'string' 
+      ? encryptedCredentials 
+      : JSON.stringify(encryptedCredentials);
+    credentials = await decryptCredentials(encryptedString);
+  } catch (error: any) {
+    console.error("Decryption error:", error);
+    // Fallback: try to use as plaintext (backward compatibility)
+    if (typeof encryptedCredentials === 'string') {
+      try {
+        credentials = JSON.parse(encryptedCredentials);
+      } catch {
+        throw new Error(`Failed to decrypt WordPress credentials: ${error.message}`);
+      }
+    } else {
+      credentials = encryptedCredentials;
+    }
+  }
   
   // Handle featured image first if available
   let featuredImageId = null;
@@ -324,25 +349,9 @@ async function publishToWordPress(blog: any, post: any): Promise<string> {
     }
   }
   
-  // Validate credentials with better error handling
-  if (!credentials) {
-    throw new Error("WordPress credentials not found in database");
-  }
-  
-  // Handle different credential storage formats
-  let username, password;
-  if (typeof credentials === 'string') {
-    try {
-      const parsed = JSON.parse(credentials);
-      username = parsed.username;
-      password = parsed.password;
-    } catch (e) {
-      throw new Error("WordPress credentials are malformed");
-    }
-  } else if (typeof credentials === 'object') {
-    username = credentials.username || credentials.apiKey;
-    password = credentials.password || credentials.apiSecret;
-  }
+  // Extract username and password from decrypted credentials
+  const username = credentials.username || credentials.apiKey;
+  const password = credentials.password || credentials.apiSecret;
   
   if (!username || !password) {
     throw new Error("WordPress username and password are required. Please reconnect your WordPress site.");
@@ -484,9 +493,15 @@ async function uploadShopifyImage(blog: any, imageUrl: string): Promise<string |
     const base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
 
     // Upload to Shopify
-    const credentials = blog.cms_credentials;
-    if (!credentials || !credentials.access_token) {
+    // 🔓 Decrypt credentials
+    const encryptedCredentials = blog.cms_credentials;
+    if (!encryptedCredentials) {
       console.error("Missing Shopify credentials");
+      return null;
+    }
+    const credentials = await decryptBlogCredentials(encryptedCredentials);
+    if (!credentials || !credentials.access_token) {
+      console.error("Missing Shopify access token");
       return null;
     }
 
@@ -537,23 +552,38 @@ async function uploadShopifyImage(blog: any, imageUrl: string): Promise<string |
   }
 }
 
-async function uploadWordPressMedia(blog: any, imageUrl: string): Promise<number | undefined> {
-  const credentials = blog.cms_credentials;
-  
-  // Handle different credential storage formats
-  let username, password;
-  if (typeof credentials === 'string') {
-    try {
-      const parsed = JSON.parse(credentials);
-      username = parsed.username;
-      password = parsed.password;
-    } catch (e) {
-      throw new Error("WordPress credentials are malformed");
+// Helper function to decrypt credentials
+async function decryptBlogCredentials(encryptedCredentials: any): Promise<any> {
+  try {
+    const { decryptCredentials } = await import("../_shared/encryption.ts");
+    const encryptedString = typeof encryptedCredentials === 'string' 
+      ? encryptedCredentials 
+      : JSON.stringify(encryptedCredentials);
+    return await decryptCredentials(encryptedString);
+  } catch (error: any) {
+    console.error("Decryption error:", error);
+    // Fallback: try to use as plaintext (backward compatibility)
+    if (typeof encryptedCredentials === 'string') {
+      try {
+        return JSON.parse(encryptedCredentials);
+      } catch {
+        throw new Error(`Failed to decrypt credentials: ${error.message}`);
+      }
     }
-  } else if (typeof credentials === 'object') {
-    username = credentials.username || credentials.apiKey;
-    password = credentials.password || credentials.apiSecret;
+    return encryptedCredentials;
   }
+}
+
+async function uploadWordPressMedia(blog: any, imageUrl: string): Promise<number | undefined> {
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("WordPress credentials missing");
+  }
+  
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
+  const username = credentials.username || credentials.apiKey;
+  const password = credentials.password || credentials.apiSecret;
 
   if (!username || !password) {
     throw new Error("WordPress credentials missing");
@@ -634,7 +664,12 @@ async function uploadWordPressMedia(blog: any, imageUrl: string): Promise<number
 }
 
 async function publishToGhost(blog: any, post: any): Promise<string> {
-  const credentials = blog.cms_credentials;
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("Ghost credentials not found");
+  }
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
   const apiUrl = `${blog.cms_site_url}/ghost/api/v3/admin/posts/`;
 
   // Handle featured image if available
@@ -686,7 +721,12 @@ async function publishToGhost(blog: any, post: any): Promise<string> {
 }
 
 async function publishToWebflow(blog: any, post: any): Promise<string> {
-  const credentials = blog.cms_credentials;
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("Webflow credentials not found");
+  }
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
   const apiUrl = `https://api.webflow.com/collections/${credentials.collection_id}/items`;
 
   const response = await fetch(apiUrl, {
@@ -719,7 +759,12 @@ async function publishToWebflow(blog: any, post: any): Promise<string> {
 }
 
 async function publishToShopify(blog: any, post: any): Promise<string> {
-  const credentials = blog.cms_credentials;
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("Shopify credentials not found");
+  }
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
   
   if (!credentials || !credentials.access_token) {
     throw new Error("Shopify access token not found");
@@ -907,7 +952,12 @@ async function publishToShopify(blog: any, post: any): Promise<string> {
 }
 
 async function publishToHubSpot(blog: any, post: any): Promise<string> {
-  const credentials = blog.cms_credentials;
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("HubSpot credentials not found");
+  }
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
   const apiUrl = `https://api.hubapi.com/content/api/v2/blog-posts`;
 
   const response = await fetch(apiUrl, {
@@ -936,7 +986,16 @@ async function publishToHubSpot(blog: any, post: any): Promise<string> {
 }
 
 async function publishToRestAPI(blog: any, post: any): Promise<string> {
-  const credentials = blog.cms_credentials;
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("REST API credentials not found");
+  }
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
+  
+  if (!credentials.endpoint_url) {
+    throw new Error("REST API endpoint URL not found");
+  }
   
   const response = await fetch(credentials.endpoint_url, {
     method: "POST",
@@ -967,7 +1026,12 @@ async function publishToRestAPI(blog: any, post: any): Promise<string> {
 async function publishToFramer(blog: any, post: any): Promise<string> {
   console.log(`Starting Framer CMS publishing for post: ${post.title}`);
   
-  const credentials = blog.cms_credentials;
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("Framer CMS credentials not found");
+  }
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
   
   if (!credentials || !credentials.access_token || !credentials.collection_id) {
     throw new Error("Framer CMS credentials (API token and Collection ID) are required");
