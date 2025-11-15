@@ -198,19 +198,20 @@ serve(async (req) => {
           if (!Array.isArray(taskResults)) continue;
           
           for (const result of taskResults) {
-            const keywordValue = safeGet(result, 'keyword', null);
+            const resultData = result as any;
+            const keywordValue = safeGet(resultData, 'keyword', null) as string | null;
             if (!keywordValue || typeof keywordValue !== 'string') continue;
             
             const keyword = keywordValue.toLowerCase();
             
             // Extract data from either direct fields or keyword_info object
-            const searchVolume = result.search_volume ?? result.keyword_info?.search_volume;
-            const cpc = result.cpc ?? result.keyword_info?.cpc;
-            const competition: any = result.competition_level ?? result.competition ?? result.keyword_info?.competition;
-            const monthlySearches = result.monthly_searches ?? result.keyword_info?.monthly_searches;
+            const searchVolume = resultData.search_volume ?? resultData.keyword_info?.search_volume;
+            const cpc = resultData.cpc ?? resultData.keyword_info?.cpc;
+            const competition: any = resultData.competition_level ?? resultData.competition ?? resultData.keyword_info?.competition;
+            const monthlySearches = resultData.monthly_searches ?? resultData.keyword_info?.monthly_searches;
             
             // Convert competition level to numeric difficulty (0-100)
-            let difficulty = result.keyword_difficulty ?? 50; // default to medium
+            let difficulty = resultData.keyword_difficulty ?? 50; // default to medium
             if (competition && typeof competition === 'string') {
               const compLower = competition.toLowerCase();
               if (compLower === 'low') difficulty = 25;
@@ -226,7 +227,7 @@ serve(async (req) => {
               keywordDifficulty: difficulty,
               cpc: cpc,
               competition: competition,
-              intent: determineIntent(result),
+              intent: determineIntent(resultData),
               trendsData: monthlySearches?.map((m: MonthlySearch) => ({
                 month: m.month,
                 volume: m.search_volume
