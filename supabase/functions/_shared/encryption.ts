@@ -43,7 +43,7 @@ async function importKey(): Promise<CryptoKey> {
   
   return await crypto.subtle.importKey(
     "raw",
-    keyMaterial,
+    keyMaterial.buffer as ArrayBuffer,
     { name: ALGORITHM },
     false,
     ["encrypt", "decrypt"]
