@@ -239,13 +239,15 @@ Return ONLY a valid JSON array of blog ideas. No markdown, no explanation, just 
     let blogIdeas;
     try {
       // Remove markdown code blocks if present
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const contentStr = content as string;
+      const cleanContent = contentStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       blogIdeas = JSON.parse(cleanContent);
     } catch (parseError) {
+      const contentStr = content as string;
       console.error('Failed to parse AI response JSON:', {
         error: parseError,
-        contentPreview: content.substring(0, 200),
-        contentLength: content.length
+        contentPreview: contentStr.substring(0, 200),
+        contentLength: contentStr.length
       });
       return createErrorResponse(
         parseError,
