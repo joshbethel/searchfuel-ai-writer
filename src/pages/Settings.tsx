@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { BacklinkSettings } from "@/components/settings/BacklinkSettings";
 import { ArticleTypeSettings } from "@/components/settings/ArticleTypeSettings";
+import { CredentialMigration } from "@/components/settings/CredentialMigration";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getPlanLimits } from "@/lib/utils/subscription-limits";
 import type { Database } from "@/integrations/supabase/types";
@@ -344,6 +345,9 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Credential Migration Section */}
+            <CredentialMigration />
           </TabsContent>
 
           <TabsContent value="article-types" className="mt-6">
