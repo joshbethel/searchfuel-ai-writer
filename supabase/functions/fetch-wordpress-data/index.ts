@@ -56,7 +56,32 @@ serve(async (req) => {
     }
 
     const baseUrl = `${blog.cms_site_url}/wp-json/wp/v2`;
-    const credentials = blog.cms_credentials || {};
+    
+    // 🔓 Decrypt credentials
+    const encryptedCredentials = blog.cms_credentials;
+    let credentials: any = {};
+    if (encryptedCredentials) {
+      try {
+        const { decryptCredentials } = await import("../_shared/encryption.ts");
+        const encryptedString = typeof encryptedCredentials === 'string' 
+          ? encryptedCredentials 
+          : JSON.stringify(encryptedCredentials);
+        credentials = await decryptCredentials(encryptedString);
+      } catch (error: any) {
+        console.error("Decryption error:", error);
+        // Fallback to plaintext (backward compatibility)
+        if (typeof encryptedCredentials === 'string') {
+          try {
+            credentials = JSON.parse(encryptedCredentials);
+          } catch {
+            credentials = {};
+          }
+        } else {
+          credentials = encryptedCredentials;
+        }
+      }
+    }
+    
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (credentials.apiKey) {
       headers['Authorization'] = `Bearer ${credentials.apiKey}`;
