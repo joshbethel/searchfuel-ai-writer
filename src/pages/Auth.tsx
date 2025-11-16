@@ -15,6 +15,28 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // Helper function to check subscription and redirect
+  const checkSubscriptionAndRedirect = async (userId: string) => {
+    try {
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('status, plan_name')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      // If no subscription or no active plan, redirect to plans page
+      if (!subscription || subscription.status !== 'active' || !subscription.plan_name) {
+        navigate("/plans");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+      // On error, redirect to plans to be safe
+      navigate("/plans");
+    }
+  };
+
   useEffect(() => {
     // Check URL params for mode
     const params = new URLSearchParams(window.location.search);
@@ -28,13 +50,15 @@ export default function Auth() {
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/dashboard");
+        // Check subscription status and redirect accordingly
+        checkSubscriptionAndRedirect(session.user.id);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        navigate("/dashboard");
+      if (session && event === 'SIGNED_IN') {
+        // Check subscription status and redirect accordingly
+        checkSubscriptionAndRedirect(session.user.id);
       }
     });
 
@@ -60,17 +84,44 @@ export default function Auth() {
         if (!session) throw new Error('Session verification failed');
         
         toast.success("Logged in successfully!");
-        navigate("/dashboard");
+        // Check subscription status and redirect accordingly
+        if (data.user) {
+          await checkSubscriptionAndRedirect(data.user.id);
+        } else {
+          navigate("/plans");
+        }
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
+            emailRedirectTo: `${window.location.origin}/plans`,
           },
         });
-        if (error) throw error;
-        toast.success("Account created! Please check your email to confirm.");
+        if (signUpError) throw signUpError;
+        
+        // Create Stripe customer and subscription record immediately after signup
+        if (signUpData.user) {
+          try {
+            const { error: stripeError } = await supabase.functions.invoke('create-stripe-customer', {
+              body: {}
+            });
+            
+            if (stripeError) {
+              console.error('Error creating Stripe customer:', stripeError);
+              // Don't block signup if Stripe customer creation fails - can be created later
+              toast.warning("Account created, but there was an issue setting up billing. You can complete this later.");
+            } else {
+              toast.success("Account created! Please check your email to confirm.");
+            }
+          } catch (err) {
+            console.error('Error calling create-stripe-customer:', err);
+            // Don't block signup - Stripe customer can be created later
+            toast.success("Account created! Please check your email to confirm.");
+          }
+        } else {
+          toast.success("Account created! Please check your email to confirm.");
+        }
       }
     } catch (error: any) {
       console.error('Auth error:', error);

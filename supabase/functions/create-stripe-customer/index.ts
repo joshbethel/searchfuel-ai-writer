@@ -144,7 +144,7 @@ serve(async (req) => {
         user_id: user.id,
         stripe_customer_id: customerId,
         status: 'inactive',
-        plan_name: 'free',
+        plan_name: null, // No default plan - user must select one
         posts_generated_count: 0,
         keywords_count: 0,
       }, {

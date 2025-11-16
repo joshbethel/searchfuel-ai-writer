@@ -22,6 +22,7 @@ interface Keyword {
 
 
 export default function Keywords() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [isFetching, setIsFetching] = useState(true);
@@ -75,6 +76,36 @@ export default function Keywords() {
     
     if (!websiteUrl.trim()) {
       toast.error("Please enter a website URL");
+      return;
+    }
+
+    // Check subscription before scanning
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please sign in to scan websites");
+        return;
+      }
+
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('status, plan_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const hasActiveSubscription = subscription && 
+        (subscription.status === 'active' || subscription.status === 'trialing') &&
+        subscription.plan_name !== null &&
+        subscription.plan_name !== 'free';
+
+      if (!hasActiveSubscription) {
+        toast.error("Please upgrade to Pro to scan websites");
+        navigate("/plans");
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+      toast.error("Failed to verify subscription. Please try again.");
       return;
     }
 
@@ -218,6 +249,24 @@ export default function Keywords() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
+
+      // Check subscription before adding keywords
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('status, plan_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const hasActiveSubscription = subscription && 
+        (subscription.status === 'active' || subscription.status === 'trialing') &&
+        subscription.plan_name !== null &&
+        subscription.plan_name !== 'free';
+
+      if (!hasActiveSubscription) {
+        toast.error("Please upgrade to Pro to add keywords");
+        navigate("/plans");
+        return;
+      }
       
       const keywordsData = keywordsToAdd.map(keyword => ({
         user_id: user.id,

@@ -553,6 +553,24 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('Not authenticated');
 
+      // Check subscription before generating
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('status, plan_name')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      const hasActiveSubscription = subscription && 
+        (subscription.status === 'active' || subscription.status === 'trialing') &&
+        subscription.plan_name !== null &&
+        subscription.plan_name !== 'free';
+
+      if (!hasActiveSubscription) {
+        toast.error("Please upgrade to Pro to generate articles");
+        setGeneratingTopics(prev => prev.filter(t => t !== topic));
+        return;
+      }
+
       toast.info('Starting article generation...');
 
       // Get the blog ID

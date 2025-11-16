@@ -158,7 +158,7 @@ serve(async (req) => {
       },
     ],
     mode: "subscription",
-    success_url: `${origin || 'https://searchfuel-ai-writer.lovable.app'}/settings?tab=subscription&session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${origin || 'https://searchfuel-ai-writer.lovable.app'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin || 'https://searchfuel-ai-writer.lovable.app'}/settings?tab=subscription&canceled=true`,
     metadata: {
       user_id: user.id,

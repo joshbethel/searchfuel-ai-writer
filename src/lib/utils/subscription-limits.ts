@@ -13,7 +13,7 @@ export const PLAN_LIMITS = {
     }
   },
   pro: {
-    maxPostsPerMonth: 40,
+    maxPostsPerMonth: 20,
     maxKeywordsTotal: 100,
     features: {
       backlinkNetwork: true,
@@ -35,7 +35,22 @@ export interface Subscription {
 }
 
 // Utility functions
-export function getPlanLimits(planName: string) {
+export function getPlanLimits(planName: string | null) {
+  if (!planName) {
+    // Return empty limits for no plan (all features disabled)
+    return {
+      maxPostsPerMonth: 0,
+      maxKeywordsTotal: 0,
+      features: {
+        backlinkNetwork: false,
+        competitorAnalysis: false,
+        analytics: false,
+        whiteLabel: false,
+        customDomain: false,
+        autoPosting: false
+      }
+    };
+  }
   const plan = planName.toLowerCase() as keyof typeof PLAN_LIMITS;
   return PLAN_LIMITS[plan] || PLAN_LIMITS.free;
 }

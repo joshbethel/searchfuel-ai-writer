@@ -185,6 +185,36 @@ export default function Articles() {
       toast.error("No blog found. Please connect your CMS first.");
       return;
     }
+
+    // Check subscription before generating
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please sign in to generate articles");
+        return;
+      }
+
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('status, plan_name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const hasActiveSubscription = subscription && 
+        (subscription.status === 'active' || subscription.status === 'trialing') &&
+        subscription.plan_name !== null &&
+        subscription.plan_name !== 'free';
+
+      if (!hasActiveSubscription) {
+        toast.error("Please upgrade to Pro to generate articles");
+        navigate("/plans");
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+      toast.error("Failed to verify subscription. Please try again.");
+      return;
+    }
     
     setIsGeneratingArticle(true);
     setShowGenerateDialog(false);

@@ -67,7 +67,7 @@ export default function Settings() {
                 .insert({
                   user_id: userId,
                   status: 'inactive',
-                  plan_name: 'free',
+                  plan_name: null,
                   posts_generated_count: 0,
                   keywords_count: 0,
                 })
@@ -104,7 +104,7 @@ export default function Settings() {
               .insert({
                 user_id: userId,
                 status: 'inactive',
-                plan_name: 'free',
+                plan_name: null,
                 posts_generated_count: 0,
                 keywords_count: 0,
               })
@@ -267,7 +267,7 @@ export default function Settings() {
   };
 
   // Get plan info
-  const planName = subscription?.plan_name || 'free';
+  const planName = subscription?.plan_name || null;
   const planLimits = getPlanLimits(planName);
   const isActive = subscription?.status === 'active' || subscription?.status === 'trialing';
   const postsUsed = subscription?.posts_generated_count || 0;
@@ -385,7 +385,9 @@ export default function Settings() {
               <>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Current Plan</p>
-                  <p className="text-lg font-semibold capitalize">{planName}</p>
+                  <p className="text-lg font-semibold capitalize">
+                    {planName ? planName : 'No Plan Selected'}
+                  </p>
                   {subscription && (
                     <p className="text-xs text-muted-foreground mt-1">
                       Status: {subscription.status}

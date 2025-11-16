@@ -135,6 +135,8 @@ export default function Dashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   const [blogForm, setBlogForm] = useState({
     subdomain: "",
     title: "",
@@ -142,10 +144,42 @@ export default function Dashboard() {
     customDomain: "",
   });
 
+  // Fetch subscription status
+  const fetchSubscription = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching subscription:', error);
+      }
+
+      setSubscription(data || null);
+    } catch (error) {
+      console.error('Error fetching subscription:', error);
+      setSubscription(null);
+    } finally {
+      setIsLoadingSubscription(false);
+    }
+  };
+
   useEffect(() => {
     fetchUserBlog();
     fetchKeywordsCpc();
+    fetchSubscription();
   }, []);
+
+  // Check if user has active subscription
+  const hasActiveSubscription = subscription && 
+    (subscription.status === 'active' || subscription.status === 'trialing') &&
+    subscription.plan_name !== null &&
+    subscription.plan_name !== 'free';
 
   const fetchKeywordsCpc = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -457,6 +491,13 @@ export default function Dashboard() {
       return;
     }
 
+    // Check subscription before scanning
+    if (!hasActiveSubscription) {
+      toast.error("Please upgrade to Pro to scan websites");
+      navigate("/plans");
+      return;
+    }
+
     setIsScanning(true);
 
     try {
@@ -488,6 +529,13 @@ export default function Dashboard() {
 
   const handleApprove = async (idea: BlogIdea) => {
     if (!scanData) return;
+
+    // Check subscription before generating
+    if (!hasActiveSubscription) {
+      toast.error("Please upgrade to Pro to generate articles");
+      navigate("/plans");
+      return;
+    }
 
     setGeneratingIds((prev) => new Set(prev).add(idea.id));
 

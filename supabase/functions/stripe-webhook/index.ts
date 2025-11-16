@@ -171,17 +171,61 @@ serve(async (req) => {
             })
             .eq('id', existingSub.id);
         } else {
-          // Create new subscription (only if user_id is provided in metadata)
-          if (!session.metadata?.user_id) {
-            console.error(`Cannot create subscription: user_id missing from session metadata for subscription ${subscription.id}`);
+          // Try to get user_id from metadata first, then fallback to email lookup
+          let userId: string | null = session.metadata?.user_id || null;
+          
+          // If user_id is missing, try to look up user by email
+          if (!userId) {
+            // Get customer email from session - check customer_details first (actual payload location)
+            // then fallback to customer_email field, then retrieve from Stripe
+            let customerEmail: string | null = 
+              session.customer_details?.email || 
+              session.customer_email || 
+              null;
+            
+            if (!customerEmail && subscription.customer) {
+              try {
+                const customer = await stripe.customers.retrieve(subscription.customer as string);
+                if (customer && !('deleted' in customer) && customer.email) {
+                  customerEmail = customer.email;
+                }
+              } catch (err) {
+                console.error(`Error retrieving customer ${subscription.customer}:`, err);
+              }
+            }
+            
+            // Look up user by email if we have it
+            // Use admin API to find user by email
+            if (customerEmail) {
+              try {
+                const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+                if (!authError && authUsers) {
+                  const matchingUser = authUsers.users.find(
+                    u => u.email?.toLowerCase() === customerEmail.toLowerCase()
+                  );
+                  if (matchingUser) {
+                    userId = matchingUser.id;
+                    console.log(`Found user by email: ${customerEmail} -> ${userId}`);
+                  }
+                } else if (authError) {
+                  console.error(`Error looking up user by email ${customerEmail}:`, authError);
+                }
+              } catch (err) {
+                console.error(`Exception while looking up user by email ${customerEmail}:`, err);
+              }
+            }
+          }
+          
+          if (!userId) {
+            console.error(`Cannot create subscription: user_id missing from session metadata and no user found for email. Subscription: ${subscription.id}, Customer: ${subscription.customer}`);
             break;
           }
           
-          console.log(`Creating new subscription ${subscription.id} for user ${session.metadata.user_id}`);
+          console.log(`Creating new subscription ${subscription.id} for user ${userId}`);
           await supabase
             .from('subscriptions')
             .upsert({
-              user_id: session.metadata.user_id,
+              user_id: userId,
               stripe_customer_id: subscription.customer as string,
               stripe_subscription_id: subscription.id,
               stripe_price_id: subscription.items.data[0].price.id,

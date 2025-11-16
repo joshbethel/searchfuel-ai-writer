@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import Plans from "./pages/Plans";
 import Dashboard from "./pages/Dashboard";
 import Articles from "./pages/Articles";
 import Keywords from "./pages/Keywords";
@@ -16,6 +17,7 @@ import NotFound from "./pages/NotFound";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import { ProtectedRoute } from "./layouts/ProtectedRoute";
+import { SubscriptionProtectedRoute } from "./layouts/SubscriptionProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -28,7 +30,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
-          <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+          <Route path="/plans" element={<Plans />} />
+          <Route element={<SubscriptionProtectedRoute><DashboardLayout /></SubscriptionProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/articles" element={<Articles />} />
             <Route path="/articles/:id" element={<ArticleDetail />} />
