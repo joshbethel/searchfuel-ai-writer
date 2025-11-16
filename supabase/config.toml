@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.fetch-seo-data]
 verify_jwt = false
+
+[functions.migrate-credentials]
+verify_jwt = false

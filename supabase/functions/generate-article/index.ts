@@ -175,13 +175,15 @@ The article should be 800-1200 words, engaging, and optimized for both users and
     // Parse the JSON response from content
     let article;
     try {
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const contentStr = content as string;
+      const cleanContent = contentStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       article = JSON.parse(cleanContent);
     } catch (parseError) {
+      const contentStr = content as string;
       console.error('Failed to parse AI response JSON:', {
         error: parseError,
-        contentPreview: content.substring(0, 200),
-        contentLength: content.length
+        contentPreview: contentStr.substring(0, 200),
+        contentLength: contentStr.length
       });
       return createErrorResponse(
         parseError,
