@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Check, Sparkles, TrendingUp, Target, BarChart3, Globe, Zap, Link2, FileText } from "lucide-react";
+import { User } from "@supabase/supabase-js";
 
 export default function Plans() {
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,6 +35,16 @@ export default function Plans() {
 
     setLoading(true);
     try {
+      // Ensure we have a valid session before calling the function
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        toast.error("Please sign in to select a plan");
+        navigate("/auth");
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
         body: {}
       });
@@ -46,9 +57,10 @@ export default function Plans() {
       } else {
         throw new Error('No checkout URL received');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating checkout session:', error);
-      toast.error(error.message || 'Failed to create checkout session. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create checkout session. Please try again.';
+      toast.error(errorMessage);
       setLoading(false);
     }
   };
