@@ -1,10 +1,13 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Download, ExternalLink, ArrowLeft, Calendar } from "lucide-react";
+import { Copy, Download, ExternalLink, ArrowLeft, Calendar, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { autoScheduleKeyword } from "@/lib/utils/auto-schedule";
 import { format } from "date-fns";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 interface InternalLink {
   anchorText: string;
@@ -33,12 +36,57 @@ interface ArticleViewerProps {
 }
 
 export const ArticleViewer = ({ article, onBack }: ArticleViewerProps) => {
+  const [schedulingKeywords, setSchedulingKeywords] = useState<Set<string>>(new Set());
+  const [scheduledKeywords, setScheduledKeywords] = useState<Set<string>>(new Set());
+
+  // Fetch scheduled keywords
+  useEffect(() => {
+    fetchScheduledKeywords();
+  }, []);
+
+  const fetchScheduledKeywords = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: blog } = await supabase
+        .from("blogs")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!blog) return;
+
+      const { data: scheduled } = await supabase
+        .from("scheduled_keywords")
+        .select("keyword")
+        .eq("blog_id", blog.id)
+        .eq("status", "pending");
+
+      if (scheduled) {
+        setScheduledKeywords(new Set(scheduled.map(s => s.keyword.toLowerCase())));
+      }
+    } catch (error) {
+      console.error("Error fetching scheduled keywords:", error);
+    }
+  };
+
   const handleScheduleKeyword = async (keyword: string) => {
+    setSchedulingKeywords(prev => new Set(prev).add(keyword));
+    
     const result = await autoScheduleKeyword(keyword);
+    
+    setSchedulingKeywords(prev => {
+      const next = new Set(prev);
+      next.delete(keyword);
+      return next;
+    });
+
     if (result.success && result.date) {
-      toast.success(`Scheduled "${keyword}" for ${format(result.date, 'MMM d, yyyy')}`);
+      setScheduledKeywords(prev => new Set(prev).add(keyword.toLowerCase()));
+      toast.success(`Added "${keyword}" to calendar for ${format(result.date, 'MMM d, yyyy')}`);
     } else {
-      toast.error(result.error || "Failed to schedule keyword");
+      toast.error(result.error || "Failed to add to calendar");
     }
   };
 
@@ -177,9 +225,20 @@ export const ArticleViewer = ({ article, onBack }: ArticleViewerProps) => {
                 variant="outline"
                 size="sm"
                 onClick={() => handleScheduleKeyword(keyword)}
-                className="flex items-center gap-2"
+                disabled={scheduledKeywords.has(keyword.toLowerCase()) || schedulingKeywords.has(keyword)}
+                className={cn(
+                  "flex items-center gap-2 transition-colors",
+                  scheduledKeywords.has(keyword.toLowerCase())
+                    ? "text-green-600 dark:text-green-400 cursor-not-allowed"
+                    : ""
+                )}
+                title={scheduledKeywords.has(keyword.toLowerCase()) ? "Already scheduled" : "Add to Calendar"}
               >
-                <Calendar className="w-3 h-3" />
+                {schedulingKeywords.has(keyword) ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Calendar className="w-3 h-3" />
+                )}
                 Add to Calendar
               </Button>
             ))}
