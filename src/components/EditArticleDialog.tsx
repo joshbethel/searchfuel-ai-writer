@@ -5,9 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Code2, Eye } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface EditArticleDialogProps {
   articleId: string | null;
@@ -30,6 +33,7 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [updateToCms, setUpdateToCms] = useState(false);
+  const [contentMode, setContentMode] = useState<"visual" | "text">("text");
   const [articleData, setArticleData] = useState<ArticleData>({
     title: "",
     content: "",
@@ -186,15 +190,48 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="content">Content</Label>
-              <Textarea
-                id="content"
-                value={articleData.content}
-                onChange={(e) => setArticleData({ ...articleData, content: e.target.value })}
-                placeholder="Article content"
-                rows={15}
-                className="font-mono text-sm"
-              />
+              <Label>Content</Label>
+              <Tabs value={contentMode} onValueChange={(v) => setContentMode(v as "visual" | "text")} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="text" className="flex items-center gap-2">
+                    <Code2 className="w-4 h-4" />
+                    Text Editor
+                  </TabsTrigger>
+                  <TabsTrigger value="visual" className="flex items-center gap-2">
+                    <Eye className="w-4 h-4" />
+                    Visual Preview
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="text" className="mt-2">
+                  <Textarea
+                    id="content"
+                    value={articleData.content}
+                    onChange={(e) => setArticleData({ ...articleData, content: e.target.value })}
+                    placeholder="Article content (Markdown supported)"
+                    rows={15}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Supports Markdown formatting: **bold**, *italic*, # headings, etc.
+                  </p>
+                </TabsContent>
+                
+                <TabsContent value="visual" className="mt-2">
+                  <div className="border rounded-lg p-4 min-h-[400px] max-h-[600px] overflow-y-auto bg-background prose prose-sm dark:prose-invert max-w-none">
+                    {articleData.content ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {articleData.content}
+                      </ReactMarkdown>
+                    ) : (
+                      <p className="text-muted-foreground italic">No content to preview</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Switch to Text Editor to make changes
+                  </p>
+                </TabsContent>
+              </Tabs>
             </div>
 
             {articleData.publishing_status === 'published' && articleData.external_post_id && (
