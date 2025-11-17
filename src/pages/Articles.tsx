@@ -55,6 +55,14 @@ const getPublishingStatusBadge = (status: string, scheduledDate?: string | null)
   }
 };
 
+interface ScheduledKeyword {
+  id: string;
+  keyword: string;
+  scheduled_date: string;
+  status: string;
+  created_at: string;
+}
+
 export default function Articles() {
   const navigate = useNavigate();
   const { articles, isLoading, blogId, fetchArticles, setArticles } = useArticles();
@@ -63,6 +71,35 @@ export default function Articles() {
   const [editArticleId, setEditArticleId] = useState<string | null>(null);
   const [rescheduleArticleId, setRescheduleArticleId] = useState<string | null>(null);
   const [rescheduleArticleDate, setRescheduleArticleDate] = useState<string | null>(null);
+  const [scheduledKeywords, setScheduledKeywords] = useState<ScheduledKeyword[]>([]);
+  const [isLoadingScheduled, setIsLoadingScheduled] = useState(true);
+
+  // Fetch scheduled keywords
+  const fetchScheduledKeywords = useCallback(async () => {
+    if (!blogId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("scheduled_keywords")
+        .select("*")
+        .eq("blog_id", blogId)
+        .eq("status", "pending")
+        .order("scheduled_date", { ascending: true });
+
+      if (error) throw error;
+      setScheduledKeywords(data || []);
+    } catch (error) {
+      console.error("Error fetching scheduled keywords:", error);
+    } finally {
+      setIsLoadingScheduled(false);
+    }
+  }, [blogId]);
+
+  useEffect(() => {
+    if (blogId) {
+      fetchScheduledKeywords();
+    }
+  }, [blogId, fetchScheduledKeywords]);
 
   const handlePublishNow = async (postId: string) => {
     if (!blogId) return;
@@ -109,6 +146,7 @@ export default function Articles() {
 
       toast.success("Post published successfully!");
       await fetchArticles();
+      await fetchScheduledKeywords();
     } catch (error: any) {
       console.error("Error publishing post:", error);
       toast.error(error.message || "Failed to publish post");
@@ -134,6 +172,7 @@ export default function Articles() {
         
         // After successful publishing, fetch articles to update the list
         await fetchArticles();
+        await fetchScheduledKeywords();
       } catch (error) {
         console.error(`Failed to publish scheduled post ${post.id}:`, error);
         toast.error(`Failed to publish scheduled post "${post.title}"`);
@@ -246,6 +285,7 @@ export default function Articles() {
       }
       
       await fetchArticles();
+      await fetchScheduledKeywords();
     } catch (error: any) {
       console.error('Article generation error:', error);
       
@@ -260,10 +300,10 @@ export default function Articles() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isLoadingScheduled) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <Loader2 className="w-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -331,7 +371,7 @@ export default function Articles() {
         <div>
           <h1 className="text-4xl font-bold text-foreground mb-2">Articles</h1>
           <p className="text-muted-foreground">
-            {scheduledPosts.length} scheduled · {pendingPosts.length} pending · {publishedPosts.length} published · {failedPosts.length} failed
+            {scheduledPosts.length + scheduledKeywords.length} scheduled · {pendingPosts.length} pending · {publishedPosts.length} published · {failedPosts.length} failed
           </p>
         </div>
         <div className="flex gap-2">
@@ -378,11 +418,38 @@ export default function Articles() {
           <Calendar className="w-6 h-6 text-purple-600" />
           Scheduled Posts
           <Badge variant="secondary" className="bg-purple-600 text-white">
-            {scheduledPosts.length}
+            {scheduledPosts.length + scheduledKeywords.length}
           </Badge>
         </h2>
         <div className="grid gap-4">
-          {scheduledPosts.length === 0 ? (
+          {/* Scheduled Keywords (not yet generated) */}
+          {scheduledKeywords.map((keyword) => (
+            <Card key={keyword.id} className="p-6 hover:shadow-md transition-shadow w-[99%] mx-auto border-dashed">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="bg-yellow-600 text-white">Queued for Generation</Badge>
+                  </div>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    {keyword.keyword}
+                  </h3>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      <span>Scheduled for {format(parseISO(keyword.scheduled_date), 'MMM d, yyyy')}</span>
+                    </div>
+                    <span>Added {format(parseISO(keyword.created_at), 'MMM d, yyyy')}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    This article will be automatically generated and published on the scheduled date
+                  </p>
+                </div>
+              </div>
+            </Card>
+          ))}
+
+          {/* Scheduled Blog Posts (already generated) */}
+          {scheduledPosts.length === 0 && scheduledKeywords.length === 0 ? (
             <Card className="p-6 text-center text-muted-foreground">
               No scheduled posts yet
             </Card>
