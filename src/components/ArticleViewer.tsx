@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Download, ExternalLink, ArrowLeft, Calendar } from "lucide-react";
 import { toast } from "sonner";
-import { ScheduleKeywordDialog } from "./ScheduleKeywordDialog";
-import { useState } from "react";
+import { autoScheduleKeyword } from "@/lib/utils/auto-schedule";
+import { format } from "date-fns";
 
 interface InternalLink {
   anchorText: string;
@@ -33,8 +33,14 @@ interface ArticleViewerProps {
 }
 
 export const ArticleViewer = ({ article, onBack }: ArticleViewerProps) => {
-  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
-  const [keywordToSchedule, setKeywordToSchedule] = useState("");
+  const handleScheduleKeyword = async (keyword: string) => {
+    const result = await autoScheduleKeyword(keyword);
+    if (result.success && result.date) {
+      toast.success(`Scheduled "${keyword}" for ${format(result.date, 'MMM d, yyyy')}`);
+    } else {
+      toast.error(result.error || "Failed to schedule keyword");
+    }
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(article.content);
@@ -159,10 +165,10 @@ export const ArticleViewer = ({ article, onBack }: ArticleViewerProps) => {
         <Card className="p-6">
           <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-accent" />
-            Schedule Related Topics
+            Add Topics to Calendar
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Schedule articles for related keywords to your content calendar
+            Add related keywords to your content calendar - they'll be scheduled automatically
           </p>
           <div className="flex flex-wrap gap-2">
             {[article.keyword].map((keyword, index) => (
@@ -170,30 +176,16 @@ export const ArticleViewer = ({ article, onBack }: ArticleViewerProps) => {
                 key={index}
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setKeywordToSchedule(keyword);
-                  setScheduleDialogOpen(true);
-                }}
+                onClick={() => handleScheduleKeyword(keyword)}
                 className="flex items-center gap-2"
               >
                 <Calendar className="w-3 h-3" />
-                {keyword}
+                Add to Calendar
               </Button>
             ))}
           </div>
         </Card>
       </div>
-
-      {/* Schedule Keyword Dialog */}
-      <ScheduleKeywordDialog
-        open={scheduleDialogOpen}
-        onOpenChange={setScheduleDialogOpen}
-        keyword={keywordToSchedule}
-        onScheduled={() => {
-          setScheduleDialogOpen(false);
-          setKeywordToSchedule("");
-        }}
-      />
     </div>
   );
 };

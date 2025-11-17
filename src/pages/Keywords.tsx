@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ScheduleKeywordDialog } from "@/components/ScheduleKeywordDialog";
+import { autoScheduleKeyword } from "@/lib/utils/auto-schedule";
+import { format } from "date-fns";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,8 +34,15 @@ export default function Keywords() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [manualKeywords, setManualKeywords] = useState("");
-  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
-  const [keywordToSchedule, setKeywordToSchedule] = useState("");
+
+  const handleScheduleKeyword = async (keyword: string) => {
+    const result = await autoScheduleKeyword(keyword);
+    if (result.success && result.date) {
+      toast.success(`Added "${keyword}" to calendar for ${format(result.date, 'MMM d, yyyy')}`);
+    } else {
+      toast.error(result.error || "Failed to add to calendar");
+    }
+  };
 
   // Fetch keywords from database
   const fetchKeywords = async () => {
@@ -577,12 +585,9 @@ export default function Keywords() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          setKeywordToSchedule(keyword.keyword);
-                          setScheduleDialogOpen(true);
-                        }}
+                        onClick={() => handleScheduleKeyword(keyword.keyword)}
                         className="text-primary hover:text-primary"
-                        title="Schedule to Calendar"
+                        title="Add to Calendar"
                       >
                         <Calendar className="w-4 h-4" />
                       </Button>
@@ -644,17 +649,6 @@ export default function Keywords() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Schedule Keyword Dialog */}
-      <ScheduleKeywordDialog
-        open={scheduleDialogOpen}
-        onOpenChange={setScheduleDialogOpen}
-        keyword={keywordToSchedule}
-        onScheduled={() => {
-          setScheduleDialogOpen(false);
-          setKeywordToSchedule("");
-        }}
-      />
     </div>
   );
 }
