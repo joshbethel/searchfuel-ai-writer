@@ -364,6 +364,60 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_keywords: {
+        Row: {
+          blog_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          keyword: string
+          post_id: string | null
+          scheduled_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          blog_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          keyword: string
+          post_id?: string | null
+          scheduled_date: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          blog_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          keyword?: string
+          post_id?: string | null
+          scheduled_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_keywords_blog_id_fkey"
+            columns: ["blog_id"]
+            isOneToOne: false
+            referencedRelation: "blogs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_keywords_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "blog_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           cancel_at: string | null

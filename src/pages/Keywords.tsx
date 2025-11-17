@@ -1,12 +1,13 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TrendingUp, TrendingDown, Minus, Search, Loader2, Trash2, RotateCcw, Plus, AlertCircle, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Search, Loader2, Trash2, RotateCcw, Plus, AlertCircle, RefreshCw, Calendar } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ScheduleKeywordDialog } from "@/components/ScheduleKeywordDialog";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +33,8 @@ export default function Keywords() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [manualKeywords, setManualKeywords] = useState("");
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [keywordToSchedule, setKeywordToSchedule] = useState("");
 
   // Fetch keywords from database
   const fetchKeywords = async () => {
@@ -541,7 +544,7 @@ export default function Keywords() {
               <TableHead>Intent</TableHead>
               <TableHead>Trend</TableHead>
               <TableHead className="text-right">CPC</TableHead>
-              <TableHead className="w-[100px]">Actions</TableHead>
+              <TableHead className="w-[150px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -570,14 +573,28 @@ export default function Keywords() {
                   <TableCell>{getTrendIcon(keyword.trend)}</TableCell>
                   <TableCell className="text-right text-foreground">${keyword.cpc.toFixed(2)}</TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteKeyword(keyword.keyword)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setKeywordToSchedule(keyword.keyword);
+                          setScheduleDialogOpen(true);
+                        }}
+                        className="text-primary hover:text-primary"
+                        title="Schedule to Calendar"
+                      >
+                        <Calendar className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteKeyword(keyword.keyword)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -627,6 +644,17 @@ export default function Keywords() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Schedule Keyword Dialog */}
+      <ScheduleKeywordDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        keyword={keywordToSchedule}
+        onScheduled={() => {
+          setScheduleDialogOpen(false);
+          setKeywordToSchedule("");
+        }}
+      />
     </div>
   );
 }
