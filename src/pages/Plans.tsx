@@ -9,11 +9,42 @@ import { Loader2, Check, Sparkles, TrendingUp, Target, BarChart3, Globe, Zap, Li
 import { User } from "@supabase/supabase-js";
 import { Link } from "react-router-dom";
 
+interface Subscription {
+  status: string;
+  plan_name: string | null;
+}
+
 export default function Plans() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [checkingSubscription, setCheckingSubscription] = useState(false);
   const navigate = useNavigate();
+
+  // Fetch subscription status
+  const fetchSubscription = async (userId: string) => {
+    setCheckingSubscription(true);
+    try {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('status, plan_name')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching subscription:', error);
+        setSubscription(null);
+      } else {
+        setSubscription(data || null);
+      }
+    } catch (error) {
+      console.error('Error fetching subscription:', error);
+      setSubscription(null);
+    } finally {
+      setCheckingSubscription(false);
+    }
+  };
 
   useEffect(() => {
     // Check if user is authenticated
@@ -24,12 +55,23 @@ export default function Plans() {
         if (error) {
           console.error('Error checking session:', error);
           setUser(null);
+          setSubscription(null);
+          setCheckingSubscription(false);
+        } else if (session?.user) {
+          // User is authenticated, fetch their subscription
+          setUser(session.user);
+          await fetchSubscription(session.user.id);
         } else {
-          setUser(session?.user ?? null);
+          // No user session
+          setUser(null);
+          setSubscription(null);
+          setCheckingSubscription(false);
         }
       } catch (error) {
         console.error('Error checking auth:', error);
         setUser(null);
+        setSubscription(null);
+        setCheckingSubscription(false);
       } finally {
         setCheckingAuth(false);
       }
@@ -37,18 +79,40 @@ export default function Plans() {
 
     checkAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setCheckingAuth(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        // User is authenticated, fetch their subscription
+        setUser(session.user);
+        setCheckingAuth(false);
+        await fetchSubscription(session.user.id);
+      } else {
+        // No user session
+        setUser(null);
+        setSubscription(null);
+        setCheckingAuth(false);
+        setCheckingSubscription(false);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  // Check if user has active subscription
+  const hasActiveSubscription = subscription && 
+    (subscription.status === 'active' || subscription.status === 'trialing') &&
+    subscription.plan_name !== null &&
+    subscription.plan_name !== 'free';
+
   const handleSelectPlan = async () => {
     if (!user) {
       toast.error("Please sign in to select a plan");
       navigate("/auth");
+      return;
+    }
+
+    // If user already has active subscription, redirect to dashboard
+    if (hasActiveSubscription) {
+      navigate("/dashboard");
       return;
     }
 
@@ -118,6 +182,13 @@ export default function Plans() {
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Start generating SEO-optimized content that drives traffic and conversions
           </p>
+          {/* Show message if user already has active subscription */}
+          {user && !checkingSubscription && hasActiveSubscription && (
+            <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg border border-primary/20">
+              <Check className="w-5 h-5" />
+              <span className="font-medium">You already have an active subscription</span>
+            </div>
+          )}
         </div>
 
         {/* Plans Grid */}
@@ -179,6 +250,15 @@ export default function Plans() {
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Checking authentication...
                 </Button>
+              ) : checkingSubscription ? (
+                <Button
+                  disabled
+                  className="w-full text-lg py-6"
+                  size="lg"
+                >
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Checking subscription...
+                </Button>
               ) : !user ? (
                 <>
                   <Button
@@ -190,6 +270,19 @@ export default function Plans() {
                   </Button>
                   <p className="text-xs text-center text-muted-foreground">
                     You must be signed in to select a plan
+                  </p>
+                </>
+              ) : hasActiveSubscription ? (
+                <>
+                  <Button
+                    onClick={() => navigate("/dashboard")}
+                    className="w-full text-lg py-6"
+                    size="lg"
+                  >
+                    Go to Dashboard
+                  </Button>
+                  <p className="text-xs text-center text-muted-foreground">
+                    You already have an active {subscription?.plan_name || 'Pro'} subscription
                   </p>
                 </>
               ) : (

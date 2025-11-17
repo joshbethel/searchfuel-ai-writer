@@ -38,8 +38,8 @@ const BlogPost = () => {
           .from("blog_posts")
           .select("*")
           .eq("slug", slug)
-          .eq("status", "published")
-          .single();
+          .in("publishing_status", ["published", "scheduled"])
+          .maybeSingle();
 
         if (error) {
           console.error("Error fetching post:", error);
@@ -84,10 +84,22 @@ const BlogPost = () => {
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-6">
-          <Link to="/blog" className="inline-flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-            <span className="font-semibold">SearchFuel Blog</span>
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link 
+              to="/articles" 
+              className="inline-flex items-center gap-2 text-foreground hover:text-primary transition-colors font-medium"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Articles</span>
+            </Link>
+            <div className="h-4 w-px bg-border" />
+            <Link 
+              to="/blog" 
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              SearchFuel Blog
+            </Link>
+          </div>
         </div>
       </header>
 
