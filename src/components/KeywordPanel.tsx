@@ -10,7 +10,8 @@ import {
   TrendingUp, 
   DollarSign, 
   BarChart3,
-  Target
+  Target,
+  Calendar
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -20,6 +21,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { autoScheduleKeyword } from "@/lib/utils/auto-schedule";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface SEOStats {
   searchVolume?: number;
@@ -62,8 +66,81 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
   const [isReExtracting, setIsReExtracting] = useState(false);
   const [generatingTopics, setGeneratingTopics] = useState<string[]>([]);
   const [addingKeywords, setAddingKeywords] = useState<Set<string>>(new Set());
+  const [schedulingKeywords, setSchedulingKeywords] = useState<Set<string>>(new Set());
+  const [scheduledKeywords, setScheduledKeywords] = useState<Set<string>>(new Set());
+  const [schedulingTopics, setSchedulingTopics] = useState<Set<string>>(new Set());
+  const [scheduledTopics, setScheduledTopics] = useState<Set<string>>(new Set());
+
+  // Fetch scheduled keywords and topics
+  const fetchScheduledItems = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: blog } = await supabase
+        .from("blogs")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!blog) return;
+
+      const { data: scheduled } = await supabase
+        .from("scheduled_keywords")
+        .select("keyword")
+        .eq("blog_id", blog.id)
+        .eq("status", "pending");
+
+      if (scheduled) {
+        const scheduledSet = new Set(scheduled.map(s => s.keyword.toLowerCase()));
+        setScheduledKeywords(scheduledSet);
+        setScheduledTopics(scheduledSet);
+      }
+    } catch (error) {
+      console.error("Error fetching scheduled items:", error);
+    }
+  };
+
+  const handleScheduleKeyword = async (keyword: string) => {
+    setSchedulingKeywords(prev => new Set(prev).add(keyword));
+    
+    const result = await autoScheduleKeyword(keyword);
+    
+    setSchedulingKeywords(prev => {
+      const next = new Set(prev);
+      next.delete(keyword);
+      return next;
+    });
+
+    if (result.success && result.date) {
+      setScheduledKeywords(prev => new Set(prev).add(keyword.toLowerCase()));
+      toast.success(`Added "${keyword}" to calendar for ${format(result.date, 'MMM d, yyyy')}`);
+    } else {
+      toast.error(result.error || "Failed to add to calendar");
+    }
+  };
+
+  const handleScheduleTopic = async (topic: string) => {
+    setSchedulingTopics(prev => new Set(prev).add(topic));
+    
+    const result = await autoScheduleKeyword(topic);
+    
+    setSchedulingTopics(prev => {
+      const next = new Set(prev);
+      next.delete(topic);
+      return next;
+    });
+
+    if (result.success && result.date) {
+      setScheduledTopics(prev => new Set(prev).add(topic.toLowerCase()));
+      toast.success(`Added "${topic}" to calendar for ${format(result.date, 'MMM d, yyyy')}`);
+    } else {
+      toast.error(result.error || "Failed to add to calendar");
+    }
+  };
 
   useEffect(() => {
+    fetchScheduledItems();
     if (!id) return;
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -436,16 +513,26 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 hover:text-primary"
-                              onClick={() => addToKeywordsList(k)}
+                              onClick={() => handleScheduleKeyword(k.keyword)}
+                              disabled={scheduledKeywords.has(k.keyword.toLowerCase()) || schedulingKeywords.has(k.keyword)}
+                              className={cn(
+                                "opacity-0 group-hover:opacity-100 transition-opacity",
+                                scheduledKeywords.has(k.keyword.toLowerCase())
+                                  ? "text-green-600 dark:text-green-400 cursor-not-allowed opacity-100"
+                                  : "hover:bg-primary/10 hover:text-primary"
+                              )}
+                              title={scheduledKeywords.has(k.keyword.toLowerCase()) ? "Already scheduled" : "Add to Calendar"}
                             >
-                              {addingKeywords.has(k.keyword) ? (
+                              {schedulingKeywords.has(k.keyword) ? (
                                 <>
                                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
                                   Adding...
                                 </>
                               ) : (
-                                'Add to Keywords'
+                                <>
+                                  <Calendar className="w-4 h-4 mr-2" />
+                                  Add to Calendar
+                                </>
                               )}
                             </Button>
                           </td>
@@ -494,17 +581,26 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                             <Button 
                               size="default"
                               variant="secondary"
-                              onClick={() => generateArticle(t.topic)}
-                              className="h-9 px-4 hover:bg-primary/20 hover:text-primary transition-colors"
-                              disabled={isGenerating}
+                              onClick={() => handleScheduleTopic(t.topic)}
+                              disabled={scheduledTopics.has(t.topic.toLowerCase()) || schedulingTopics.has(t.topic)}
+                              className={cn(
+                                "h-9 px-4 transition-colors",
+                                scheduledTopics.has(t.topic.toLowerCase())
+                                  ? "text-green-600 dark:text-green-400 cursor-not-allowed"
+                                  : "hover:bg-primary/20 hover:text-primary"
+                              )}
+                              title={scheduledTopics.has(t.topic.toLowerCase()) ? "Already scheduled" : "Add to Calendar"}
                             >
-                              {isGenerating ? (
+                              {schedulingTopics.has(t.topic) ? (
                                 <>
                                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Writing...
+                                  Adding...
                                 </>
                               ) : (
-                                'Write Article'
+                                <>
+                                  <Calendar className="w-4 h-4 mr-2" />
+                                  Add to Calendar
+                                </>
                               )}
                             </Button>
                           </div>
