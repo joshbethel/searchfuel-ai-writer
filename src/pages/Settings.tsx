@@ -230,9 +230,10 @@ export default function Settings() {
       } else {
         throw new Error('No checkout URL received');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating checkout session:', error);
-      toast.error(error.message || 'Failed to create checkout session. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create checkout session. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setIsCreatingCheckout(false);
     }
@@ -258,9 +259,10 @@ export default function Settings() {
       } else {
         throw new Error('No portal URL received');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error opening billing portal:', error);
-      toast.error(error.message || 'Failed to open billing portal. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to open billing portal. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setIsOpeningPortal(false);
     }
@@ -441,42 +443,51 @@ export default function Settings() {
                     )}
                   </Button>
                 ) : (
-                  <Button 
-                    className="w-full bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
-                    onClick={handleUpgradeToPro}
-                    disabled={isCreatingCheckout}
-                  >
-                    {isCreatingCheckout ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      '↗ Upgrade to Pro'
-                    )}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button 
+                      className="w-full bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+                      onClick={handleUpgradeToPro}
+                      disabled={isCreatingCheckout}
+                    >
+                      {isCreatingCheckout ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Select Pro Plan'
+                      )}
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      Subscription required to access all features
+                    </p>
+                  </div>
                 )}
               </>
             )}
 
             <div className="pt-4">
-              <p className="text-sm font-medium mb-3">Upgrade to get:</p>
+              <p className="text-sm font-medium mb-3">Pro Plan includes:</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <span className="text-sm text-muted-foreground">20-40 AI-generated posts per month</span>
+                  <span className="text-sm text-muted-foreground">20 SEO-optimized articles per month</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <span className="text-sm text-muted-foreground">SEO keyword targeting (100+ keywords)</span>
+                  <span className="text-sm text-muted-foreground">100 keywords tracking</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <span className="text-sm text-muted-foreground">Access to backlink network</span>
+                  <span className="text-sm text-muted-foreground">CMS integration (WordPress, etc.)</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <span className="text-sm text-muted-foreground">Competitor analysis & tracking</span>
+                  <span className="text-sm text-muted-foreground">Backlink network</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <span className="text-sm text-muted-foreground">Competitor analysis</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -484,7 +495,15 @@ export default function Settings() {
                 </div>
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <span className="text-sm text-muted-foreground">Fully white-labeled blog</span>
+                  <span className="text-sm text-muted-foreground">White label options</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <span className="text-sm text-muted-foreground">Custom domain</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <span className="text-sm text-muted-foreground">Auto-posting to CMS</span>
                 </div>
               </div>
             </div>
