@@ -58,8 +58,22 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_ANON_KEY") ?? ""
   );
 
+  console.log("Checking authentication...");
   const authHeader = req.headers.get("Authorization");
+  console.log("Authorization header present:", !!authHeader);
+  
   if (!authHeader) {
+    console.error("No authorization header found in request");
+    // Log headers without sensitive information
+    const headers: Record<string, string> = {};
+    for (const [key, value] of req.headers.entries()) {
+      if (key.toLowerCase() === 'authorization') {
+        headers[key] = '[REDACTED]';
+      } else {
+        headers[key] = value;
+      }
+    }
+    console.log("Request headers (authorization redacted):", headers);
     return new Response(
       JSON.stringify({ error: "No authorization header" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -67,16 +81,28 @@ serve(async (req) => {
   }
 
   const token = authHeader.replace("Bearer ", "");
+  console.log("Token extracted, length:", token.length);
+  
   const { data, error: authError } = await supabaseClient.auth.getUser(token);
   
-  if (authError || !data.user?.email) {
+  if (authError) {
+    console.error("Authentication error:", authError.message);
     return new Response(
-      JSON.stringify({ error: "Unauthorized" }),
+      JSON.stringify({ error: "Unauthorized", details: authError.message }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+  
+  if (!data.user?.email) {
+    console.error("No user email found after authentication");
+    return new Response(
+      JSON.stringify({ error: "Unauthorized", details: "User email not found" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
   const user = data.user;
+  console.log("User authenticated successfully:", user.id, user.email);
 
   // Stripe initialization with mode-based config
   const stripeMode = Deno.env.get("STRIPE_MODE") || "test";
