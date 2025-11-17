@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.migrate-credentials]
 verify_jwt = false
+
+[functions.schedule-article-generation]
+verify_jwt = false
