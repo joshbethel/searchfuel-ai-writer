@@ -5,6 +5,7 @@ import {
   Settings,
   Home,
   TrendingUp,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -14,6 +15,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Articles", href: "/articles", icon: FileText },
   { name: "Keywords", href: "/keywords", icon: TrendingUp },
+  { name: "Calendar", href: "/calendar", icon: CalendarIcon },
 ];
 
 export function Sidebar() {

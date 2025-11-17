@@ -9,6 +9,7 @@ import Plans from "./pages/Plans";
 import Dashboard from "./pages/Dashboard";
 import Articles from "./pages/Articles";
 import Keywords from "./pages/Keywords";
+import Calendar from "./pages/Calendar";
 import ArticleDetail from "./pages/ArticleDetail";
 import Settings from "./pages/Settings";
 import WordPressDebug from "./pages/WordPressDebug";
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/articles" element={<Articles />} />
             <Route path="/articles/:id" element={<ArticleDetail />} />
             <Route path="/keywords" element={<Keywords />} />
+            <Route path="/calendar" element={<Calendar />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/debug" element={<WordPressDebug />} />
           </Route>
