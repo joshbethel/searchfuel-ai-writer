@@ -11,16 +11,34 @@ import { User } from "@supabase/supabase-js";
 export default function Plans() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     // Check if user is authenticated
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error checking session:', error);
+          setUser(null);
+        } else {
+          setUser(session?.user ?? null);
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        setUser(null);
+      } finally {
+        setCheckingAuth(false);
+      }
+    };
+
+    checkAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      setCheckingAuth(false);
     });
 
     return () => subscription.unsubscribe();
@@ -140,24 +158,50 @@ export default function Plans() {
             </CardContent>
 
             <CardFooter className="flex flex-col gap-4">
-              <Button
-                onClick={handleSelectPlan}
-                disabled={loading}
-                className="w-full text-lg py-6"
-                size="lg"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "Select Pro Plan"
-                )}
-              </Button>
-              <p className="text-xs text-center text-muted-foreground">
-                Secure payment powered by Stripe
-              </p>
+              {checkingAuth ? (
+                <Button
+                  disabled
+                  className="w-full text-lg py-6"
+                  size="lg"
+                >
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Checking authentication...
+                </Button>
+              ) : !user ? (
+                <>
+                  <Button
+                    onClick={() => navigate("/auth")}
+                    className="w-full text-lg py-6"
+                    size="lg"
+                  >
+                    Sign In to Select Plan
+                  </Button>
+                  <p className="text-xs text-center text-muted-foreground">
+                    You must be signed in to select a plan
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Button
+                    onClick={handleSelectPlan}
+                    disabled={loading}
+                    className="w-full text-lg py-6"
+                    size="lg"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      "Select Pro Plan"
+                    )}
+                  </Button>
+                  <p className="text-xs text-center text-muted-foreground">
+                    Secure payment powered by Stripe
+                  </p>
+                </>
+              )}
             </CardFooter>
           </Card>
         </div>
