@@ -514,7 +514,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 gap-10">
         {CMS_PLATFORMS.map((platform) => (
           <button
             key={platform.id}

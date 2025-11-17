@@ -12,7 +12,7 @@ import { ArticleCalendar } from "@/components/ArticleCalendar";
 import { EditArticleDialog } from "@/components/EditArticleDialog";
 import { RescheduleArticleDialog } from "@/components/RescheduleArticleDialog";
 import { toast } from "sonner";
-import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, Edit } from "lucide-react";
+import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, Edit, AlertTriangle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import {
   AlertDialog,
@@ -74,6 +74,37 @@ export default function Articles() {
   const [rescheduleArticleDate, setRescheduleArticleDate] = useState<string | null>(null);
   const [scheduledKeywords, setScheduledKeywords] = useState<ScheduledKeyword[]>([]);
   const [isLoadingScheduled, setIsLoadingScheduled] = useState(true);
+  const [cmsConnected, setCmsConnected] = useState<boolean | null>(null);
+  const [cmsPlatform, setCmsPlatform] = useState<string | null>(null);
+
+  // Check CMS connection status
+  const checkCMSConnection = useCallback(async () => {
+    if (!blogId) {
+      setCmsConnected(false);
+      return;
+    }
+
+    try {
+      const { data: blog, error } = await supabase
+        .from("blogs")
+        .select("cms_platform, cms_site_url, cms_credentials")
+        .eq("id", blogId)
+        .single();
+
+      if (error) {
+        console.error("Error checking CMS connection:", error);
+        setCmsConnected(false);
+        return;
+      }
+
+      const isConnected = !!(blog?.cms_platform && blog?.cms_site_url && blog?.cms_credentials);
+      setCmsConnected(isConnected);
+      setCmsPlatform(blog?.cms_platform || null);
+    } catch (error) {
+      console.error("Error checking CMS connection:", error);
+      setCmsConnected(false);
+    }
+  }, [blogId]);
 
   // Fetch scheduled keywords
   const fetchScheduledKeywords = useCallback(async () => {
@@ -99,8 +130,9 @@ export default function Articles() {
   useEffect(() => {
     if (blogId) {
       fetchScheduledKeywords();
+      checkCMSConnection();
     }
-  }, [blogId, fetchScheduledKeywords]);
+  }, [blogId, fetchScheduledKeywords, checkCMSConnection]);
 
   const handlePublishNow = async (postId: string) => {
     if (!blogId) return;
@@ -304,7 +336,7 @@ export default function Articles() {
   if (isLoading || isLoadingScheduled) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 w-8 animate-spin text-primary" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -328,13 +360,34 @@ export default function Articles() {
               No Posts Generated Yet
             </h3>
             <p className="text-muted-foreground mb-6">
-              Your AI engine is ready! Posts will be generated automatically based on your settings.
+              Your AI engine is ready! Generate your first article or connect your CMS to enable automatic publishing.
             </p>
-            <Button onClick={() => navigate("/")}>
-              Go to Dashboard
-            </Button>
+            <div className="flex gap-3 justify-center">
+              <Button 
+                onClick={() => setShowGenerateDialog(true)} 
+                disabled={!blogId}
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Generate Article
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/dashboard")}>
+                Go to Dashboard
+              </Button>
+            </div>
+            {!blogId && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-4">
+                💡 Tip: Connect your CMS first to enable article generation and publishing
+              </p>
+            )}
           </div>
         </Card>
+        
+        <GenerateArticleDialog
+          open={showGenerateDialog}
+          onOpenChange={setShowGenerateDialog}
+          onGenerate={handleGenerateArticle}
+          isGenerating={isGeneratingArticle}
+        />
       </div>
     );
   }
@@ -413,6 +466,20 @@ export default function Articles() {
           currentScheduledDate={rescheduleArticleDate}
         />
       </div>
+
+      {cmsConnected === false && (
+        <Card className="mb-6 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+          <div className="p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-1">CMS Not Connected</h3>
+              <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
+                Your CMS is not connected. Articles are stored locally but publishing is disabled. Go to your <button onClick={() => navigate("/dashboard")} className="underline font-medium hover:no-underline">dashboard</button> to connect a CMS.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Tabs defaultValue="scheduled" className="w-full">
         <TabsList className="grid w-full grid-cols-4">

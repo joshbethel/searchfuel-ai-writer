@@ -64,8 +64,8 @@ export function MonthlyCalendarView({ scheduledItems, onViewArticle }: MonthlyCa
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
-        <p className="text-muted-foreground mt-1">Plan and schedule your articles</p>
+        {/* <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
+        <p className="text-muted-foreground mt-1">Plan and schedule your articles</p> */}
       </div>
 
       {/* Calendar Controls */}
