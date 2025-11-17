@@ -493,12 +493,15 @@ Format: 16:9 aspect ratio, centered single subject.`;
         if (insertError) throw insertError;
 
         // Increment usage count after successful post creation
-        const { error: usageError } = await supabase
+        console.log(`Incrementing post count for user ${userId}`);
+        const { data: incrementResult, error: usageError } = await supabase
           .rpc('increment_post_count', { user_uuid: userId });
 
         if (usageError) {
           console.error('Failed to increment usage count:', usageError);
           // Don't fail the request, but log the error
+        } else {
+          console.log('Successfully incremented post count for user:', userId);
         }
 
         // Trigger keyword extraction for the newly created post (best-effort)
