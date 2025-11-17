@@ -13,6 +13,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface Keyword {
   keyword: string;
@@ -34,10 +35,50 @@ export default function Keywords() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [manualKeywords, setManualKeywords] = useState("");
+  const [schedulingKeywords, setSchedulingKeywords] = useState<Set<string>>(new Set());
+  const [scheduledKeywords, setScheduledKeywords] = useState<Set<string>>(new Set());
+
+  // Fetch scheduled keywords
+  const fetchScheduledKeywords = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: blog } = await supabase
+        .from("blogs")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!blog) return;
+
+      const { data: scheduled } = await supabase
+        .from("scheduled_keywords")
+        .select("keyword")
+        .eq("blog_id", blog.id)
+        .eq("status", "pending");
+
+      if (scheduled) {
+        setScheduledKeywords(new Set(scheduled.map(s => s.keyword)));
+      }
+    } catch (error) {
+      console.error("Error fetching scheduled keywords:", error);
+    }
+  };
 
   const handleScheduleKeyword = async (keyword: string) => {
+    setSchedulingKeywords(prev => new Set(prev).add(keyword));
+    
     const result = await autoScheduleKeyword(keyword);
+    
+    setSchedulingKeywords(prev => {
+      const next = new Set(prev);
+      next.delete(keyword);
+      return next;
+    });
+
     if (result.success && result.date) {
+      setScheduledKeywords(prev => new Set(prev).add(keyword));
       toast.success(`Added "${keyword}" to calendar for ${format(result.date, 'MMM d, yyyy')}`);
     } else {
       toast.error(result.error || "Failed to add to calendar");
@@ -312,6 +353,7 @@ export default function Keywords() {
   // Load keywords on mount
   useEffect(() => {
     fetchKeywords();
+    fetchScheduledKeywords();
 
     // Set up realtime subscription
     const channel = supabase
@@ -586,10 +628,20 @@ export default function Keywords() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleScheduleKeyword(keyword.keyword)}
-                        className="text-primary hover:text-primary"
-                        title="Add to Calendar"
+                        disabled={scheduledKeywords.has(keyword.keyword) || schedulingKeywords.has(keyword.keyword)}
+                        className={cn(
+                          "transition-colors",
+                          scheduledKeywords.has(keyword.keyword)
+                            ? "text-green-600 dark:text-green-400 cursor-not-allowed"
+                            : "text-primary hover:text-primary"
+                        )}
+                        title={scheduledKeywords.has(keyword.keyword) ? "Already scheduled" : "Add to Calendar"}
                       >
-                        <Calendar className="w-4 h-4" />
+                        {schedulingKeywords.has(keyword.keyword) ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Calendar className="w-4 h-4" />
+                        )}
                       </Button>
                       <Button
                         variant="ghost"
