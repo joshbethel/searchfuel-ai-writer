@@ -8,12 +8,12 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { ArticleTypeSettings } from "@/components/settings/ArticleTypeSettings";
 
-type CMSPlatform = 
-  | "wordpress" 
-  | "webflow" 
-  | "ghost" 
-  | "shopify" 
-  | "wix" 
+type CMSPlatform =
+  | "wordpress"
+  | "webflow"
+  | "ghost"
+  | "shopify"
+  | "wix"
   | "framer"
   | "notion"
   | "hubspot"
@@ -39,22 +39,22 @@ interface BlogOnboardingProps {
 
 const CMS_PLATFORMS = [
   { id: "wordpress" as const, name: "WordPress", icon: "🔷", description: "Connect your WordPress site" },
-  { id: "webflow" as const, name: "Webflow", icon: "⚡", description: "Sync with Webflow CMS" },
-  { id: "ghost" as const, name: "Ghost", icon: "👻", description: "Integrate Ghost publishing" },
+  // { id: "webflow" as const, name: "Webflow", icon: "⚡", description: "Sync with Webflow CMS" },
+  // { id: "ghost" as const, name: "Ghost", icon: "👻", description: "Integrate Ghost publishing" },
   { id: "shopify" as const, name: "Shopify", icon: "🛍️", description: "Connect your Shopify store" },
-  { id: "wix" as const, name: "WIX", icon: "🌐", description: "Sync with WIX website" },
+  // { id: "wix" as const, name: "WIX", icon: "🌐", description: "Sync with WIX website" },
   { id: "framer" as const, name: "Framer", icon: "🎨", description: "Connect Framer site" },
-  { id: "notion" as const, name: "Notion", icon: "📝", description: "Sync with Notion database" },
-  { id: "hubspot" as const, name: "HubSpot", icon: "🎯", description: "Connect HubSpot CMS" },
-  { id: "nextjs" as const, name: "Next.js", icon: "⚫", description: "Connect Next.js blog" },
-  { id: "rest_api" as const, name: "REST API", icon: "🔌", description: "Custom REST API" },
+  // { id: "notion" as const, name: "Notion", icon: "📝", description: "Sync with Notion database" },
+  // { id: "hubspot" as const, name: "HubSpot", icon: "🎯", description: "Connect HubSpot CMS" },
+  // { id: "nextjs" as const, name: "Next.js", icon: "⚫", description: "Connect Next.js blog" },
+  // { id: "rest_api" as const, name: "REST API", icon: "🔌", description: "Custom REST API" },
 ];
 
 export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingProps) {
   const [selectedPlatform, setSelectedPlatform] = useState<CMSPlatform | null>(null);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [currentStep, setCurrentStep] = useState<'platform' | 'connection' | 'article-types'>('platform');
+  const [currentStep, setCurrentStep] = useState<"platform" | "connection" | "article-types">("platform");
   const [blogId, setBlogId] = useState<string | null>(null);
   const [connectionData, setConnectionData] = useState<CMSConnection>({
     platform: "wordpress",
@@ -70,8 +70,8 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
     }
 
     // Add https:// if no protocol is specified
-    const formattedUrl = connectionData.siteUrl.trim().match(/^https?:\/\//) 
-      ? connectionData.siteUrl.trim() 
+    const formattedUrl = connectionData.siteUrl.trim().match(/^https?:\/\//)
+      ? connectionData.siteUrl.trim()
       : `https://${connectionData.siteUrl.trim()}`;
 
     setTesting(true);
@@ -108,24 +108,22 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
     }
 
     // Add https:// if no protocol is specified
-    const formattedUrl = connectionData.siteUrl.trim().match(/^https?:\/\//) 
-      ? connectionData.siteUrl.trim() 
+    const formattedUrl = connectionData.siteUrl.trim().match(/^https?:\/\//)
+      ? connectionData.siteUrl.trim()
       : `https://${connectionData.siteUrl.trim()}`;
 
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       // Check if blog already exists for this user
-      const { data: existingBlog } = await supabase
-        .from("blogs")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data: existingBlog } = await supabase.from("blogs").select("id").eq("user_id", user.id).maybeSingle();
 
       // Extract site name from URL for title
-      const siteName = new URL(formattedUrl).hostname.split('.')[0];
+      const siteName = new URL(formattedUrl).hostname.split(".")[0];
 
       // Prepare credentials based on platform
       let credentials = {};
@@ -140,7 +138,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
           return;
         }
         credentials = {
-          access_token: connectionData.accessToken
+          access_token: connectionData.accessToken,
         };
       } else {
         credentials = {
@@ -154,11 +152,10 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
       // 🔒 Encrypt credentials before saving
       let encryptedCredentials: string;
       try {
-        const { data: encryptResult, error: encryptError } = await supabase.functions.invoke(
-          'encrypt-credentials',
-          { body: { credentials } }
-        );
-        
+        const { data: encryptResult, error: encryptError } = await supabase.functions.invoke("encrypt-credentials", {
+          body: { credentials },
+        });
+
         if (encryptError) {
           console.error("Encryption error:", encryptError);
           // Fallback to plaintext if encryption fails (backward compatibility)
@@ -218,20 +215,20 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
 
       toast.success("CMS connected successfully!");
       setBlogId(resultData.id);
-      
+
       // Automatically generate the first article
       toast.info("Generating your first article...");
       try {
-        await supabase.functions.invoke('generate-blog-post', {
-          body: { blogId: resultData.id }
+        await supabase.functions.invoke("generate-blog-post", {
+          body: { blogId: resultData.id },
         });
         toast.success("First article generated! Check your dashboard.");
       } catch (genError) {
-        console.error('Error generating first article:', genError);
+        console.error("Error generating first article:", genError);
         toast.error("CMS connected but article generation failed. You can generate articles from the Articles page.");
       }
-      
-      setCurrentStep('article-types');
+
+      setCurrentStep("article-types");
     } catch (error: any) {
       toast.error("Failed to connect CMS: " + error.message);
     } finally {
@@ -247,7 +244,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
   const renderConnectionForm = () => {
     if (!selectedPlatform) return null;
 
-    const platform = CMS_PLATFORMS.find(p => p.id === selectedPlatform);
+    const platform = CMS_PLATFORMS.find((p) => p.id === selectedPlatform);
 
     return (
       <div className="space-y-6">
@@ -257,7 +254,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
             size="sm"
             onClick={() => {
               setSelectedPlatform(null);
-              setCurrentStep('platform');
+              setCurrentStep("platform");
             }}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -297,9 +294,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
                   onChange={(e) => setConnectionData({ ...connectionData, username: e.target.value })}
                   className="mt-1"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Your WordPress admin username
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">Your WordPress admin username</p>
               </div>
               <div>
                 <Label htmlFor="password">Application Password *</Label>
@@ -375,7 +370,8 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
                   <li>Go to Shopify admin → Apps → Develop apps</li>
                   <li>Click "Create an app"</li>
                   <li>Name it (e.g., "SearchFuel Integration")</li>
-                  <li>Under "Configure Admin API access", enable:
+                  <li>
+                    Under "Configure Admin API access", enable:
                     <ul className="list-disc list-inside ml-4 mt-1">
                       <li>read_content, write_content (for blog posts)</li>
                       <li>read_files, write_files (for images)</li>
@@ -462,11 +458,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
           </div>
 
           <div className="flex gap-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={handleTestConnection}
-              disabled={testing || !connectionData.siteUrl}
-            >
+            <Button variant="outline" onClick={handleTestConnection} disabled={testing || !connectionData.siteUrl}>
               {testing ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -476,11 +468,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
                 "Test Connection"
               )}
             </Button>
-            <Button
-              onClick={handleConnect}
-              disabled={loading || !connectionData.siteUrl}
-              className="flex-1"
-            >
+            <Button onClick={handleConnect} disabled={loading || !connectionData.siteUrl} className="flex-1">
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -497,7 +485,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
   };
 
   // Article Types Step
-  if (currentStep === 'article-types' && blogId) {
+  if (currentStep === "article-types" && blogId) {
     return (
       <Card className="p-8 bg-card max-w-4xl">
         <div className="mb-6">
@@ -506,22 +494,14 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
             Choose the content formats that best fit your audience. You can change this anytime in settings.
           </p>
         </div>
-        <ArticleTypeSettings 
-          blogId={blogId} 
-          isOnboarding={true}
-          onSave={handleArticleTypesSaved}
-        />
+        <ArticleTypeSettings blogId={blogId} isOnboarding={true} onSave={handleArticleTypesSaved} />
       </Card>
     );
   }
 
   // Connection Form Step
-  if (currentStep === 'connection' && selectedPlatform) {
-    return (
-      <Card className="p-8 bg-card max-w-2xl">
-        {renderConnectionForm()}
-      </Card>
-    );
+  if (currentStep === "connection" && selectedPlatform) {
+    return <Card className="p-8 bg-card max-w-2xl">{renderConnectionForm()}</Card>;
   }
 
   // Platform Selection Step
@@ -541,7 +521,7 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
             onClick={() => {
               setSelectedPlatform(platform.id);
               setConnectionData({ ...connectionData, platform: platform.id });
-              setCurrentStep('connection');
+              setCurrentStep("connection");
             }}
             className="p-4 rounded-lg border-2 border-border hover:border-accent transition-all bg-card hover:bg-accent/5 flex flex-col items-center gap-2 text-center"
           >
