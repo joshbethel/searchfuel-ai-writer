@@ -38,7 +38,7 @@ const BlogPost = () => {
           .from("blog_posts")
           .select("*")
           .eq("slug", slug)
-          .in("publishing_status", ["published", "scheduled"])
+          .in("publishing_status", ["published", "scheduled", "pending"])
           .maybeSingle();
 
         if (error) {

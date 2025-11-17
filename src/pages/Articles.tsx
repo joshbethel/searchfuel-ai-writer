@@ -10,8 +10,9 @@ import { GenerateArticleDialog } from "@/components/GenerateArticleDialog";
 import { ArticleCalendar } from "@/components/ArticleCalendar";
 import { MonthlyCalendarView } from "@/components/MonthlyCalendarView";
 import { EditArticleDialog } from "@/components/EditArticleDialog";
+import { RescheduleArticleDialog } from "@/components/RescheduleArticleDialog";
 import { toast } from "sonner";
-import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, List } from "lucide-react";
+import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, List, Edit } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import {
   AlertDialog,
@@ -62,6 +63,8 @@ export default function Articles() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
   const [editArticleId, setEditArticleId] = useState<string | null>(null);
+  const [rescheduleArticleId, setRescheduleArticleId] = useState<string | null>(null);
+  const [rescheduleArticleDate, setRescheduleArticleDate] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
   const handlePublishNow = async (postId: string) => {
@@ -358,6 +361,19 @@ export default function Articles() {
           onOpenChange={(open) => !open && setEditArticleId(null)}
           onSaved={fetchArticles}
         />
+
+        <RescheduleArticleDialog
+          articleId={rescheduleArticleId}
+          open={rescheduleArticleId !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRescheduleArticleId(null);
+              setRescheduleArticleDate(null);
+            }
+          }}
+          onSaved={fetchArticles}
+          currentScheduledDate={rescheduleArticleDate}
+        />
       </div>
 
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "calendar")} className="mb-6">
@@ -411,14 +427,30 @@ export default function Articles() {
                       {post.title}
                     </h3>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        <span>
-                          {post.scheduled_publish_date ? 
-                            `Scheduled for ${format(parseISO(post.scheduled_publish_date), "PPP 'at' p")}` :
-                            'Not scheduled'
-                          }
-                        </span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4" />
+                          <span>
+                            {post.scheduled_publish_date ? 
+                              `Scheduled for ${format(parseISO(post.scheduled_publish_date), "PPP 'at' p")}` :
+                              'Not scheduled'
+                            }
+                          </span>
+                        </div>
+                        {post.scheduled_publish_date && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-3 text-xs font-medium hover:bg-primary hover:text-primary-foreground transition-colors"
+                            onClick={() => {
+                              setRescheduleArticleId(post.id);
+                              setRescheduleArticleDate(post.scheduled_publish_date);
+                            }}
+                          >
+                            <Edit className="w-3.5 h-3.5 mr-1.5" />
+                            Edit Schedule
+                          </Button>
+                        )}
                       </div>
                       <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
                     </div>
@@ -493,6 +525,17 @@ export default function Articles() {
                           onClick={() => handlePublishNow(post.id)}
                         >
                           Publish Now
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setRescheduleArticleId(post.id);
+                            setRescheduleArticleDate(null); // No existing schedule for pending posts
+                          }}
+                        >
+                          <Calendar className="w-4 h-4 mr-2" />
+                          Schedule
                         </Button>
                         <Button
                           variant="outline"
