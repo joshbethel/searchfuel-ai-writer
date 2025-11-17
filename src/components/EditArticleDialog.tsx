@@ -48,14 +48,20 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
     toolbar: [
       [{ header: [1, 2, 3, 4, 5, 6, false] }],
       [{ font: [] }],
-      [{ size: [] }],
-      ["bold", "italic", "underline", "strike", "blockquote"],
-      [{ list: "ordered" }, { list: "bullet" }, { indent: "-1" }, { indent: "+1" }],
-      ["link", "image", "video"],
-      [{ align: [] }],
+      [{ size: ["small", false, "large", "huge"] }],
+      ["bold", "italic", "underline", "strike"],
       [{ color: [] }, { background: [] }],
+      [{ script: "sub" }, { script: "super" }],
+      ["blockquote", "code-block"],
+      [{ list: "ordered" }, { list: "bullet" }],
+      [{ indent: "-1" }, { indent: "+1" }],
+      [{ align: [] }],
+      ["link", "image", "video"],
       ["clean"],
     ],
+    clipboard: {
+      matchVisual: false, // Preserve formatting when pasting
+    },
   };
 
   const formats = [
@@ -66,16 +72,18 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
     "italic",
     "underline",
     "strike",
+    "color",
+    "background",
+    "script",
     "blockquote",
+    "code-block",
     "list",
     "bullet",
     "indent",
+    "align",
     "link",
     "image",
     "video",
-    "align",
-    "color",
-    "background",
   ];
 
   useEffect(() => {
@@ -240,7 +248,7 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
                 </TabsList>
                 
                 <TabsContent value="visual" className="mt-2">
-                  <div className="border rounded-lg overflow-hidden bg-background">
+                  <div className="border rounded-lg overflow-hidden bg-background quill-wrapper">
                     <ReactQuill
                       theme="snow"
                       value={articleData.content}
@@ -248,11 +256,12 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
                       modules={modules}
                       formats={formats}
                       placeholder="Write your article content here..."
-                      className="min-h-[400px]"
+                      className="quill-editor"
+                      preserveWhitespace={true}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Use the toolbar above to format your content visually
+                    Use the toolbar above to format your content. All HTML tags are preserved.
                   </p>
                 </TabsContent>
                 
