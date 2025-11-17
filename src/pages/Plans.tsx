@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Check, Sparkles, TrendingUp, Target, BarChart3, Globe, Zap, Link2, FileText } from "lucide-react";
+import { Loader2, Check, Sparkles, TrendingUp, Target, BarChart3, Globe, Zap, Link2, FileText, Home, ArrowLeft } from "lucide-react";
 import { User } from "@supabase/supabase-js";
+import { Link } from "react-router-dom";
 
 export default function Plans() {
   const [loading, setLoading] = useState(false);
@@ -98,6 +99,17 @@ export default function Plans() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted py-12 px-4">
       <div className="max-w-5xl mx-auto">
+        {/* Navigation */}
+        <div className="mb-8">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Go to Home</span>
+          </Link>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
