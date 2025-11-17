@@ -495,48 +495,57 @@ Format: 16:9 aspect ratio, centered single subject.`;
         // Increment usage count after successful post creation
         console.log(`Incrementing post count for user ${userId}`);
         
-        // First, check current count before increment
-        const { data: subscriptionBefore } = await supabase
+        // Get subscription first
+        const { data: subscription, error: subError } = await supabase
           .from('subscriptions')
-          .select('posts_generated_count, status, plan_name')
+          .select('id, posts_generated_count, status, plan_name')
           .eq('user_id', userId)
-          .eq('status', 'active')
+          .in('status', ['active', 'trialing'])
+          .eq('plan_name', 'pro')
           .maybeSingle();
         
-        console.log('Subscription before increment:', {
-          count: subscriptionBefore?.posts_generated_count,
-          status: subscriptionBefore?.status,
-          plan: subscriptionBefore?.plan_name
-        });
-        
-        const { data: incrementResult, error: usageError } = await supabase
-          .rpc('increment_post_count', { user_uuid: userId });
-
-        if (usageError) {
-          console.error('Failed to increment usage count:', usageError);
-          // Don't fail the request, but log the error
+        if (subError) {
+          console.error('Error fetching subscription:', subError);
+        } else if (!subscription) {
+          console.error('No active subscription found for user:', userId);
         } else {
-          // Verify the increment worked by checking the count after
-          const { data: subscriptionAfter } = await supabase
-            .from('subscriptions')
-            .select('posts_generated_count')
-            .eq('user_id', userId)
-            .eq('status', 'active')
-            .maybeSingle();
+          const currentCount = subscription.posts_generated_count || 0;
+          const newCount = currentCount + 1;
           
-          console.log('Subscription after increment:', {
-            count: subscriptionAfter?.posts_generated_count,
-            expected: (subscriptionBefore?.posts_generated_count || 0) + 1
+          console.log('Subscription before increment:', {
+            id: subscription.id,
+            count: currentCount,
+            status: subscription.status,
+            plan: subscription.plan_name
           });
           
-          if (subscriptionAfter?.posts_generated_count !== (subscriptionBefore?.posts_generated_count || 0) + 1) {
-            console.error('WARNING: Post count did not increment correctly!', {
-              before: subscriptionBefore?.posts_generated_count,
-              after: subscriptionAfter?.posts_generated_count,
-              expected: (subscriptionBefore?.posts_generated_count || 0) + 1
-            });
+          // Direct UPDATE using service role (bypasses RLS)
+          const { data: updateData, error: updateError } = await supabase
+            .from('subscriptions')
+            .update({ 
+              posts_generated_count: newCount,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', subscription.id)
+            .select('posts_generated_count')
+            .single();
+
+          if (updateError) {
+            console.error('Failed to increment usage count:', updateError);
           } else {
-            console.log('Successfully incremented post count for user:', userId);
+            console.log('Successfully incremented post count:', {
+              subscription_id: subscription.id,
+              old_count: currentCount,
+              new_count: updateData?.posts_generated_count,
+              expected: newCount
+            });
+            
+            if (updateData?.posts_generated_count !== newCount) {
+              console.error('WARNING: Post count mismatch after update!', {
+                expected: newCount,
+                actual: updateData?.posts_generated_count
+              });
+            }
           }
         }
 
