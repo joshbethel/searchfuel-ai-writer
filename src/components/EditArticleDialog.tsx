@@ -9,8 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Code2, Eye } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
+import "./EditArticleDialog.css";
 
 interface EditArticleDialogProps {
   articleId: string | null;
@@ -33,7 +34,7 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [updateToCms, setUpdateToCms] = useState(false);
-  const [contentMode, setContentMode] = useState<"visual" | "text">("text");
+  const [contentMode, setContentMode] = useState<"visual" | "html">("visual");
   const [articleData, setArticleData] = useState<ArticleData>({
     title: "",
     content: "",
@@ -41,6 +42,41 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
     meta_description: "",
     excerpt: "",
   });
+
+  // Quill editor modules configuration
+  const modules = {
+    toolbar: [
+      [{ header: [1, 2, 3, 4, 5, 6, false] }],
+      [{ font: [] }],
+      [{ size: [] }],
+      ["bold", "italic", "underline", "strike", "blockquote"],
+      [{ list: "ordered" }, { list: "bullet" }, { indent: "-1" }, { indent: "+1" }],
+      ["link", "image", "video"],
+      [{ align: [] }],
+      [{ color: [] }, { background: [] }],
+      ["clean"],
+    ],
+  };
+
+  const formats = [
+    "header",
+    "font",
+    "size",
+    "bold",
+    "italic",
+    "underline",
+    "strike",
+    "blockquote",
+    "list",
+    "bullet",
+    "indent",
+    "link",
+    "image",
+    "video",
+    "align",
+    "color",
+    "background",
+  ];
 
   useEffect(() => {
     if (articleId && open) {
@@ -190,45 +226,47 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
             </div>
 
             <div className="space-y-2">
-              <Label>Content</Label>
-              <Tabs value={contentMode} onValueChange={(v) => setContentMode(v as "visual" | "text")} className="w-full">
+              <Label>Content Editor</Label>
+              <Tabs value={contentMode} onValueChange={(v) => setContentMode(v as "visual" | "html")} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="text" className="flex items-center gap-2">
-                    <Code2 className="w-4 h-4" />
-                    Text Editor
-                  </TabsTrigger>
                   <TabsTrigger value="visual" className="flex items-center gap-2">
                     <Eye className="w-4 h-4" />
-                    Visual Preview
+                    Visual Editor
+                  </TabsTrigger>
+                  <TabsTrigger value="html" className="flex items-center gap-2">
+                    <Code2 className="w-4 h-4" />
+                    Text/HTML Editor
                   </TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value="text" className="mt-2">
+                <TabsContent value="visual" className="mt-2">
+                  <div className="border rounded-lg overflow-hidden bg-background">
+                    <ReactQuill
+                      theme="snow"
+                      value={articleData.content}
+                      onChange={(value) => setArticleData({ ...articleData, content: value })}
+                      modules={modules}
+                      formats={formats}
+                      placeholder="Write your article content here..."
+                      className="min-h-[400px]"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use the toolbar above to format your content visually
+                  </p>
+                </TabsContent>
+                
+                <TabsContent value="html" className="mt-2">
                   <Textarea
                     id="content"
                     value={articleData.content}
                     onChange={(e) => setArticleData({ ...articleData, content: e.target.value })}
-                    placeholder="Article content (Markdown supported)"
-                    rows={15}
+                    placeholder="Edit HTML/Text content directly"
+                    rows={18}
                     className="font-mono text-sm"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Supports Markdown formatting: **bold**, *italic*, # headings, etc.
-                  </p>
-                </TabsContent>
-                
-                <TabsContent value="visual" className="mt-2">
-                  <div className="border rounded-lg p-4 min-h-[400px] max-h-[600px] overflow-y-auto bg-background prose prose-sm dark:prose-invert max-w-none">
-                    {articleData.content ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {articleData.content}
-                      </ReactMarkdown>
-                    ) : (
-                      <p className="text-muted-foreground italic">No content to preview</p>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Switch to Text Editor to make changes
+                    Edit raw HTML or text. Changes sync with Visual Editor.
                   </p>
                 </TabsContent>
               </Tabs>
