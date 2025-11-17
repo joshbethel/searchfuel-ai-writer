@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useArticles } from "@/hooks/use-articles";
 import KeywordPanel from '@/components/KeywordPanel';
 import { GenerateArticleDialog } from "@/components/GenerateArticleDialog";
@@ -413,128 +414,146 @@ export default function Articles() {
         />
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Calendar className="w-6 h-6 text-purple-600" />
-          Scheduled Posts
-          <Badge variant="secondary" className="bg-purple-600 text-white">
-            {scheduledPosts.length + scheduledKeywords.length}
-          </Badge>
-        </h2>
-        <div className="grid gap-4">
-          {/* Scheduled Keywords (not yet generated) */}
-          {scheduledKeywords.map((keyword) => (
-            <Card key={keyword.id} className="p-6 hover:shadow-md transition-shadow w-[99%] mx-auto border-dashed">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="bg-yellow-600 text-white">Queued for Generation</Badge>
-                  </div>
-                  <h3 className="text-xl font-semibold text-foreground mb-2">
-                    {keyword.keyword}
-                  </h3>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
-                      <span>Scheduled for {format(parseISO(keyword.scheduled_date), 'MMM d, yyyy')}</span>
-                    </div>
-                    <span>Added {format(parseISO(keyword.created_at), 'MMM d, yyyy')}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    This article will be automatically generated and published on the scheduled date
-                  </p>
-                </div>
-              </div>
-            </Card>
-          ))}
+      <Tabs defaultValue="scheduled" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="scheduled" className="flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            Scheduled
+            <Badge variant="secondary" className="ml-1 bg-purple-600 text-white">
+              {scheduledPosts.length + scheduledKeywords.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="pending" className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            Pending
+            <Badge variant="secondary" className="ml-1 bg-blue-600 text-white">
+              {pendingPosts.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="published" className="flex items-center gap-2">
+            <FileText className="w-4 h-4" />
+            Published
+            <Badge variant="secondary" className="ml-1 bg-green-600 text-white">
+              {publishedPosts.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="failed" className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            Failed
+            <Badge variant="destructive" className="ml-1">
+              {failedPosts.length}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
 
-          {/* Scheduled Blog Posts (already generated) */}
-          {scheduledPosts.length === 0 && scheduledKeywords.length === 0 ? (
-            <Card className="p-6 text-center text-muted-foreground">
-              No scheduled posts yet
-            </Card>
-          ) : scheduledPosts.map((post) => (
-              <Card key={post.id} className="p-6 hover:shadow-md transition-shadow w-[99%] mx-auto">
+        <TabsContent value="scheduled" className="mt-6">
+          <div className="grid gap-4">
+            {scheduledKeywords.map((keyword) => (
+              <Card key={keyword.id} className="p-6 hover:shadow-md transition-shadow w-[99%] mx-auto border-dashed">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="secondary" className="bg-purple-600 text-white">Scheduled</Badge>
-                      {post.article_type && (
-                        <Badge variant="outline">
-                          {ARTICLE_TYPE_LABELS[post.article_type]?.emoji} {ARTICLE_TYPE_LABELS[post.article_type]?.name || post.article_type}
-                        </Badge>
-                      )}
+                      <Badge variant="secondary" className="bg-yellow-600 text-white">Queued for Generation</Badge>
                     </div>
                     <h3 className="text-xl font-semibold text-foreground mb-2">
-                      {post.title}
+                      {keyword.keyword}
                     </h3>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4" />
-                          <span>
-                            {post.scheduled_publish_date ? 
-                              `Scheduled for ${format(parseISO(post.scheduled_publish_date), "PPP 'at' p")}` :
-                              'Not scheduled'
-                            }
-                          </span>
-                        </div>
-                        {post.scheduled_publish_date && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-3 text-xs font-medium hover:bg-primary hover:text-primary-foreground transition-colors"
-                            onClick={() => {
-                              setRescheduleArticleId(post.id);
-                              setRescheduleArticleDate(post.scheduled_publish_date);
-                            }}
-                          >
-                            <Edit className="w-3.5 h-3.5 mr-1.5" />
-                            Edit Schedule
-                          </Button>
-                        )}
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        <span>Scheduled for {format(parseISO(keyword.scheduled_date), 'MMM d, yyyy')}</span>
                       </div>
-                      <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
+                      <span>Added {format(parseISO(keyword.created_at), 'MMM d, yyyy')}</span>
                     </div>
-                    <div className="flex gap-2 mb-6">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handlePublishNow(post.id)}
-                      >
-                        Publish Now
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/blog/${post.slug}`)}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Preview
-                      </Button>
-                    </div>
-                    <div>
-                      <KeywordPanel id={post.id} kind="blog_post" />
-                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      This article will be automatically generated and published on the scheduled date
+                    </p>
                   </div>
                 </div>
               </Card>
-            ))
-          }
-        </div>
-      </div>
+            ))}
 
-      {pendingPosts.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Clock className="w-6 h-6 text-blue-600" />
-            Pending Posts
-            <Badge variant="secondary" className="bg-blue-600 text-white">
-              {pendingPosts.length}
-            </Badge>
-          </h2>
+            {scheduledPosts.length === 0 && scheduledKeywords.length === 0 ? (
+              <Card className="p-6 text-center text-muted-foreground">
+                No scheduled posts yet
+              </Card>
+            ) : scheduledPosts.map((post) => (
+                <Card key={post.id} className="p-6 hover:shadow-md transition-shadow w-[99%] mx-auto">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="bg-purple-600 text-white">Scheduled</Badge>
+                        {post.article_type && (
+                          <Badge variant="outline">
+                            {ARTICLE_TYPE_LABELS[post.article_type]?.emoji} {ARTICLE_TYPE_LABELS[post.article_type]?.name || post.article_type}
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="text-xl font-semibold text-foreground mb-2">
+                        {post.title}
+                      </h3>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-4 h-4" />
+                            <span>
+                              {post.scheduled_publish_date ? 
+                                `Scheduled for ${format(parseISO(post.scheduled_publish_date), "PPP 'at' p")}` :
+                                'Not scheduled'
+                              }
+                            </span>
+                          </div>
+                          {post.scheduled_publish_date && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-3 text-xs font-medium hover:bg-primary hover:text-primary-foreground transition-colors"
+                              onClick={() => {
+                                setRescheduleArticleId(post.id);
+                                setRescheduleArticleDate(post.scheduled_publish_date);
+                              }}
+                            >
+                              <Edit className="w-3 h-3 mr-1" />
+                              Reschedule
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mb-6">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handlePublishNow(post.id)}
+                        >
+                          Publish Now
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/blog/${post.slug}`)}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          Preview
+                        </Button>
+                      </div>
+                      <div>
+                        <KeywordPanel id={post.id} kind="blog_post" />
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))
+            }
+          </div>
+        </TabsContent>
+
+        <TabsContent value="pending" className="mt-6">
           <div className="grid gap-4">
-            {pendingPosts.map((post, index) => {
+            {pendingPosts.length === 0 ? (
+              <Card className="p-6 text-center text-muted-foreground">
+                No pending posts
+              </Card>
+            ) : pendingPosts.map((post, index) => {
               const estimatedDate = new Date();
               estimatedDate.setDate(estimatedDate.getDate() + index);
               
@@ -573,7 +592,7 @@ export default function Articles() {
                           size="sm"
                           onClick={() => {
                             setRescheduleArticleId(post.id);
-                            setRescheduleArticleDate(null); // No existing schedule for pending posts
+                            setRescheduleArticleDate(null);
                           }}
                         >
                           <Calendar className="w-4 h-4 mr-2" />
@@ -587,6 +606,21 @@ export default function Articles() {
                           <Eye className="w-4 h-4 mr-2" />
                           Preview
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditArticleId(post.id)}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDeleteId(post.id)}
+                        >
+                          Delete
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -597,20 +631,15 @@ export default function Articles() {
               );
             })}
           </div>
-        </div>
-      )}
+        </TabsContent>
 
-      {publishedPosts.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
-            <FileText className="w-6 h-6 text-green-600" />
-            Published Posts
-            <Badge variant="default" className="bg-green-600">
-              {publishedPosts.length}
-            </Badge>
-          </h2>
+        <TabsContent value="published" className="mt-6">
           <div className="grid gap-4">
-            {publishedPosts.map((post) => (
+            {publishedPosts.length === 0 ? (
+              <Card className="p-6 text-center text-muted-foreground">
+                No published posts yet
+              </Card>
+            ) : publishedPosts.map((post) => (
               <Card key={post.id} className="p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -651,20 +680,15 @@ export default function Articles() {
               </Card>
             ))}
           </div>
-        </div>
-      )}
+        </TabsContent>
 
-      {failedPosts.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
-            <AlertCircle className="w-6 h-6 text-red-600" />
-            Failed Posts
-            <Badge variant="destructive">
-              {failedPosts.length}
-            </Badge>
-          </h2>
+        <TabsContent value="failed" className="mt-6">
           <div className="grid gap-4">
-            {failedPosts.map((post) => (
+            {failedPosts.length === 0 ? (
+              <Card className="p-6 text-center text-muted-foreground">
+                No failed posts
+              </Card>
+            ) : failedPosts.map((post) => (
               <Card key={post.id} className="p-6 border-red-200 dark:border-red-900 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -685,7 +709,7 @@ export default function Articles() {
                   </div>
                   <div className="flex gap-2">
                     <Button
-                      variant="default"
+                      variant="outline"
                       size="sm"
                       onClick={() => handlePublishNow(post.id)}
                     >
@@ -704,8 +728,8 @@ export default function Articles() {
               </Card>
             ))}
           </div>
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
