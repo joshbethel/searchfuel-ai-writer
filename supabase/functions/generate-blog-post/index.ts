@@ -494,6 +494,21 @@ Format: 16:9 aspect ratio, centered single subject.`;
 
         // Increment usage count after successful post creation
         console.log(`Incrementing post count for user ${userId}`);
+        
+        // First, check current count before increment
+        const { data: subscriptionBefore } = await supabase
+          .from('subscriptions')
+          .select('posts_generated_count, status, plan_name')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .maybeSingle();
+        
+        console.log('Subscription before increment:', {
+          count: subscriptionBefore?.posts_generated_count,
+          status: subscriptionBefore?.status,
+          plan: subscriptionBefore?.plan_name
+        });
+        
         const { data: incrementResult, error: usageError } = await supabase
           .rpc('increment_post_count', { user_uuid: userId });
 
@@ -501,7 +516,28 @@ Format: 16:9 aspect ratio, centered single subject.`;
           console.error('Failed to increment usage count:', usageError);
           // Don't fail the request, but log the error
         } else {
-          console.log('Successfully incremented post count for user:', userId);
+          // Verify the increment worked by checking the count after
+          const { data: subscriptionAfter } = await supabase
+            .from('subscriptions')
+            .select('posts_generated_count')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .maybeSingle();
+          
+          console.log('Subscription after increment:', {
+            count: subscriptionAfter?.posts_generated_count,
+            expected: (subscriptionBefore?.posts_generated_count || 0) + 1
+          });
+          
+          if (subscriptionAfter?.posts_generated_count !== (subscriptionBefore?.posts_generated_count || 0) + 1) {
+            console.error('WARNING: Post count did not increment correctly!', {
+              before: subscriptionBefore?.posts_generated_count,
+              after: subscriptionAfter?.posts_generated_count,
+              expected: (subscriptionBefore?.posts_generated_count || 0) + 1
+            });
+          } else {
+            console.log('Successfully incremented post count for user:', userId);
+          }
         }
 
         // Trigger keyword extraction for the newly created post (best-effort)
