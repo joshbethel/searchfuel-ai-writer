@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -21,11 +22,14 @@ interface ArticleData {
   meta_title: string | null;
   meta_description: string | null;
   excerpt: string | null;
+  publishing_status?: string | null;
+  external_post_id?: string | null;
 }
 
 export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: EditArticleDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [updateToCms, setUpdateToCms] = useState(false);
   const [articleData, setArticleData] = useState<ArticleData>({
     title: "",
     content: "",
@@ -47,7 +51,7 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
     try {
       const { data, error } = await supabase
         .from("blog_posts")
-        .select("title, content, meta_title, meta_description, excerpt")
+        .select("title, content, meta_title, meta_description, excerpt, publishing_status, external_post_id")
         .eq("id", articleId)
         .single();
 
@@ -59,7 +63,12 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
         meta_title: data.meta_title || "",
         meta_description: data.meta_description || "",
         excerpt: data.excerpt || "",
+        publishing_status: data.publishing_status,
+        external_post_id: data.external_post_id,
       });
+      
+      // Auto-check if post is already published
+      setUpdateToCms(data.publishing_status === 'published' && !!data.external_post_id);
     } catch (error) {
       console.error("Error fetching article:", error);
       toast.error("Failed to load article");
@@ -73,6 +82,7 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
 
     setIsSaving(true);
     try {
+      // Update database
       const { error } = await supabase
         .from("blog_posts")
         .update({
@@ -87,7 +97,29 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
 
       if (error) throw error;
 
-      toast.success("Article updated successfully!");
+      toast.success("Article updated in database!");
+
+      // Update CMS if checkbox is checked
+      if (updateToCms && articleData.publishing_status === 'published') {
+        toast.info("Updating CMS...");
+        
+        try {
+          const { error: publishError } = await supabase.functions.invoke('publish-to-cms', {
+            body: { blog_post_id: articleId }
+          });
+
+          if (publishError) {
+            console.error("CMS update error:", publishError);
+            toast.error("Database updated but CMS update failed. Please try publishing again.");
+          } else {
+            toast.success("CMS updated successfully!");
+          }
+        } catch (cmsError) {
+          console.error("CMS update error:", cmsError);
+          toast.error("Database updated but CMS update failed. Please try publishing again.");
+        }
+      }
+
       onSaved();
       onOpenChange(false);
     } catch (error) {
@@ -164,6 +196,27 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
                 className="font-mono text-sm"
               />
             </div>
+
+            {articleData.publishing_status === 'published' && articleData.external_post_id && (
+              <div className="flex items-center space-x-2 p-4 border rounded-lg bg-muted/50">
+                <Checkbox
+                  id="update-cms"
+                  checked={updateToCms}
+                  onCheckedChange={(checked) => setUpdateToCms(checked === true)}
+                />
+                <div className="flex-1">
+                  <Label
+                    htmlFor="update-cms"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    Update published post in CMS
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Push changes to your WordPress/Framer CMS after saving
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -173,7 +226,7 @@ export function EditArticleDialog({ articleId, open, onOpenChange, onSaved }: Ed
           </Button>
           <Button onClick={handleSave} disabled={isSaving || isLoading}>
             {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Save Changes
+            {updateToCms && articleData.publishing_status === 'published' ? 'Save & Update CMS' : 'Save Changes'}
           </Button>
         </DialogFooter>
       </DialogContent>

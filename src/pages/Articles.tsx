@@ -666,6 +666,14 @@ export default function Articles() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => setEditArticleId(post.id)}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => navigate(`/blog/${post.slug}`)}
                       >
                         <Eye className="w-4 h-4 mr-2" />
