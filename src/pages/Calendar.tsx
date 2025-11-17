@@ -17,17 +17,25 @@ interface Article {
   excerpt?: string | null;
 }
 
+interface ScheduledItem {
+  id: string;
+  title: string;
+  status: string;
+  scheduled_date: string;
+  type: 'post' | 'keyword';
+}
+
 export default function Calendar() {
   const navigate = useNavigate();
-  const [articles, setArticles] = useState<Article[]>([]);
+  const [scheduledItems, setScheduledItems] = useState<ScheduledItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [blogId, setBlogId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchBlogAndArticles();
+    fetchBlogAndScheduledItems();
   }, []);
 
-  const fetchBlogAndArticles = async () => {
+  const fetchBlogAndScheduledItems = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -50,15 +58,44 @@ export default function Calendar() {
 
       setBlogId(blog.id);
 
-      // Fetch articles
+      // Fetch blog posts
       const { data: posts, error: postsError } = await supabase
         .from("blog_posts")
         .select("*")
         .eq("blog_id", blog.id)
+        .not("scheduled_publish_date", "is", null)
         .order("scheduled_publish_date", { ascending: true });
 
       if (postsError) throw postsError;
-      setArticles(posts || []);
+
+      // Fetch scheduled keywords
+      const { data: scheduledKeywords, error: keywordsError } = await supabase
+        .from("scheduled_keywords")
+        .select("*")
+        .eq("blog_id", blog.id)
+        .order("scheduled_date", { ascending: true });
+
+      if (keywordsError) throw keywordsError;
+
+      // Combine both into a unified structure
+      const items: ScheduledItem[] = [
+        ...(posts || []).map(post => ({
+          id: post.id,
+          title: post.title,
+          status: post.publishing_status || 'pending',
+          scheduled_date: post.scheduled_publish_date!,
+          type: 'post' as const,
+        })),
+        ...(scheduledKeywords || []).map(keyword => ({
+          id: keyword.id,
+          title: keyword.keyword,
+          status: keyword.status,
+          scheduled_date: keyword.scheduled_date,
+          type: 'keyword' as const,
+        })),
+      ];
+
+      setScheduledItems(items);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load calendar");
@@ -87,7 +124,7 @@ export default function Calendar() {
   return (
     <div className="container mx-auto py-8 px-4">
       <MonthlyCalendarView
-        articles={articles}
+        scheduledItems={scheduledItems}
         onViewArticle={handleViewArticle}
         onEditArticle={handleEditArticle}
       />

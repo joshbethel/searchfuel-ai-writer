@@ -6,44 +6,38 @@ import { Card } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface Article {
+interface ScheduledItem {
   id: string;
   title: string;
-  slug: string;
   status: string;
-  publishing_status: string | null;
-  scheduled_publish_date?: string | null;
-  created_at: string;
-  article_type: string | null;
-  excerpt?: string | null;
+  scheduled_date: string;
+  type: 'post' | 'keyword';
 }
 
 interface MonthlyCalendarViewProps {
-  articles: Article[];
+  scheduledItems: ScheduledItem[];
   onViewArticle: (id: string) => void;
   onEditArticle: (id: string) => void;
 }
 
-export function MonthlyCalendarView({ articles, onViewArticle }: MonthlyCalendarViewProps) {
+export function MonthlyCalendarView({ scheduledItems, onViewArticle }: MonthlyCalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-  // Get articles for a specific date
-  const getArticlesForDate = (date: Date) => {
-    return articles.filter((article) => {
-      if (!article.scheduled_publish_date) return false;
-      return isSameDay(parseISO(article.scheduled_publish_date), date);
+  // Get scheduled items for a specific date
+  const getItemsForDate = (date: Date) => {
+    return scheduledItems.filter((item) => {
+      return isSameDay(parseISO(item.scheduled_date), date);
     });
   };
 
-  // Get total articles in current month
-  const articlesThisMonth = articles.filter((article) => {
-    if (!article.scheduled_publish_date) return false;
-    const articleDate = parseISO(article.scheduled_publish_date);
-    return isSameMonth(articleDate, currentMonth);
+  // Get total items in current month
+  const itemsThisMonth = scheduledItems.filter((item) => {
+    const itemDate = parseISO(item.scheduled_date);
+    return isSameMonth(itemDate, currentMonth);
   }).length;
 
   // Days of week
@@ -106,7 +100,7 @@ export function MonthlyCalendarView({ articles, onViewArticle }: MonthlyCalendar
       {/* Month and Article Count */}
       <div>
         <h2 className="text-2xl font-semibold">{format(currentMonth, 'MMMM yyyy')}</h2>
-        <p className="text-sm text-muted-foreground mt-1">{articlesThisMonth} articles this month</p>
+        <p className="text-sm text-muted-foreground mt-1">{itemsThisMonth} scheduled items this month</p>
       </div>
 
       {/* Calendar Grid */}
@@ -126,7 +120,7 @@ export function MonthlyCalendarView({ articles, onViewArticle }: MonthlyCalendar
 
           {/* Days of month */}
           {daysInMonth.map((day) => {
-            const dayArticles = getArticlesForDate(day);
+            const dayItems = getItemsForDate(day);
             const dayNumber = format(day, 'd');
             const dayName = format(day, 'EEE');
 
@@ -141,30 +135,29 @@ export function MonthlyCalendarView({ articles, onViewArticle }: MonthlyCalendar
                 </div>
 
                 <div className="space-y-2">
-                  {dayArticles.map((article) => (
+                  {dayItems.map((item) => (
                     <div
-                      key={article.id}
+                      key={item.id}
                       className="p-2 bg-card border rounded-md space-y-1.5 hover:bg-accent/50 transition-colors"
                     >
                       <Badge
                         variant="outline"
-                        className={cn("text-xs uppercase font-medium", getStatusColor(article.publishing_status || 'pending'))}
+                        className={cn("text-xs uppercase font-medium", getStatusColor(item.status))}
                       >
-                        {article.publishing_status || 'pending'}
+                        {item.status === 'published' ? '✓ Published' : item.status}
                       </Badge>
-                      <h4 className="text-xs font-medium line-clamp-2">{article.title}</h4>
-                      {article.excerpt && (
-                        <p className="text-xs text-muted-foreground line-clamp-1">{article.excerpt}</p>
+                      <h4 className="text-xs font-medium line-clamp-2">{item.title}</h4>
+                      {item.type === 'post' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto p-0 text-xs hover:bg-transparent"
+                          onClick={() => onViewArticle(item.id)}
+                        >
+                          <Eye className="w-3 h-3 mr-1" />
+                          View Article
+                        </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto p-0 text-xs hover:bg-transparent"
-                        onClick={() => onViewArticle(article.id)}
-                      >
-                        <Eye className="w-3 h-3 mr-1" />
-                        View Article
-                      </Button>
                     </div>
                   ))}
                 </div>
