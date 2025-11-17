@@ -8,11 +8,10 @@ import { useArticles } from "@/hooks/use-articles";
 import KeywordPanel from '@/components/KeywordPanel';
 import { GenerateArticleDialog } from "@/components/GenerateArticleDialog";
 import { ArticleCalendar } from "@/components/ArticleCalendar";
-import { MonthlyCalendarView } from "@/components/MonthlyCalendarView";
 import { EditArticleDialog } from "@/components/EditArticleDialog";
 import { RescheduleArticleDialog } from "@/components/RescheduleArticleDialog";
 import { toast } from "sonner";
-import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, List, Edit } from "lucide-react";
+import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, Edit } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import {
   AlertDialog,
@@ -24,7 +23,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const ARTICLE_TYPE_LABELS: Record<string, { name: string; emoji: string }> = {
   how_to: { name: "How-To Guides", emoji: "📚" },
@@ -65,7 +63,6 @@ export default function Articles() {
   const [editArticleId, setEditArticleId] = useState<string | null>(null);
   const [rescheduleArticleId, setRescheduleArticleId] = useState<string | null>(null);
   const [rescheduleArticleDate, setRescheduleArticleDate] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
   const handlePublishNow = async (postId: string) => {
     if (!blogId) return;
@@ -376,28 +373,6 @@ export default function Articles() {
         />
       </div>
 
-      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "calendar")} className="mb-6">
-        <TabsList>
-          <TabsTrigger value="list" className="flex items-center gap-2">
-            <List className="w-4 h-4" />
-            List View
-          </TabsTrigger>
-          <TabsTrigger value="calendar" className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            Calendar View
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="calendar" className="mt-6">
-          <MonthlyCalendarView
-            articles={articles}
-            onViewArticle={(id) => navigate(`/articles/${id}`)}
-            onEditArticle={setEditArticleId}
-          />
-        </TabsContent>
-
-        <TabsContent value="list" className="mt-0">
-
       <div className="mb-8">
         <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center gap-2">
           <Calendar className="w-6 h-6 text-purple-600" />
@@ -664,9 +639,6 @@ export default function Articles() {
           </div>
         </div>
       )}
-
-        </TabsContent>
-      </Tabs>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
