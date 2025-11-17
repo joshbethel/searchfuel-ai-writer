@@ -22,8 +22,9 @@ function isOriginAllowed(origin: string | null): boolean {
   // Check exact matches
   if (allowedOrigins.includes(normalizedOrigin)) return true;
   
-  // Allow Lovable preview domains (*.lovableproject.com)
+  // Allow Lovable preview domains (*.lovableproject.com and *.lovable.app)
   if (normalizedOrigin.endsWith('.lovableproject.com')) return true;
+  if (normalizedOrigin.endsWith('.lovable.app')) return true;
   
   return false;
 }
