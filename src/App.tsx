@@ -13,6 +13,7 @@ import Calendar from "./pages/Calendar";
 import ArticleDetail from "./pages/ArticleDetail";
 import Settings from "./pages/Settings";
 import WordPressDebug from "./pages/WordPressDebug";
+import Presentation from "./pages/Presentation";
 import DashboardLayout from "./layouts/DashboardLayout";
 import NotFound from "./pages/NotFound";
 import Blog from "./pages/Blog";
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/" element={<Auth />} />
           <Route path="/index" element={<Index />} />
           <Route path="/plans" element={<Plans />} />
+          <Route path="/presentation" element={<Presentation />} />
           <Route element={<SubscriptionProtectedRoute><DashboardLayout /></SubscriptionProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/articles" element={<Articles />} />
