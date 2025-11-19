@@ -175,25 +175,27 @@ export default function Articles() {
         body: { blog_post_id: postId },
       });
 
-      if (error) throw error;
+      if (data.success) {
+        // Get the updated post data to show post ID
+        const { data: updatedPost } = await supabase
+          .from("blog_posts")
+          .select("external_post_id, blog_id, blogs(cms_platform)")
+          .eq("id", postId)
+          .single();
 
-      // Get the updated post data to show post ID
-      const { data: updatedPost } = await supabase
-        .from("blog_posts")
-        .select("external_post_id, blog_id, blogs(cms_platform)")
-        .eq("id", postId)
-        .single();
-
-      const platform = updatedPost?.blogs?.cms_platform;
-      
-      if (platform === 'framer' && updatedPost?.external_post_id) {
-        toast.success(`Article write done! You published it in Framer using post ID: ${updatedPost.external_post_id}`);
-      } else {
-        toast.success("Post published successfully!");
+        const platform = updatedPost?.blogs?.cms_platform;
+        
+        if (platform === 'framer' && updatedPost?.external_post_id) {
+          toast.success(`Article published to Framer! Post ID: ${updatedPost.external_post_id}`);
+        } else if (updatedPost?.external_post_id) {
+          toast.success(`Post published successfully! Post ID: ${updatedPost.external_post_id}`);
+        } else {
+          toast.success("Post published successfully!");
+        }
+        
+        await fetchArticles();
+        await fetchScheduledKeywords();
       }
-      
-      await fetchArticles();
-      await fetchScheduledKeywords();
     } catch (error: any) {
       console.error("Error publishing post:", error);
       toast.error(error.message || "Failed to publish post");
@@ -316,12 +318,16 @@ export default function Articles() {
       
       if (error) throw error;
       
-      if (data?.success) {
+      if (data.success) {
         if (scheduleDate) {
           toast.success(`Article scheduled for publication on ${format(scheduleDate, "PPP 'at' p")}`);
+        } else if (cmsPlatform === 'framer') {
+          // Framer articles don't auto-publish
+          toast.success("Article write done! ✓");
+          toast.info("Article is pending - click 'Publish' to publish it to Framer");
         } else if (data.results?.[0]?.success) {
           toast.success("Article generated successfully!");
-          toast.info("Article published to WordPress!");
+          toast.info("Article published to CMS!");
         } else {
           toast.success("Article generated successfully!");
           toast.warning(`Article created but publishing failed: ${data.results?.[0]?.error}`);
