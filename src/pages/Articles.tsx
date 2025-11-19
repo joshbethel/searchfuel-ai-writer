@@ -209,12 +209,12 @@ export default function Articles() {
         
         if (platform === 'framer') {
           if (updatedPost?.external_post_id) {
-            toast.success(`✓ Published to Framer!`);
+            toast.success(`✓ Status updated to Published!`);
             toast.info(`Post ID: ${updatedPost.external_post_id}`, {
-              description: "Use this ID in the Framer CMS API"
+              description: "This post is now marked as published"
             });
           } else {
-            toast.success("Published successfully!");
+            toast.success("Status updated to Published!");
           }
         } else if (updatedPost?.external_post_id) {
           toast.success(`Published successfully! Post ID: ${updatedPost.external_post_id}`);
@@ -360,8 +360,8 @@ export default function Articles() {
           toast.success(`Article scheduled for publication on ${format(scheduleDate, "PPP 'at' p")}`);
         } else if (cmsPlatform === 'framer') {
           // Framer articles don't auto-publish
-          toast.success("Article write done! ✓");
-          toast.info("Article is pending - click 'Publish' to publish it to Framer");
+          toast.success("✓ Article write done!");
+          toast.info("Article is in pending tab - Use the Post ID to sync in Framer, then click 'Publish' to update status");
         } else if (data.results?.[0]?.success) {
           toast.success("Article generated successfully!");
           toast.info("Article published to CMS!");
