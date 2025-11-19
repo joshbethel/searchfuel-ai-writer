@@ -1,79 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blog Automation Publisher</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body {
-      margin: 0;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-      background: #fff;
-    }
-    .btn {
-      padding: 10px 16px;
-      border-radius: 6px;
-      border: none;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .btn-primary {
-      background: #0099ff;
-      color: white;
-    }
-    .btn-primary:hover {
-      background: #0077cc;
-    }
-    .btn-secondary {
-      background: #f3f4f6;
-      color: #374151;
-    }
-    .btn-secondary:hover {
-      background: #e5e7eb;
-    }
-    .input {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-    .input:focus {
-      outline: none;
-      border-color: #0099ff;
-      box-shadow: 0 0 0 3px rgba(0, 153, 255, 0.1);
-    }
-    .label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 6px;
-      color: #374151;
-    }
-    .status {
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      margin-bottom: 12px;
-    }
-    .status-success {
-      background: #d1fae5;
-      color: #065f46;
-    }
-    .status-error {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="text/babel" src="app.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SearchFuel Publisher - Framer Plugin</title>
+    <script type="module" src="/main.jsx"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: #fff;
+        color: #1f2937;
+      }
+
+      #root {
+        width: 100%;
+        min-height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>
+

@@ -60,7 +60,7 @@
         document.getElementById('debugForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const resultsDiv = document.getElementById('results');
+            const resultsDiv = document.getElementById('results');ree
             resultsDiv.innerHTML = '<div class="info">🔄 Testing WordPress connection...</div>';
             
             const siteUrl = document.getElementById('siteUrl').value.replace(/\/$/, '');
@@ -124,7 +124,7 @@
                     } else {
                         testResults.push(`<div class="error">❌ Authentication test failed (Status: ${authResponse.status})</div>`);
                         return;
-                    }
+7                    }
                 } catch (error) {
                     testResults.push(`<div class="error">❌ Authentication test error: ${error.message}</div>`);
                     return;

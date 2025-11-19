@@ -1,12 +1,17 @@
 {
-  "id": "blog-automation-publisher",
-  "name": "Blog Automation Publisher",
+  "pluginVersion": 2,
+  "id": "searchfuel-framer-publisher",
+  "displayName": "SearchFuel Publisher",
+  "description": "Publish your Framer content directly to SearchFuel blog automation system with one click",
+  "author": "SearchFuel Team",
   "version": "1.0.0",
-  "description": "Publish your Framer content directly to your blog automation system",
-  "author": "Blog Automation",
+  "permissions": [
+    "web.request"
+  ],
   "icon": "https://framerusercontent.com/images/default-plugin-icon.svg",
-  "main": "index.html",
-  "permissions": ["data.write"],
-  "width": 400,
-  "height": 600
+  "supportedFramerVersions": ["latest"],
+  "keywords": ["blog", "publishing", "seo", "automation", "content"],
+  "documentationUrl": "https://docs.trysearchfuel.com/framer-plugin",
+  "supportUrl": "mailto:support@trysearchfuel.com"
 }
+

@@ -4,6 +4,8 @@ import "./styles.css";
 /**
  * SearchFuel Framer Plugin
  * Publish content from Framer to SearchFuel blog automation system
+ * 
+ * Note: The `framer` API is globally available in the plugin context
  */
 
 // Status Message Component
@@ -440,4 +442,3 @@ const styles = {
     margin: "4px 0 0 0",
   },
 };
-
