@@ -186,46 +186,31 @@ serve(async (req: Request) => {
         break;
 
       case "framer":
-        // Test Framer CMS API connection
-        // Framer requires: API Token (accessToken) and Collection ID (apiKey)
+        // Framer only requires URL verification
         try {
-          if (!apiKey || !accessToken) {
+          if (!siteUrl) {
             success = false;
-            error = "Framer CMS requires both Collection ID and API Token";
+            error = "Framer site URL is required";
             break;
           }
 
-          // Test connection by attempting to fetch collection items
-          // Format: https://api.framer.com/v1/collections/{collectionId}/items
-          const collectionApiUrl = `https://api.framer.com/v1/collections/${apiKey}/items`;
+          console.log(`Testing Framer site accessibility: ${siteUrl}`);
           
-          console.log(`Testing Framer CMS connection for collection: ${apiKey}`);
-          
-          const response = await fetch(collectionApiUrl, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
+          // Simply verify the Framer site is accessible
+          const response = await fetch(siteUrl, {
+            method: 'HEAD',
           });
 
-          success = response.ok;
+          success = response.ok || response.status === 405; // 405 is OK (HEAD might not be allowed)
           
           if (!success) {
-            const errorText = await response.text();
-            if (response.status === 401) {
-              error = "Invalid Framer API token. Please verify your token in Framer settings.";
-            } else if (response.status === 404) {
-              error = "Collection ID not found. Please verify your Collection ID in Framer CMS.";
-            } else {
-              error = `Framer API error (${response.status}): ${errorText}`;
-            }
+            error = `Unable to access Framer site. Please verify the URL: ${siteUrl}`;
           } else {
-            console.log("Successfully connected to Framer CMS collection");
+            console.log("Successfully verified Framer site accessibility");
           }
         } catch (e) {
           success = false;
-          error = `Failed to connect to Framer API: ${e.message}`;
+          error = `Failed to verify Framer site: ${e.message}`;
         }
         break;
 
