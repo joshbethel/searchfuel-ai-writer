@@ -1038,72 +1038,15 @@ async function publishToRestAPI(blog: any, post: any): Promise<string> {
 }
 
 async function publishToFramer(blog: any, post: any): Promise<string> {
-  console.log(`Starting Framer CMS publishing for post: ${post.title}`);
+  console.log(`Marking Framer post as published (manual sync): ${post.title}`);
   
-  // 🔓 Decrypt credentials
-  const encryptedCredentials = blog.cms_credentials;
-  if (!encryptedCredentials) {
-    throw new Error("Framer CMS credentials not found");
-  }
-  const credentials = await decryptBlogCredentials(encryptedCredentials);
+  // For Framer, users manually sync in Framer CMS themselves
+  // This function just marks the post as published in our database
+  // and returns the blog_post_id as the "external_post_id"
   
-  if (!credentials || !credentials.access_token || !credentials.collection_id) {
-    throw new Error("Framer CMS credentials (API token and Collection ID) are required");
-  }
-
-  // Extract markdown content
-  const markdownContent = extractContent(post.content);
+  console.log(`✓ Framer post marked as published. Post ID: ${post.id}`);
   
-  // Framer CMS API endpoint
-  const apiUrl = `https://api.framer.com/v1/collections/${credentials.collection_id}/items`;
-  
-  console.log(`Framer API URL: ${apiUrl}`);
-  
-  // Prepare the item data for Framer CMS
-  const itemData = {
-    fieldData: {
-      title: post.title,
-      slug: post.slug,
-      content: markdownContent,
-      excerpt: post.excerpt || "",
-      metaTitle: post.meta_title || post.title,
-      metaDescription: post.meta_description || post.excerpt || "",
-      publishedAt: new Date().toISOString(),
-      featuredImage: post.featured_image || "",
-    },
-    isDraft: false, // Publish immediately
-  };
-
-  console.log("Publishing to Framer CMS...");
-  
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${credentials.access_token}`,
-    },
-    body: JSON.stringify(itemData),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Framer CMS API Error:", {
-      status: response.status,
-      statusText: response.statusText,
-      body: errorText
-    });
-    
-    if (response.status === 401) {
-      throw new Error("Framer authentication failed - please reconnect your Framer CMS");
-    } else if (response.status === 404) {
-      throw new Error("Framer Collection not found - verify your Collection ID");
-    } else {
-      throw new Error(`Framer API error (${response.status}): ${errorText}`);
-    }
-  }
-
-  const data = await response.json();
-  console.log(`Successfully published to Framer CMS. Item ID: ${data.id}`);
-  
-  return data.id.toString();
+  // Return the blog post ID as the external ID
+  // Users will use this ID to sync manually in Framer
+  return post.id;
 }
