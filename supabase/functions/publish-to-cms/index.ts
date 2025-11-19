@@ -37,18 +37,53 @@ serve(async (req: any) => {
       );
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data, error: authError } = await supabaseClient.auth.getUser(token);
-    
-    if (authError || !data.user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    let userId: string;
 
-    const userId = data.user.id;
-    console.log(`Authenticated user: ${userId}`);
+    // Support both Bearer token and Basic auth
+    if (authHeader.startsWith("Basic ")) {
+      // Basic auth: decode base64 username:password
+      const base64Credentials = authHeader.replace("Basic ", "");
+      const credentials = atob(base64Credentials);
+      const [email, password] = credentials.split(":");
+
+      if (!email || !password) {
+        return new Response(
+          JSON.stringify({ error: "Invalid basic auth credentials" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Authenticate with email/password
+      const { data: signInData, error: signInError } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError || !signInData.user) {
+        console.error("Basic auth failed:", signInError);
+        return new Response(
+          JSON.stringify({ error: "Invalid credentials" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      userId = signInData.user.id;
+      console.log(`Authenticated user via Basic auth: ${userId}`);
+    } else {
+      // Bearer token auth (existing flow)
+      const token = authHeader.replace("Bearer ", "");
+      const { data, error: authError } = await supabaseClient.auth.getUser(token);
+      
+      if (authError || !data.user) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      userId = data.user.id;
+      console.log(`Authenticated user via Bearer token: ${userId}`);
+    }
 
     // Validate request body with Zod schema
     const requestBody = await req.json();
