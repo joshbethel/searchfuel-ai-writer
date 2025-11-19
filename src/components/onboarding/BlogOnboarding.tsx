@@ -140,6 +140,9 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
         credentials = {
           access_token: connectionData.accessToken,
         };
+      } else if (selectedPlatform === "framer") {
+        // Framer only needs URL, use empty credentials object
+        credentials = { connected: true };
       } else {
         credentials = {
           apiKey: connectionData.apiKey,

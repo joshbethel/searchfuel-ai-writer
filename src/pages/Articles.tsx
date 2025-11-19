@@ -138,16 +138,19 @@ export default function Articles() {
     if (!blogId) return;
 
     try {
+      console.log(`[PUBLISH] Starting publish for post: ${postId}`);
       toast.info("Publishing post...");
       
-      // First clear any scheduled publish date
+      // First clear any scheduled publish date and set to publishing
       await supabase
         .from("blog_posts")
         .update({
           scheduled_publish_date: null,
-          publishing_status: "pending"
+          publishing_status: "publishing"
         })
         .eq("id", postId);
+      
+      console.log(`[PUBLISH] Updated status to 'publishing'`);
       
       // Verify the post exists before trying to publish
       const { data: postCheck, error: postCheckError } = await supabase
@@ -156,7 +159,12 @@ export default function Articles() {
         .eq("id", postId)
         .single();
         
-      if (postCheckError) throw new Error("Could not find post to publish");
+      if (postCheckError) {
+        console.error(`[PUBLISH] Post check error:`, postCheckError);
+        throw new Error("Could not find post to publish");
+      }
+      
+      console.log(`[PUBLISH] Post found:`, postCheck.title);
       
       // Verify the blog exists and has CMS configuration
       const { data: blogCheck, error: blogCheckError } = await supabase
@@ -165,15 +173,28 @@ export default function Articles() {
         .eq("id", postCheck.blog_id)
         .single();
         
-      if (blogCheckError) throw new Error("Could not find blog configuration");
-      
-      if (!blogCheck.cms_platform || !blogCheck.cms_credentials) {
-        throw new Error("WordPress/CMS is not properly configured");
+      if (blogCheckError) {
+        console.error(`[PUBLISH] Blog check error:`, blogCheckError);
+        throw new Error("Could not find blog configuration");
       }
       
+      console.log(`[PUBLISH] Blog CMS Platform:`, blogCheck.cms_platform);
+      
+      if (!blogCheck.cms_platform || !blogCheck.cms_credentials) {
+        throw new Error("CMS is not properly configured");
+      }
+      
+      console.log(`[PUBLISH] Calling publish-to-cms edge function...`);
       const { data, error } = await supabase.functions.invoke("publish-to-cms", {
         body: { blog_post_id: postId },
       });
+
+      if (error) {
+        console.error(`[PUBLISH] Edge function error:`, error);
+        throw error;
+      }
+
+      console.log(`[PUBLISH] Edge function response:`, data);
 
       if (data.success) {
         // Get the updated post data to show post ID
@@ -184,20 +205,36 @@ export default function Articles() {
           .single();
 
         const platform = updatedPost?.blogs?.cms_platform;
+        console.log(`[PUBLISH] Success! Platform: ${platform}, Post ID: ${updatedPost?.external_post_id}`);
         
-        if (platform === 'framer' && updatedPost?.external_post_id) {
-          toast.success(`Article published to Framer! Post ID: ${updatedPost.external_post_id}`);
+        if (platform === 'framer') {
+          if (updatedPost?.external_post_id) {
+            toast.success(`✓ Published to Framer!`);
+            toast.info(`Post ID: ${updatedPost.external_post_id}`, {
+              description: "Use this ID in the Framer CMS API"
+            });
+          } else {
+            toast.success("Published successfully!");
+          }
         } else if (updatedPost?.external_post_id) {
-          toast.success(`Post published successfully! Post ID: ${updatedPost.external_post_id}`);
+          toast.success(`Published successfully! Post ID: ${updatedPost.external_post_id}`);
         } else {
           toast.success("Post published successfully!");
         }
         
         await fetchArticles();
         await fetchScheduledKeywords();
+      } else {
+        console.error(`[PUBLISH] Publish failed:`, data);
+        throw new Error(data.error || "Publishing failed");
       }
     } catch (error: any) {
-      console.error("Error publishing post:", error);
+      console.error("[PUBLISH] Error:", error);
+      // Revert status to pending on error
+      await supabase
+        .from("blog_posts")
+        .update({ publishing_status: "pending" })
+        .eq("id", postId);
       toast.error(error.message || "Failed to publish post");
     }
   };
@@ -667,15 +704,22 @@ export default function Articles() {
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Clock className="w-4 h-4" />
-                          <span>Scheduled for {format(estimatedDate, 'MMM d, yyyy')}</span>
+                          <span>Ready to publish</span>
                         </div>
                         <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
-                        {post.external_post_id && (
-                          <Badge variant="outline" className="text-xs">
+                      </div>
+                      {!post.external_post_id && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                          💡 Click "Publish Now" to publish to Framer and get the Post ID
+                        </p>
+                      )}
+                      {post.external_post_id && (
+                        <div className="mt-2">
+                          <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
                             Post ID: {post.external_post_id}
                           </Badge>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       <div className="flex gap-2 mt-2">
                         <Button
                           variant="default"
