@@ -106,7 +106,11 @@ export const testCmsConnectionSchema = z.object({
   password: z.string().optional(),
 }).refine(
   (data) => {
-    // At least one credential field should be present
+    // Framer only needs URL, others need credentials
+    if (data.platform === 'framer') {
+      return !!data.siteUrl;
+    }
+    // At least one credential field should be present for other platforms
     return !!(data.apiKey || data.apiSecret || data.accessToken || 
               data.username || data.password);
   },
