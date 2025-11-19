@@ -599,6 +599,11 @@ export default function Articles() {
                             </Button>
                           )}
                         </div>
+                        {post.external_post_id && (
+                          <Badge variant="outline" className="text-xs">
+                            Post ID: {post.external_post_id}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex gap-2 mb-6">
                         <Button
@@ -659,6 +664,11 @@ export default function Articles() {
                           <span>Scheduled for {format(estimatedDate, 'MMM d, yyyy')}</span>
                         </div>
                         <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
+                        {post.external_post_id && (
+                          <Badge variant="outline" className="text-xs">
+                            Post ID: {post.external_post_id}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex gap-2 mt-2">
                         <Button
@@ -739,7 +749,7 @@ export default function Articles() {
                       <span>Published {format(new Date(post.published_at || post.created_at), 'MMM d, yyyy')}</span>
                       {post.external_post_id && (
                         <Badge variant="outline" className="text-xs">
-                          External ID: {post.external_post_id}
+                          Post ID: {post.external_post_id}
                         </Badge>
                       )}
                     </div>
@@ -794,6 +804,11 @@ export default function Articles() {
                     </h3>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
+                      {post.external_post_id && (
+                        <Badge variant="outline" className="text-xs">
+                          Post ID: {post.external_post_id}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-2">
