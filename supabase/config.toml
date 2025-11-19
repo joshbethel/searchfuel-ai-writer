@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.schedule-article-generation]
 verify_jwt = false
+
+[functions.get-post-data]
+verify_jwt = false
