@@ -12,6 +12,54 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Check for Basic Authentication
+    const authHeader = req.headers.get("Authorization");
+    
+    if (!authHeader || !authHeader.startsWith("Basic ")) {
+      return new Response(
+        JSON.stringify({ error: "Basic authentication required" }),
+        { 
+          status: 401, 
+          headers: { 
+            ...corsHeaders, 
+            "Content-Type": "application/json",
+            "WWW-Authenticate": 'Basic realm="Post Data API"'
+          } 
+        }
+      );
+    }
+
+    // Decode Basic Auth credentials
+    const base64Credentials = authHeader.split(" ")[1];
+    const credentials = atob(base64Credentials);
+    const [email, password] = credentials.split(":");
+
+    console.log(`Authentication attempt for user: ${email}`);
+
+    // Initialize Supabase client for auth
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Verify credentials
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !authData.user) {
+      console.error("Authentication failed:", authError?.message);
+      return new Response(
+        JSON.stringify({ error: "Invalid credentials" }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
+
+    console.log(`User authenticated: ${authData.user.id}`);
+
     // Get post_id from query parameters
     const url = new URL(req.url);
     const post_id = url.searchParams.get("post_id");
@@ -28,13 +76,13 @@ serve(async (req: Request) => {
 
     console.log(`Fetching post data for ID: ${post_id}`);
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Use service role for data fetching
+    const supabaseServiceUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseService = createClient(supabaseServiceUrl, supabaseServiceKey);
 
     // Fetch the blog post
-    const { data: post, error } = await supabase
+    const { data: post, error } = await supabaseService
       .from("blog_posts")
       .select(`
         id,
