@@ -403,47 +403,11 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
           )}
 
           {selectedPlatform === "framer" && (
-            <>
-              <div>
-                <Label htmlFor="apiKey">Collection ID *</Label>
-                <Input
-                  id="apiKey"
-                  type="text"
-                  placeholder="Enter your Framer CMS Collection ID"
-                  value={connectionData.apiKey}
-                  onChange={(e) => setConnectionData({ ...connectionData, apiKey: e.target.value })}
-                  className="mt-1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Found in Framer → CMS → Your Collection → Settings → Collection ID
-                </p>
-              </div>
-              <div>
-                <Label htmlFor="accessToken">API Token *</Label>
-                <Input
-                  id="accessToken"
-                  type="password"
-                  placeholder="Enter your Framer API Token"
-                  value={connectionData.accessToken}
-                  onChange={(e) => setConnectionData({ ...connectionData, accessToken: e.target.value })}
-                  className="mt-1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Generate from Workspace Settings → Integrations/API → Create Token (enable CMS permissions)
-                </p>
-              </div>
-              <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-foreground mb-2">Quick Setup:</h4>
-                <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
-                  <li>Click your workspace name (top left in Framer)</li>
-                  <li>Look for Workspace Settings → Integrations or API section</li>
-                  <li>Create an API Token with CMS read/write permissions</li>
-                  <li>Copy the generated token</li>
-                  <li>In your project: CMS → Select collection → Settings</li>
-                  <li>Copy the Collection ID from collection settings</li>
-                </ol>
-              </div>
-            </>
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+              <p className="text-sm text-green-800 dark:text-green-200">
+                ✓ Framer connection only requires your website URL. Click "Continue" to proceed.
+              </p>
+            </div>
           )}
 
           {/* Connection Steps Info */}
