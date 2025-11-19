@@ -701,32 +701,30 @@ export default function Articles() {
                       <h3 className="text-xl font-semibold text-foreground mb-2">
                         {post.title}
                       </h3>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
                         <div className="flex items-center gap-1">
                           <Clock className="w-4 h-4" />
                           <span>Ready to publish</span>
                         </div>
                         <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
                       </div>
-                      {!post.external_post_id && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                          💡 Click "Publish Now" to publish to Framer and get the Post ID
-                        </p>
-                      )}
-                      {post.external_post_id && (
-                        <div className="mt-2">
-                          <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-                            Post ID: {post.external_post_id}
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                        <div className="flex items-start gap-2">
+                          <Badge variant="outline" className="text-xs font-mono">
+                            Post ID: {post.id}
                           </Badge>
                         </div>
-                      )}
-                      <div className="flex gap-2 mt-2">
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                          💡 Use this Post ID to manually sync with Framer CMS, then click "Publish" below to update the status here
+                        </p>
+                      </div>
+                      <div className="flex gap-2 mt-4">
                         <Button
                           variant="default"
                           size="sm"
                           onClick={() => handlePublishNow(post.id)}
                         >
-                          Publish Now
+                          Publish
                         </Button>
                         <Button
                           variant="outline"
