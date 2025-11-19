@@ -43,7 +43,7 @@ const CMS_PLATFORMS = [
   // { id: "ghost" as const, name: "Ghost", icon: "👻", description: "Integrate Ghost publishing" },
   { id: "shopify" as const, name: "Shopify", icon: "🛍️", description: "Connect your Shopify store" },
   // { id: "wix" as const, name: "WIX", icon: "🌐", description: "Sync with WIX website" },
-  // { id: "framer" as const, name: "Framer", icon: "🎨", description: "Connect Framer site" },
+  { id: "framer" as const, name: "Framer", icon: "🎨", description: "Connect Framer site" },
   // { id: "notion" as const, name: "Notion", icon: "📝", description: "Sync with Notion database" },
   // { id: "hubspot" as const, name: "HubSpot", icon: "🎯", description: "Connect HubSpot CMS" },
   // { id: "nextjs" as const, name: "Next.js", icon: "⚫", description: "Connect Next.js blog" },
