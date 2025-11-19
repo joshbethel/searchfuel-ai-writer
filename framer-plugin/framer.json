@@ -1,0 +1,12 @@
+{
+  "id": "blog-automation-publisher",
+  "name": "Blog Automation Publisher",
+  "version": "1.0.0",
+  "description": "Publish your Framer content directly to your blog automation system",
+  "author": "Blog Automation",
+  "icon": "https://framerusercontent.com/images/default-plugin-icon.svg",
+  "main": "index.html",
+  "permissions": ["data.write"],
+  "width": 400,
+  "height": 600
+}
