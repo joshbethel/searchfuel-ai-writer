@@ -315,7 +315,7 @@ export default function Plans() {
         <div className="mt-12 text-center">
           <p className="text-sm text-muted-foreground">
             Need help choosing?{" "}
-            <a href="mailto:support@searchfuel.com" className="text-primary hover:underline">
+            <a href="mailto:team@trysearchfuel.com" className="text-primary hover:underline">
               Contact our team
             </a>
           </p>
