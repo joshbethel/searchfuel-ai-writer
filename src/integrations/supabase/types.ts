@@ -431,6 +431,7 @@ export type Database = {
           keywords_count: number | null
           plan_name: string
           posts_generated_count: number | null
+          sites_allowed: number | null
           status: string
           stripe_customer_id: string | null
           stripe_price_id: string | null
@@ -450,6 +451,7 @@ export type Database = {
           keywords_count?: number | null
           plan_name?: string
           posts_generated_count?: number | null
+          sites_allowed?: number | null
           status?: string
           stripe_customer_id?: string | null
           stripe_price_id?: string | null
@@ -469,6 +471,7 @@ export type Database = {
           keywords_count?: number | null
           plan_name?: string
           posts_generated_count?: number | null
+          sites_allowed?: number | null
           status?: string
           stripe_customer_id?: string | null
           stripe_price_id?: string | null
