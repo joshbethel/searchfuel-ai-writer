@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useSiteContext } from "@/contexts/SiteContext";
 
 interface Keyword {
   keyword: string;
@@ -27,6 +28,7 @@ interface Keyword {
 
 export default function Keywords() {
   const navigate = useNavigate();
+  const { selectedSite } = useSiteContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [isFetching, setIsFetching] = useState(true);
@@ -41,21 +43,12 @@ export default function Keywords() {
   // Fetch scheduled keywords
   const fetchScheduledKeywords = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: blog } = await supabase
-        .from("blogs")
-        .select("id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!blog) return;
+      if (!selectedSite) return;
 
       const { data: scheduled } = await supabase
         .from("scheduled_keywords")
         .select("keyword")
-        .eq("blog_id", blog.id)
+        .eq("blog_id", selectedSite.id)
         .eq("status", "pending");
 
       if (scheduled) {

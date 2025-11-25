@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSiteContext } from "@/contexts/SiteContext";
+import { canCreateSite } from "@/lib/utils/site-limits";
 import { format } from "date-fns";
 import {
   Search,
@@ -119,14 +121,17 @@ const ARTICLE_TYPE_LABELS: Record<string, { name: string; emoji: string }> = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { selectedSite, refreshSites } = useSiteContext();
   const [url, setUrl] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [scanData, setScanData] = useState<ScanData | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const [avgCpc, setAvgCpc] = useState<number>(0);
   
-  // Blog management state
-  const [blog, setBlog] = useState<Blog | null>(null);
+  // Use selectedSite from context instead of blog state
+  const blog = selectedSite as Blog | null;
+  
   const [analytics, setAnalytics] = useState<AnalyticsData[]>([]);
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [keywordRankings, setKeywordRankings] = useState<KeywordRanking[]>([]);
@@ -171,11 +176,34 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchUserBlog();
     fetchKeywordsCpc();
     fetchSubscription();
     fetchSiteCount();
   }, []);
+
+  // Check for action=add-site query parameter
+  useEffect(() => {
+    const action = searchParams.get('action');
+    if (action === 'add-site') {
+      setShowOnboarding(true);
+      // Clean up the URL
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Fetch data when selected site changes
+  useEffect(() => {
+    if (selectedSite) {
+      fetchAnalytics(selectedSite.id);
+      fetchBlogPosts(selectedSite.id);
+      fetchKeywordRankings();
+    } else {
+      // Clear data when no site is selected
+      setAnalytics([]);
+      setBlogPosts([]);
+      setKeywordRankings([]);
+    }
+  }, [selectedSite]);
 
   // Fetch count of user's sites
   const fetchSiteCount = async () => {
@@ -217,29 +245,7 @@ export default function Dashboard() {
     }
   };
 
-  const fetchUserBlog = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Get the latest blog for this user (in case of duplicates)
-    const { data } = await supabase
-      .from("blogs")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (data) {
-      setBlog(data as Blog);
-      fetchAnalytics(data.id);
-      fetchBlogPosts(data.id);
-      fetchKeywordRankings();
-    }
-    
-    // Refresh site count after fetching blog
-    fetchSiteCount();
-  };
+  // Removed fetchUserBlog - now using selectedSite from context
 
   const getDateRangeDays = (range: DateRange): number => {
     switch (range) {
@@ -364,10 +370,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (blog) {
-      fetchAnalytics(blog.id);
+    if (selectedSite) {
+      fetchAnalytics(selectedSite.id);
     }
-  }, [dateRange]);
+  }, [dateRange, selectedSite]);
 
   const handleDisconnectSite = async () => {
     if (!blog) return;
@@ -385,7 +391,7 @@ export default function Dashboard() {
 
       if (error) throw error;
 
-      await fetchUserBlog();
+      await refreshSites();
       setShowDisconnectDialog(false);
       toast.success("Site disconnected successfully - your content remains published");
     } catch (error: any) {
@@ -452,7 +458,8 @@ export default function Dashboard() {
       return;
     }
 
-    setBlog(data as Blog);
+      // Blog updated - refresh sites to get updated data
+      await refreshSites();
     setShowSettings(false);
     toast.success("Blog created successfully!");
   };
@@ -474,7 +481,7 @@ export default function Dashboard() {
       return;
     }
 
-    await fetchUserBlog();
+    await refreshSites();
     setShowSettings(false);
     toast.success("Blog updated successfully!");
   };
@@ -504,7 +511,7 @@ export default function Dashboard() {
       return;
     }
 
-    await fetchUserBlog();
+    await refreshSites();
     toast.success("Blog unpublished!");
   };
 
@@ -839,9 +846,9 @@ export default function Dashboard() {
           </div>
           <BlogOnboarding
             open={true}
-            onComplete={() => {
+            onComplete={async () => {
               setShowOnboarding(false);
-              fetchUserBlog();
+              await refreshSites();
             }}
             onCancel={() => setShowOnboarding(false)}
           />
@@ -1111,7 +1118,21 @@ export default function Dashboard() {
                   Your CMS is disconnected. Viewing historical data from all your published articles.
                 </p>
               </div>
-              <Button onClick={() => setShowOnboarding(true)} size="sm">
+              <Button 
+                onClick={async () => {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (user) {
+                    const canCreate = await canCreateSite(user.id);
+                    if (!canCreate) {
+                      toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+                      navigate("/plans");
+                      return;
+                    }
+                  }
+                  setShowOnboarding(true);
+                }} 
+                size="sm"
+              >
                 Connect New CMS
               </Button>
             </div>
@@ -1164,7 +1185,18 @@ export default function Dashboard() {
               
               <div className="flex flex-col items-center gap-3">
                 <Button 
-                  onClick={() => setShowOnboarding(true)}
+                  onClick={async () => {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                      const canCreate = await canCreateSite(user.id);
+                      if (!canCreate) {
+                        toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+                        navigate("/plans");
+                        return;
+                      }
+                    }
+                    setShowOnboarding(true);
+                  }}
                   disabled={subscription?.sites_allowed && siteCount >= subscription.sites_allowed}
                   className="w-full sm:w-auto"
                 >
@@ -1859,9 +1891,9 @@ export default function Dashboard() {
         {showPublishDialog && blog && (
           <PublishDialog
             blog={blog}
-            onComplete={() => {
+            onComplete={async () => {
               setShowPublishDialog(false);
-              fetchUserBlog();
+              await refreshSites();
             }}
             onCancel={() => setShowPublishDialog(false)}
           />

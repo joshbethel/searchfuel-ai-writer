@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useSiteContext } from '@/contexts/SiteContext';
 
 interface BlogPost {
   id: string;
@@ -17,9 +18,10 @@ interface BlogPost {
 }
 
 export function useArticles() {
+  const { selectedSite } = useSiteContext();
   const [articles, setArticles] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [blogId, setBlogId] = useState<string | null>(null);
+  const blogId = selectedSite?.id || null;
 
   const fetchArticles = useCallback(async () => {
     try {
@@ -28,69 +30,54 @@ export function useArticles() {
       if (userError) throw userError;
       if (!user) throw new Error("Not authenticated");
 
-      // Get blog and its posts in a single query
-      const { data: blog, error: blogError } = await supabase
-        .from("blogs")
-        .select(`
-          id,
-          blog_posts!inner (
-            id,
-            blog_id,
-            title,
-            slug,
-            status,
-            publishing_status,
-            external_post_id,
-            article_type,
-            created_at,
-            published_at,
-            scheduled_publish_date
-          )
-        `)
-        .eq("user_id", user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (blogError) throw blogError;
-
-      // Handle no blog case
-      if (!blog) {
+      // Use selected site from context
+      if (!selectedSite) {
         setArticles([]);
-        setBlogId(null);
+        setIsLoading(false);
         return;
       }
 
-      // Update state with sorted articles
-      setBlogId(blog.id);
-      console.log('Raw blog posts:', blog.blog_posts);
-      
-      const posts = (blog.blog_posts || []).map(post => {
-        const typedPost = post as any;
+      // Fetch posts for the selected site only
+      const { data: posts, error: postsError } = await supabase
+        .from("blog_posts")
+        .select(`
+          id,
+          blog_id,
+          title,
+          slug,
+          status,
+          publishing_status,
+          external_post_id,
+          article_type,
+          created_at,
+          published_at,
+          scheduled_publish_date
+        `)
+        .eq("blog_id", selectedSite.id)
+        .order('created_at', { ascending: false });
+
+      if (postsError) throw postsError;
+
+      // Map and sort posts
+      const mappedPosts = (posts || []).map(post => {
         const mappedPost = {
-          id: typedPost.id,
-          blog_id: typedPost.blog_id,
-          title: typedPost.title,
-          slug: typedPost.slug,
-          status: typedPost.status,
-          publishing_status: typedPost.publishing_status,
-          external_post_id: typedPost.external_post_id,
-          article_type: typedPost.article_type,
-          created_at: typedPost.created_at,
-          published_at: typedPost.published_at,
-          scheduled_publish_date: typedPost.scheduled_publish_date
+          id: post.id,
+          blog_id: post.blog_id,
+          title: post.title,
+          slug: post.slug,
+          status: post.status,
+          publishing_status: post.publishing_status,
+          external_post_id: post.external_post_id,
+          article_type: post.article_type,
+          created_at: post.created_at,
+          published_at: post.published_at,
+          scheduled_publish_date: post.scheduled_publish_date
         } as BlogPost;
-        
-        console.log('Mapped post:', {
-          id: mappedPost.id,
-          status: mappedPost.publishing_status,
-          scheduled_date: mappedPost.scheduled_publish_date
-        });
         
         return mappedPost;
       });
       
-      const sortedPosts = posts.sort(
+      const sortedPosts = mappedPosts.sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
       setArticles(sortedPosts);
@@ -106,14 +93,13 @@ export function useArticles() {
     } finally {
       setIsLoading(false);
     }
-  }, []); // No dependencies needed since we use state setters
+  }, [selectedSite]);
 
   return {
     articles,
     isLoading,
     blogId,
     fetchArticles,
-    setArticles,
-    setBlogId
+    setArticles
   };
 }

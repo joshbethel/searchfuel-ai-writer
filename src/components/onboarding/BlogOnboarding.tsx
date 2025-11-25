@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import { ArticleTypeSettings } from "@/components/settings/ArticleTypeSettings";
+import { canCreateSite, getSiteLimitInfo } from "@/lib/utils/site-limits";
+import { useNavigate } from "react-router-dom";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type CMSPlatform =
   | "wordpress"
@@ -51,17 +54,43 @@ const CMS_PLATFORMS = [
 ];
 
 export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingProps) {
+  const navigate = useNavigate();
   const [selectedPlatform, setSelectedPlatform] = useState<CMSPlatform | null>(null);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [currentStep, setCurrentStep] = useState<"platform" | "connection" | "article-types">("platform");
   const [blogId, setBlogId] = useState<string | null>(null);
+  const [siteLimitInfo, setSiteLimitInfo] = useState<{
+    limit: number;
+    count: number;
+    remaining: number;
+    canCreate: boolean;
+  } | null>(null);
   const [connectionData, setConnectionData] = useState<CMSConnection>({
     platform: "wordpress",
     siteUrl: "",
     apiKey: "",
     apiSecret: "",
   });
+
+  // Check site limit on mount
+  useEffect(() => {
+    if (open) {
+      checkSiteLimit();
+    }
+  }, [open]);
+
+  const checkSiteLimit = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const info = await getSiteLimitInfo(user.id);
+      setSiteLimitInfo(info);
+    } catch (error) {
+      console.error("Error checking site limit:", error);
+    }
+  };
 
   const handleTestConnection = async () => {
     if (!selectedPlatform || !connectionData.siteUrl) {
@@ -107,11 +136,6 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
       return;
     }
 
-    // Add https:// if no protocol is specified
-    const formattedUrl = connectionData.siteUrl.trim().match(/^https?:\/\//)
-      ? connectionData.siteUrl.trim()
-      : `https://${connectionData.siteUrl.trim()}`;
-
     setLoading(true);
     try {
       const {
@@ -119,8 +143,55 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Check if blog already exists for this user
-      const { data: existingBlog } = await supabase.from("blogs").select("id").eq("user_id", user.id).maybeSingle();
+      // Check site limit before creating new blog
+      const canCreate = await canCreateSite(user.id);
+      if (!canCreate) {
+        toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+        navigate("/plans");
+        setLoading(false);
+        return;
+      }
+
+      // Add https:// if no protocol is specified
+      const formattedUrl = connectionData.siteUrl.trim().match(/^https?:\/\//)
+        ? connectionData.siteUrl.trim()
+        : `https://${connectionData.siteUrl.trim()}`;
+
+      // Normalize URL for comparison (remove trailing slash, convert to lowercase)
+      const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, '');
+
+      // Check if a site with the same URL already exists for this user
+      const { data: existingSites, error: checkError } = await supabase
+        .from("blogs")
+        .select("id, website_homepage, cms_site_url, title")
+        .eq("user_id", user.id);
+
+      if (checkError) {
+        console.error("Error checking for existing sites:", checkError);
+        throw new Error("Failed to verify site URL");
+      }
+
+      // Check if URL already exists (check both website_homepage and cms_site_url)
+      const urlExists = existingSites?.some((site) => {
+        const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, '');
+        const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, '');
+        return existingHomepage === normalizedUrl || existingCmsUrl === normalizedUrl;
+      });
+
+      if (urlExists) {
+        const existingSite = existingSites?.find((site) => {
+          const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, '');
+          const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, '');
+          return existingHomepage === normalizedUrl || existingCmsUrl === normalizedUrl;
+        });
+        
+        toast.error(
+          `A site with this URL already exists: ${existingSite?.title || 'Untitled Site'}. ` +
+          `Please use a different URL or edit the existing site from Settings.`
+        );
+        setLoading(false);
+        return;
+      }
 
       // Extract site name from URL for title
       const siteName = new URL(formattedUrl).hostname.split(".")[0];
@@ -188,33 +259,18 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
         cms_credentials: encryptedCredentials,
       };
 
-      let resultData;
+      // Always create a new blog (multi-site support)
+      // If editing is needed in the future, we can add a blogId prop
+      const { data: resultData, error } = await supabase
+        .from("blogs")
+        .insert({
+          user_id: user.id,
+          ...blogData,
+        })
+        .select()
+        .single();
 
-      if (existingBlog) {
-        // Update existing blog with CMS connection
-        const { data, error } = await supabase
-          .from("blogs")
-          .update(blogData)
-          .eq("id", existingBlog.id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        resultData = data;
-      } else {
-        // Create new blog
-        const { data, error } = await supabase
-          .from("blogs")
-          .insert({
-            user_id: user.id,
-            ...blogData,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        resultData = data;
-      }
+      if (error) throw error;
 
       toast.success("CMS connected successfully!");
       setBlogId(resultData.id);
@@ -480,6 +536,36 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
           Choose your platform to automatically sync and publish SEO-optimized content
         </p>
       </div>
+
+      {/* Site Limit Warning */}
+      {siteLimitInfo && !siteLimitInfo.canCreate && (
+        <Alert className="mb-6 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="text-amber-800 dark:text-amber-200">Site Limit Reached</AlertTitle>
+          <AlertDescription className="text-amber-700 dark:text-amber-300">
+            You've reached your site limit ({siteLimitInfo.count} of {siteLimitInfo.limit} sites). 
+            Please upgrade your plan to add more sites.
+            <Button
+              variant="link"
+              className="p-0 h-auto ml-2 text-amber-700 dark:text-amber-300 underline"
+              onClick={() => {
+                onCancel();
+                navigate("/plans");
+              }}
+            >
+              Upgrade Now →
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {siteLimitInfo && siteLimitInfo.remaining > 0 && (
+        <Alert className="mb-6 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+          <AlertDescription className="text-blue-700 dark:text-blue-300">
+            You can add {siteLimitInfo.remaining} more {siteLimitInfo.remaining === 1 ? 'site' : 'sites'} ({siteLimitInfo.count} of {siteLimitInfo.limit} used).
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 gap-10">
         {CMS_PLATFORMS.map((platform) => (

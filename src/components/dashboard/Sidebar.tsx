@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { SiteSwitcher } from "@/components/dashboard/SiteSwitcher";
 import logo from "@/assets/logo.png";
 
 const navigation = [
@@ -37,6 +38,9 @@ export function Sidebar() {
             </div>
           </div>
         </div>
+
+        {/* Site Switcher */}
+        <SiteSwitcher />
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">

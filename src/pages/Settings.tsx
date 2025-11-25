@@ -2,7 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { CheckCircle2, Loader2, Globe, Plus, Edit, Trash2, Check, AlertCircle, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -13,22 +14,61 @@ import { ArticleTypeSettings } from "@/components/settings/ArticleTypeSettings";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getPlanLimits } from "@/lib/utils/subscription-limits";
 import type { Database } from "@/integrations/supabase/types";
+import { useSiteContext } from "@/contexts/SiteContext";
+import { canCreateSite, getSiteLimitInfo } from "@/lib/utils/site-limits";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { format } from "date-fns";
 
 type Subscription = Database['public']['Tables']['subscriptions']['Row'];
 
 export default function Settings() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { selectedSite, allSites, selectSite, refreshSites, isLoading: sitesLoading } = useSiteContext();
   const [user, setUser] = useState<User | null>(null);
-  const [blogId, setBlogId] = useState<string | null>(null);
+  const blogId = selectedSite?.id || null;
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [siteCount, setSiteCount] = useState<number>(0);
+  const [siteLimitInfo, setSiteLimitInfo] = useState<{
+    limit: number;
+    count: number;
+    remaining: number;
+    canCreate: boolean;
+  } | null>(null);
+  const [deleteSiteId, setDeleteSiteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editSiteId, setEditSiteId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    company_name: "",
+    auto_post_enabled: true,
+  });
   
   const tabParam = searchParams.get('tab');
-  const defaultTab = (tabParam === 'backlinks' || tabParam === 'article-types' || tabParam === 'subscription') ? tabParam : 'account';
+  const defaultTab = (tabParam === 'backlinks' || tabParam === 'article-types' || tabParam === 'subscription' || tabParam === 'sites') ? tabParam : 'account';
   const sessionId = searchParams.get('session_id');
   const canceled = searchParams.get('canceled');
 
@@ -176,23 +216,118 @@ export default function Settings() {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       
-      // Load user's blog
+      // Load subscription and site count
       if (currentUser) {
-        supabase
-          .from("blogs")
-          .select("id")
-          .eq("user_id", currentUser.id)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (data) setBlogId(data.id);
-          });
-
         // Fetch subscription and site count
         fetchSubscription(currentUser.id);
         fetchSiteCount(currentUser.id);
+        fetchSiteLimitInfo(currentUser.id);
       }
     });
   }, []);
+
+  const fetchSiteLimitInfo = async (userId: string) => {
+    const info = await getSiteLimitInfo(userId);
+    setSiteLimitInfo(info);
+  };
+
+  const handleDeleteSite = async () => {
+    if (!deleteSiteId) return;
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('blogs')
+        .delete()
+        .eq('id', deleteSiteId);
+
+      if (error) throw error;
+
+      toast.success("Site deleted successfully");
+      setDeleteSiteId(null);
+      
+      // Refresh sites list
+      await refreshSites();
+      
+      // Refresh site count and limit info
+      if (user) {
+        await fetchSiteCount(user.id);
+        await fetchSiteLimitInfo(user.id);
+      }
+    } catch (error: any) {
+      console.error("Error deleting site:", error);
+      toast.error("Failed to delete site: " + error.message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleAddSite = async () => {
+    if (!user) return;
+
+    const canCreate = await canCreateSite(user.id);
+    if (!canCreate) {
+      toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+      navigate("/plans");
+      return;
+    }
+
+    // Navigate to dashboard to start onboarding
+    navigate("/dashboard?action=add-site");
+  };
+
+  const handleEditSite = (site: typeof allSites[0]) => {
+    setEditSiteId(site.id);
+    setEditForm({
+      title: site.title || "",
+      description: site.description || "",
+      company_name: site.company_name || "",
+      auto_post_enabled: site.auto_post_enabled ?? true,
+    });
+  };
+
+  const handleUpdateSite = async () => {
+    if (!editSiteId) return;
+
+    setIsEditing(true);
+    try {
+      const { error } = await supabase
+        .from('blogs')
+        .update({
+          title: editForm.title,
+          description: editForm.description || null,
+          company_name: editForm.company_name || null,
+          auto_post_enabled: editForm.auto_post_enabled,
+        })
+        .eq('id', editSiteId);
+
+      if (error) throw error;
+
+      toast.success("Site updated successfully");
+      setEditSiteId(null);
+      
+      // Refresh sites list
+      await refreshSites();
+      
+      // Refresh site count and limit info
+      if (user) {
+        await fetchSiteCount(user.id);
+        await fetchSiteLimitInfo(user.id);
+      }
+    } catch (error: any) {
+      console.error("Error updating site:", error);
+      toast.error("Failed to update site: " + error.message);
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleViewDashboard = (siteId: string) => {
+    // Set the site as active first
+    selectSite(siteId);
+    // Then navigate to dashboard
+    navigate("/dashboard");
+  };
 
   // Handle checkout session completion
   useEffect(() => {
@@ -300,12 +435,331 @@ export default function Settings() {
         </div>
 
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="account">Account</TabsTrigger>
+          <TabsTrigger value="sites">Sites</TabsTrigger>
           <TabsTrigger value="article-types">Article Types</TabsTrigger>
           <TabsTrigger value="backlinks">Backlinks</TabsTrigger>
           <TabsTrigger value="subscription">Subscription</TabsTrigger>
         </TabsList>
+
+          <TabsContent value="sites" className="space-y-6 mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Sites</CardTitle>
+                    <CardDescription>
+                      Manage all your connected sites
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={handleAddSite}
+                    disabled={siteLimitInfo && !siteLimitInfo.canCreate}
+                    className="bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Site
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Site Limit Info */}
+                {siteLimitInfo && (
+                  <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">Sites</span>
+                        <span className="text-sm text-muted-foreground">
+                          {siteLimitInfo.count} of {siteLimitInfo.limit}
+                        </span>
+                      </div>
+                      {siteLimitInfo.count >= siteLimitInfo.limit ? (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                          Limit Reached
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800">
+                          {siteLimitInfo.remaining} available
+                        </Badge>
+                      )}
+                    </div>
+                    {siteLimitInfo.count >= siteLimitInfo.limit && (
+                      <div className="pt-2 border-t border-border/50">
+                        <p className="text-xs text-muted-foreground text-left mb-2">
+                          You've reached your site limit. Upgrade your plan to add more sites.
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate("/plans")}
+                        >
+                          Upgrade Plan
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Sites List */}
+                {sitesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : allSites.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Globe className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground mb-4">No sites connected yet</p>
+                    <Button
+                      onClick={handleAddSite}
+                      className="bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Your First Site
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {allSites.map((site) => {
+                      const isActive = selectedSite?.id === site.id;
+                      const siteUrl = site.custom_domain || site.subdomain || site.website_homepage || "No URL";
+                      const getCMSName = (platform: string | null) => {
+                        const names: { [key: string]: string } = {
+                          wordpress: "WordPress",
+                          webflow: "Webflow",
+                          ghost: "Ghost",
+                          shopify: "Shopify",
+                          wix: "WIX",
+                          framer: "Framer",
+                          notion: "Notion",
+                          hubspot: "HubSpot",
+                          nextjs: "Next.js",
+                          rest_api: "REST API",
+                        };
+                        return names[platform || ""] || platform || "Unknown";
+                      };
+                      const articleTypesCount = site.article_types 
+                        ? Object.values(site.article_types).filter(Boolean).length 
+                        : 0;
+                      
+                      return (
+                        <Card 
+                          key={site.id} 
+                          className={`overflow-hidden transition-all hover:shadow-md ${
+                            isActive ? "border-2 border-accent shadow-sm" : "border"
+                          }`}
+                        >
+                          <CardContent className="p-0">
+                            {/* Header Section */}
+                            <div className={`p-5 border-b ${isActive ? "bg-accent/5" : "bg-muted/30"}`}>
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
+                                      <Globe className="w-5 h-5 text-accent" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <h3 className="text-lg font-semibold text-foreground truncate">
+                                        {site.title || "Untitled Site"}
+                                      </h3>
+                                      <p className="text-sm text-muted-foreground truncate mt-0.5">
+                                        {siteUrl}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {isActive && (
+                                      <Badge className="bg-accent text-accent-foreground border-0">
+                                        <Check className="w-3 h-3 mr-1" />
+                                        Active
+                                      </Badge>
+                                    )}
+                                    {site.cms_platform ? (
+                                      <Badge variant="default" className="bg-blue-600 text-white border-0">
+                                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                                        Connected
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="secondary">
+                                        Disconnected
+                                      </Badge>
+                                    )}
+                                    {site.onboarding_completed && (
+                                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800">
+                                        Onboarded
+                                      </Badge>
+                                    )}
+                                    {articleTypesCount > 0 && (
+                                      <Badge variant="outline">
+                                        {articleTypesCount} Article Types
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* Action Buttons */}
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => handleViewDashboard(site.id)}
+                                    className="h-9 bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+                                  >
+                                    <ArrowRight className="w-4 h-4 mr-1.5" />
+                                    View Dashboard
+                                  </Button>
+                                  {!isActive && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => selectSite(site.id)}
+                                      className="h-9"
+                                    >
+                                      <Check className="w-4 h-4 mr-1.5" />
+                                      Set Active
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleEditSite(site)}
+                                    className="h-9 w-9 p-0"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setDeleteSiteId(site.id)}
+                                    className="h-9 w-9 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Details Section */}
+                            <div className="p-5">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Basic Information */}
+                                <div className="space-y-4">
+                                  <div>
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                                      Basic Information
+                                    </h4>
+                                    <div className="space-y-3">
+                                      {site.description && (
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-1">Description</p>
+                                          <p className="text-sm text-foreground">{site.description}</p>
+                                        </div>
+                                      )}
+                                      {site.company_name && (
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-1">Company</p>
+                                          <p className="text-sm font-medium text-foreground">{site.company_name}</p>
+                                        </div>
+                                      )}
+                                      {site.subdomain && (
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-1">Subdomain</p>
+                                          <p className="text-sm text-foreground font-mono">{site.subdomain}</p>
+                                        </div>
+                                      )}
+                                      {site.custom_domain && (
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-1">Custom Domain</p>
+                                          <p className="text-sm text-foreground font-mono">{site.custom_domain}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* CMS Configuration */}
+                                {site.cms_platform && (
+                                  <div className="space-y-4">
+                                    <div>
+                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                                        CMS Configuration
+                                      </h4>
+                                      <div className="space-y-3">
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-1">Platform</p>
+                                          <p className="text-sm font-medium text-foreground">{getCMSName(site.cms_platform)}</p>
+                                        </div>
+                                        {site.cms_site_url && (
+                                          <div>
+                                            <p className="text-xs text-muted-foreground mb-1">CMS URL</p>
+                                            <a 
+                                              href={site.cms_site_url} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="text-sm text-accent hover:underline truncate block"
+                                            >
+                                              {site.cms_site_url}
+                                            </a>
+                                          </div>
+                                        )}
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-1">Mode</p>
+                                          <Badge variant="outline" className="text-xs">
+                                            {site.mode?.replace('_', ' ') || "N/A"}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Settings & Stats */}
+                                <div className="space-y-4">
+                                  <div>
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                                      Settings & Stats
+                                    </h4>
+                                    <div className="space-y-3">
+                                      {site.auto_post_enabled !== null && (
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-1.5">Auto-Post</p>
+                                          {site.auto_post_enabled ? (
+                                            <Badge className="bg-green-600 text-white border-0">
+                                              Enabled
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="secondary">Disabled</Badge>
+                                          )}
+                                        </div>
+                                      )}
+                                      <div>
+                                        <p className="text-xs text-muted-foreground mb-1">Created</p>
+                                        <p className="text-sm text-foreground">
+                                          {format(new Date(site.created_at), "MMM d, yyyy")}
+                                        </p>
+                                      </div>
+                                      {site.last_post_generated_at && (
+                                        <div>
+                                          <p className="text-xs text-muted-foreground mb-1">Last Post Generated</p>
+                                          <p className="text-sm text-foreground">
+                                            {format(new Date(site.last_post_generated_at), "MMM d, yyyy")}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="account" className="space-y-6 mt-6">
             {/* Organization Section */}
@@ -552,6 +1006,116 @@ export default function Settings() {
 
           </TabsContent>
         </Tabs>
+
+        {/* Edit Site Dialog */}
+        <Dialog open={!!editSiteId} onOpenChange={(open) => !open && setEditSiteId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Site</DialogTitle>
+              <DialogDescription>
+                Update your site's title, description, and company name.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title">Title *</Label>
+                <Input
+                  id="edit-title"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  placeholder="Site title"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Input
+                  id="edit-description"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  placeholder="Site description"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-company">Company Name</Label>
+                <Input
+                  id="edit-company"
+                  value={editForm.company_name}
+                  onChange={(e) => setEditForm({ ...editForm, company_name: e.target.value })}
+                  placeholder="Company name"
+                />
+              </div>
+              <div className="flex items-center justify-between space-x-2 pt-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="edit-auto-post">Auto-Post</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically publish generated articles to your CMS
+                  </p>
+                </div>
+                <Switch
+                  id="edit-auto-post"
+                  checked={editForm.auto_post_enabled}
+                  onCheckedChange={(checked) => setEditForm({ ...editForm, auto_post_enabled: checked })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setEditSiteId(null)}
+                disabled={isEditing}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUpdateSite}
+                disabled={isEditing || !editForm.title.trim()}
+                className="bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+              >
+                {isEditing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update Site"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Site Confirmation Dialog */}
+        <AlertDialog open={!!deleteSiteId} onOpenChange={(open) => !open && setDeleteSiteId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                Delete Site
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this site? This action cannot be undone. 
+                All articles, keywords, and data associated with this site will be permanently deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteSite}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Site"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
