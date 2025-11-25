@@ -164,69 +164,69 @@ export default function Plans() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted py-12 px-4">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted py-6 px-4">
+      <div className="max-w-6xl mx-auto">
         {/* Navigation */}
-        <div className="mb-8">
+        <div className="mb-4">
           <Link
             to="/"
-            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3 h-3" />
             <span>Go to Home</span>
           </Link>
         </div>
 
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
             Choose Your Plan
           </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-base text-muted-foreground">
             Start generating SEO-optimized content that drives traffic and conversions
           </p>
           {/* Show message if user already has active subscription */}
           {user && !checkingSubscription && hasActiveSubscription && (
-            <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg border border-primary/20">
-              <Check className="w-5 h-5" />
-              <span className="font-medium">You already have an active subscription</span>
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg border border-primary/20 text-sm">
+              <Check className="w-4 h-4" />
+              <span>You already have an active subscription</span>
             </div>
           )}
         </div>
 
         {/* Plans Grid */}
-        <div className="grid md:grid-cols-1 gap-8 max-w-2xl mx-auto">
+        <div className="grid md:grid-cols-1 gap-6 max-w-3xl mx-auto">
           {/* Pro Plan */}
           <Card className="relative border-2 border-primary shadow-lg hover:shadow-xl transition-all duration-300">
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-              <Badge className="bg-primary text-primary-foreground px-4 py-1 text-sm font-semibold">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <Badge className="bg-primary text-primary-foreground px-3 py-0.5 text-xs font-semibold">
                 Most Popular
               </Badge>
             </div>
             
-            <CardHeader className="text-center pb-4">
-              <CardTitle className="text-3xl mb-2">Pro Plan</CardTitle>
-              <CardDescription className="text-lg">
+            <CardHeader className="text-center pb-3 pt-6">
+              <CardTitle className="text-2xl mb-1">Pro Plan</CardTitle>
+              <CardDescription className="text-sm">
                 Everything you need to scale your content
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
               {/* Quantity Selector */}
-              <div className="space-y-3">
-                <Label htmlFor="quantity" className="text-base font-semibold">
+              <div className="space-y-2">
+                <Label htmlFor="quantity" className="text-sm font-semibold">
                   Number of Sites
                 </Label>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     disabled={quantity <= 1}
-                    className="h-10 w-10"
+                    className="h-8 w-8"
                   >
-                    <Minus className="h-4 w-4" />
+                    <Minus className="h-3 w-3" />
                   </Button>
                   <Input
                     id="quantity"
@@ -238,7 +238,7 @@ export default function Plans() {
                       const value = parseInt(e.target.value) || 1;
                       setQuantity(Math.max(1, Math.min(10, value)));
                     }}
-                    className="text-center text-lg font-semibold w-20"
+                    className="text-center text-base font-semibold w-16 h-8"
                   />
                   <Button
                     type="button"
@@ -246,9 +246,9 @@ export default function Plans() {
                     size="icon"
                     onClick={() => setQuantity(Math.min(10, quantity + 1))}
                     disabled={quantity >= 10}
-                    className="h-10 w-10"
+                    className="h-8 w-8"
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3 w-3" />
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -256,18 +256,18 @@ export default function Plans() {
                 </p>
               </div>
 
-              {/* Features List */}
-              <div className="space-y-4">
+              {/* Features List - 2 columns for compact display */}
+              <div className="grid grid-cols-2 gap-2">
                 {features.map((feature, index) => {
                   const Icon = feature.icon;
                   return (
-                    <div key={index} className="flex items-start gap-3">
-                      <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center mt-0.5 shrink-0">
-                        <Check className="w-3 h-3 text-primary" />
+                    <div key={index} className="flex items-start gap-2">
+                      <div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center mt-0.5 shrink-0">
+                        <Check className="w-2.5 h-2.5 text-primary" />
                       </div>
-                      <div className="flex items-center gap-2 flex-1">
-                        <Icon className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-foreground">{feature.text}</span>
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-sm text-foreground leading-tight">{feature.text}</span>
                       </div>
                     </div>
                   );
@@ -275,46 +275,46 @@ export default function Plans() {
               </div>
 
               {/* Limits */}
-              <div className="pt-4 border-t space-y-2">
+              <div className="pt-3 border-t space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Articles per month</span>
-                  <span className="font-semibold text-foreground">20</span>
+                  <span className="text-xs text-muted-foreground">Articles per month</span>
+                  <span className="font-semibold text-sm text-foreground">20</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Keywords tracking</span>
-                  <span className="font-semibold text-foreground">100</span>
+                  <span className="text-xs text-muted-foreground">Keywords tracking</span>
+                  <span className="font-semibold text-sm text-foreground">100</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Sites allowed</span>
-                  <span className="font-semibold text-foreground">{quantity}</span>
+                  <span className="text-xs text-muted-foreground">Sites allowed</span>
+                  <span className="font-semibold text-sm text-foreground">{quantity}</span>
                 </div>
               </div>
             </CardContent>
 
-            <CardFooter className="flex flex-col gap-4">
+            <CardFooter className="flex flex-col gap-2 pt-4">
               {checkingAuth ? (
                 <Button
                   disabled
-                  className="w-full text-lg py-6"
+                  className="w-full text-base py-5"
                   size="lg"
                 >
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Checking authentication...
                 </Button>
               ) : checkingSubscription ? (
                 <Button
                   disabled
-                  className="w-full text-lg py-6"
+                  className="w-full text-base py-5"
                   size="lg"
                 >
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Checking subscription...
                 </Button>
               ) : !user ? (
                 <>
                   <Button
                     onClick={() => navigate("/auth")}
-                    className="w-full text-lg py-6"
+                    className="w-full text-base py-5"
                     size="lg"
                   >
                     Sign In to Select Plan
@@ -327,7 +327,7 @@ export default function Plans() {
                 <>
                   <Button
                     onClick={() => navigate("/dashboard")}
-                    className="w-full text-lg py-6"
+                    className="w-full text-base py-5"
                     size="lg"
                   >
                     Go to Dashboard
@@ -341,12 +341,12 @@ export default function Plans() {
                   <Button
                     onClick={handleSelectPlan}
                     disabled={loading}
-                    className="w-full text-lg py-6"
+                    className="w-full text-base py-5"
                     size="lg"
                   >
                     {loading ? (
                       <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Processing...
                       </>
                     ) : (
@@ -363,8 +363,8 @@ export default function Plans() {
         </div>
 
         {/* Additional Info */}
-        <div className="mt-12 text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="mt-6 text-center">
+          <p className="text-xs text-muted-foreground">
             Need help choosing?{" "}
             <a href="mailto:team@trysearchfuel.com" className="text-primary hover:underline">
               Contact our team

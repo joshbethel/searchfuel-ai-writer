@@ -137,6 +137,7 @@ export default function Dashboard() {
   const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+  const [siteCount, setSiteCount] = useState<number>(0);
   const [blogForm, setBlogForm] = useState({
     subdomain: "",
     title: "",
@@ -173,7 +174,26 @@ export default function Dashboard() {
     fetchUserBlog();
     fetchKeywordsCpc();
     fetchSubscription();
+    fetchSiteCount();
   }, []);
+
+  // Fetch count of user's sites
+  const fetchSiteCount = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { count, error } = await supabase
+      .from("blogs")
+      .select("*", { count: 'exact', head: true })
+      .eq("user_id", user.id);
+
+    if (error) {
+      console.error("Error fetching site count:", error);
+      return;
+    }
+
+    setSiteCount(count || 0);
+  };
 
   // Check if user has active subscription
   const hasActiveSubscription = subscription && 
@@ -216,6 +236,9 @@ export default function Dashboard() {
       fetchBlogPosts(data.id);
       fetchKeywordRankings();
     }
+    
+    // Refresh site count after fetching blog
+    fetchSiteCount();
   };
 
   const getDateRangeDays = (range: DateRange): number => {
@@ -1108,9 +1131,55 @@ export default function Dashboard() {
               <p className="text-muted-foreground mb-6">
                 Connect your website to start generating SEO-optimized content and tracking performance.
               </p>
-              <Button onClick={() => setShowOnboarding(true)}>
-                Connect Site
-              </Button>
+              
+              {/* Site Limit Information */}
+              {subscription?.sites_allowed && (
+                <div className="mb-6 p-4 bg-muted/30 rounded-lg border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">Sites</span>
+                      <span className="text-sm text-muted-foreground">
+                        {siteCount} of {subscription.sites_allowed}
+                      </span>
+                    </div>
+                    {siteCount >= subscription.sites_allowed ? (
+                      <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                        Limit Reached
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800">
+                        {subscription.sites_allowed - siteCount} available
+                      </Badge>
+                    )}
+                  </div>
+                  {siteCount >= subscription.sites_allowed && (
+                    <div className="pt-2 border-t border-border/50">
+                      <p className="text-xs text-muted-foreground text-left">
+                        You've reached your site limit. Upgrade your plan to add more sites.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className="flex flex-col items-center gap-3">
+                <Button 
+                  onClick={() => setShowOnboarding(true)}
+                  disabled={subscription?.sites_allowed && siteCount >= subscription.sites_allowed}
+                  className="w-full sm:w-auto"
+                >
+                  Connect Site
+                </Button>
+                {subscription?.sites_allowed && siteCount >= subscription.sites_allowed && (
+                  <Button
+                    variant="link"
+                    className="text-sm h-auto p-0"
+                    onClick={() => navigate('/plans')}
+                  >
+                    Upgrade to add more sites →
+                  </Button>
+                )}
+              </div>
             </div>
           </Card>
 ) : blog.cms_platform ? (
@@ -1743,15 +1812,37 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Subscription */}
+        {/* Subscription & Site Limits */}
         {blog && blog.cms_platform && (
           <Card className="p-6 mb-6 bg-card shadow-sm">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1">
                 <h3 className="text-lg font-semibold text-foreground mb-1">Subscription</h3>
-                <p className="text-sm text-muted-foreground">
-                  Current plan: <span className="font-medium text-foreground">Free</span>
-                </p>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">
+                    Current plan: <span className="font-medium text-foreground">
+                      {subscription?.plan_name ? subscription.plan_name.charAt(0).toUpperCase() + subscription.plan_name.slice(1) : 'Free'}
+                    </span>
+                  </p>
+                  {subscription?.sites_allowed && (
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        Sites: <span className="font-medium text-foreground">
+                          {siteCount} of {subscription.sites_allowed}
+                        </span>
+                      </p>
+                      {siteCount >= subscription.sites_allowed ? (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs">
+                          Limit Reached
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800 text-xs">
+                          {subscription.sites_allowed - siteCount} available
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <Button
                 variant="outline"
