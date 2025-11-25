@@ -25,6 +25,7 @@ export default function Settings() {
   const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
   const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+  const [siteCount, setSiteCount] = useState<number>(0);
   
   const tabParam = searchParams.get('tab');
   const defaultTab = (tabParam === 'backlinks' || tabParam === 'article-types' || tabParam === 'subscription') ? tabParam : 'account';
@@ -155,6 +156,21 @@ export default function Settings() {
     }
   };
 
+  // Fetch site count
+  const fetchSiteCount = async (userId: string) => {
+    const { count, error } = await supabase
+      .from("blogs")
+      .select("*", { count: 'exact', head: true })
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Error fetching site count:", error);
+      return;
+    }
+
+    setSiteCount(count || 0);
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
@@ -171,8 +187,9 @@ export default function Settings() {
             if (data) setBlogId(data.id);
           });
 
-        // Fetch subscription
+        // Fetch subscription and site count
         fetchSubscription(currentUser.id);
+        fetchSiteCount(currentUser.id);
       }
     });
   }, []);
@@ -424,6 +441,29 @@ export default function Settings() {
                         />
                       </div>
                     </div>
+                    {subscription?.sites_allowed && (
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-muted-foreground">Sites</span>
+                          <span>{siteCount} / {subscription.sites_allowed}</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full transition-all ${
+                              siteCount >= subscription.sites_allowed 
+                                ? 'bg-amber-500' 
+                                : 'bg-[#8B7355]'
+                            }`}
+                            style={{ width: `${Math.min((siteCount / subscription.sites_allowed) * 100, 100)}%` }}
+                          />
+                        </div>
+                        {siteCount >= subscription.sites_allowed && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                            Site limit reached. Upgrade to add more sites.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
             
