@@ -20,6 +20,7 @@ import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import { ProtectedRoute } from "./layouts/ProtectedRoute";
 import { SubscriptionProtectedRoute } from "./layouts/SubscriptionProtectedRoute";
+import { SiteProvider } from "./contexts/SiteContext";
 
 const queryClient = new QueryClient();
 
@@ -28,28 +29,30 @@ const App = () => (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Auth />} />
-          <Route path="/index" element={<Index />} />
-          <Route path="/plans" element={<Plans />} />
-          <Route path="/presentation" element={<Presentation />} />
-          <Route element={<SubscriptionProtectedRoute><DashboardLayout /></SubscriptionProtectedRoute>}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/articles" element={<Articles />} />
-            <Route path="/articles/:id" element={<ArticleDetail />} />
-            <Route path="/keywords" element={<Keywords />} />
-            <Route path="/calendar" element={<Calendar />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/debug" element={<WordPressDebug />} />
-          </Route>
-          {/* SearchFuel blog routes */}
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/blog/:slug" element={<BlogPost />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+      <SiteProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Auth />} />
+            <Route path="/index" element={<Index />} />
+            <Route path="/plans" element={<Plans />} />
+            <Route path="/presentation" element={<Presentation />} />
+            <Route element={<SubscriptionProtectedRoute><DashboardLayout /></SubscriptionProtectedRoute>}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/articles" element={<Articles />} />
+              <Route path="/articles/:id" element={<ArticleDetail />} />
+              <Route path="/keywords" element={<Keywords />} />
+              <Route path="/calendar" element={<Calendar />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/debug" element={<WordPressDebug />} />
+            </Route>
+            {/* SearchFuel blog routes */}
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </SiteProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );
