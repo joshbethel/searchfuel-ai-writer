@@ -83,7 +83,7 @@ serve(async (req) => {
     }
 
     const stripe = new Stripe(stripeKey, {
-      apiVersion: "2025-08-27.basil",
+      apiVersion: "2025-10-29.clover",
     });
 
     const supabaseService = createClient(
@@ -145,6 +145,7 @@ serve(async (req) => {
         stripe_customer_id: customerId,
         status: 'inactive',
         plan_name: null, // No default plan - user must select one
+        sites_allowed: 1, // Default to 1 site
         posts_generated_count: 0,
         keywords_count: 0,
       }, {
