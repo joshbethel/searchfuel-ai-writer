@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Check, Sparkles, TrendingUp, Target, BarChart3, Globe, Zap, Link2, FileText, Home, ArrowLeft } from "lucide-react";
+import { Loader2, Check, Sparkles, TrendingUp, Target, BarChart3, Globe, Zap, Link2, FileText, Home, ArrowLeft, Minus, Plus } from "lucide-react";
 import { User } from "@supabase/supabase-js";
 import { Link } from "react-router-dom";
 
@@ -20,6 +22,7 @@ export default function Plans() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [checkingSubscription, setCheckingSubscription] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const navigate = useNavigate();
 
   // Fetch subscription status
@@ -129,7 +132,7 @@ export default function Plans() {
       }
 
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-        body: {}
+        body: { quantity }
       });
 
       if (error) throw error;
@@ -209,6 +212,50 @@ export default function Plans() {
             </CardHeader>
 
             <CardContent className="space-y-6">
+              {/* Quantity Selector */}
+              <div className="space-y-3">
+                <Label htmlFor="quantity" className="text-base font-semibold">
+                  Number of Sites
+                </Label>
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    disabled={quantity <= 1}
+                    className="h-10 w-10"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={quantity}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value) || 1;
+                      setQuantity(Math.max(1, Math.min(10, value)));
+                    }}
+                    className="text-center text-lg font-semibold w-20"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                    disabled={quantity >= 10}
+                    className="h-10 w-10"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select how many sites you want to manage (1-10 sites)
+                </p>
+              </div>
+
               {/* Features List */}
               <div className="space-y-4">
                 {features.map((feature, index) => {
@@ -236,6 +283,10 @@ export default function Plans() {
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground">Keywords tracking</span>
                   <span className="font-semibold text-foreground">100</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Sites allowed</span>
+                  <span className="font-semibold text-foreground">{quantity}</span>
                 </div>
               </div>
             </CardContent>

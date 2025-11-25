@@ -52,6 +52,20 @@ serve(async (req) => {
   }
 
   try {
+  // Parse request body for quantity (must be done before authentication to avoid consuming body)
+  let quantity = 1;
+  try {
+    const body = await req.json();
+    if (body && typeof body.quantity === 'number' && body.quantity > 0) {
+      quantity = Math.floor(body.quantity);
+      // Cap quantity at reasonable limit (e.g., 50 sites)
+      if (quantity > 50) quantity = 50;
+      console.log(`Quantity requested: ${quantity}`);
+    }
+  } catch (e) {
+    // If body parsing fails or body is empty, use default quantity of 1
+    console.log("No quantity provided or body parsing failed, using default: 1");
+  }
 
   // User authentication
   const supabaseClient = createClient(
@@ -181,7 +195,7 @@ serve(async (req) => {
     line_items: [
       {
         price: priceId,
-        quantity: 1,
+        quantity: quantity,
       },
     ],
     mode: "subscription",
@@ -190,6 +204,7 @@ serve(async (req) => {
     metadata: {
       user_id: user.id,
       user_email: user.email,
+      quantity: quantity.toString(), // Store quantity in metadata for reference
     },
   });
 

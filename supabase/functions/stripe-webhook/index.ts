@@ -104,6 +104,10 @@ serve(async (req) => {
         // Get plan from metadata or price ID
         const planName = getPlanName(subscription.items.data[0]);
         
+        // Extract quantity from subscription items (for multi-site support)
+        const quantity = subscription.items.data[0]?.quantity || 1;
+        console.log(`Subscription quantity (sites_allowed): ${quantity}`);
+        
         // Try to get period dates - check subscription items first (they're more reliable in webhook payloads)
         // Then fallback to subscription-level fields
         let periodStart: number | null | undefined = undefined;
@@ -166,6 +170,7 @@ serve(async (req) => {
               plan_name: planName,
               current_period_start: timestampToISO(periodStart),
               current_period_end: timestampToISO(periodEnd),
+              sites_allowed: quantity, // Store quantity as sites_allowed
               posts_generated_count: 0, // Reset on new subscription
               keywords_count: 0,
             })
@@ -233,6 +238,7 @@ serve(async (req) => {
               plan_name: planName,
               current_period_start: timestampToISO(periodStart),
               current_period_end: timestampToISO(periodEnd),
+              sites_allowed: quantity, // Store quantity as sites_allowed
               posts_generated_count: 0, // Reset on new subscription
               keywords_count: 0,
             }, {
@@ -306,6 +312,10 @@ serve(async (req) => {
       // Get plan from metadata or price ID, fallback to existing if not found
       const newPlan = getPlanName(subscription.items.data[0]) || existing.plan_name;
       
+      // Extract quantity from subscription items (for multi-site support)
+      const quantity = subscription.items.data[0]?.quantity || existing.sites_allowed || 1;
+      console.log(`[${event.type}] Subscription quantity (sites_allowed): ${quantity}`);
+      
       // Try to get period dates - check subscription items first (they're more reliable in webhook payloads)
       // Then fallback to subscription-level fields
       let periodStart: number | null | undefined = undefined;
@@ -353,6 +363,7 @@ serve(async (req) => {
       const updates: {
         status: string;
         plan_name: string;
+        sites_allowed?: number;
         current_period_start?: string | null;
         current_period_end?: string | null;
         cancel_at_period_end: boolean;
@@ -365,6 +376,7 @@ serve(async (req) => {
       } = {
         status: subscription.status,
         plan_name: newPlan,
+        sites_allowed: quantity, // Update sites_allowed from quantity
         cancel_at_period_end: subscription.cancel_at_period_end,
       };
       
