@@ -164,6 +164,7 @@ serve(async (req) => {
         .upsert({
           user_id: user.id,
           stripe_customer_id: customerId,
+          sites_allowed: quantity, // Set sites based on quantity
         }, {
           onConflict: 'user_id'
         });
@@ -183,6 +184,7 @@ serve(async (req) => {
         .upsert({
           user_id: user.id,
           stripe_customer_id: customerId,
+          sites_allowed: quantity, // Set sites based on quantity
         }, {
           onConflict: 'user_id'
         });
