@@ -38,6 +38,7 @@ interface BlogOnboardingProps {
   open: boolean;
   onComplete: (blogId?: string) => void;
   onCancel: () => void;
+  blogId?: string | null; // Optional: if provided, update existing blog instead of creating new one
 }
 
 const CMS_PLATFORMS = [
@@ -53,13 +54,17 @@ const CMS_PLATFORMS = [
   // { id: "rest_api" as const, name: "REST API", icon: "🔌", description: "Custom REST API" },
 ];
 
-export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingProps) {
+export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId }: BlogOnboardingProps) {
   const navigate = useNavigate();
   const [selectedPlatform, setSelectedPlatform] = useState<CMSPlatform | null>(null);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [currentStep, setCurrentStep] = useState<"platform" | "connection" | "article-types">("platform");
-  const [blogId, setBlogId] = useState<string | null>(null);
+  const [isLoadingExistingData, setIsLoadingExistingData] = useState(false);
+  // Set initial step based on whether we're reconnecting
+  const [currentStep, setCurrentStep] = useState<"platform" | "connection" | "article-types">(
+    propBlogId ? "connection" : "platform"
+  );
+  const [blogId, setBlogId] = useState<string | null>(propBlogId || null);
   const [siteLimitInfo, setSiteLimitInfo] = useState<{
     limit: number;
     count: number;
@@ -73,12 +78,58 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
     apiSecret: "",
   });
 
-  // Check site limit on mount
+  // Check site limit on mount and load existing blog data if reconnecting
   useEffect(() => {
     if (open) {
       checkSiteLimit();
+      if (propBlogId) {
+        // Pre-load existing data before showing UI to avoid flicker
+        loadExistingBlogData(propBlogId);
+      } else {
+        // Reset state when opening for new site
+        setSelectedPlatform(null);
+        setCurrentStep("platform");
+        setConnectionData({
+          platform: "wordpress",
+          siteUrl: "",
+          apiKey: "",
+          apiSecret: "",
+        });
+        setIsLoadingExistingData(false);
+      }
     }
-  }, [open]);
+  }, [open, propBlogId]);
+
+  // Load existing blog data for reconnecting
+  const loadExistingBlogData = async (id: string) => {
+    setIsLoadingExistingData(true);
+    try {
+      const { data: blog, error } = await supabase
+        .from("blogs")
+        .select("cms_platform, cms_site_url, title")
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+
+      if (blog.cms_platform) {
+        setSelectedPlatform(blog.cms_platform as CMSPlatform);
+        setConnectionData(prev => ({
+          ...prev,
+          platform: blog.cms_platform as CMSPlatform,
+          siteUrl: blog.cms_site_url || "",
+        }));
+        // Step is already set to "connection" initially when propBlogId exists
+      }
+    } catch (error) {
+      console.error("Error loading blog data:", error);
+      toast.error("Failed to load site information");
+      // Fallback to platform selection if loading fails
+      setCurrentStep("platform");
+    } finally {
+      setIsLoadingExistingData(false);
+    }
+  };
 
   const checkSiteLimit = async () => {
     try {
@@ -143,13 +194,15 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Check site limit before creating new blog
-      const canCreate = await canCreateSite(user.id);
-      if (!canCreate) {
-        toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
-        navigate("/plans");
-        setLoading(false);
-        return;
+      // Check site limit only when creating new blog (not reconnecting)
+      if (!propBlogId) {
+        const canCreate = await canCreateSite(user.id);
+        if (!canCreate) {
+          toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+          navigate("/plans");
+          setLoading(false);
+          return;
+        }
       }
 
       // Add https:// if no protocol is specified
@@ -157,40 +210,43 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
         ? connectionData.siteUrl.trim()
         : `https://${connectionData.siteUrl.trim()}`;
 
-      // Normalize URL for comparison (remove trailing slash, convert to lowercase)
-      const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, '');
+      // Only check for duplicate URLs when creating a new site (not reconnecting)
+      if (!propBlogId) {
+        // Normalize URL for comparison (remove trailing slash, convert to lowercase)
+        const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, '');
 
-      // Check if a site with the same URL already exists for this user
-      const { data: existingSites, error: checkError } = await supabase
-        .from("blogs")
-        .select("id, website_homepage, cms_site_url, title")
-        .eq("user_id", user.id);
+        // Check if a site with the same URL already exists for this user
+        const { data: existingSites, error: checkError } = await supabase
+          .from("blogs")
+          .select("id, website_homepage, cms_site_url, title")
+          .eq("user_id", user.id);
 
-      if (checkError) {
-        console.error("Error checking for existing sites:", checkError);
-        throw new Error("Failed to verify site URL");
-      }
+        if (checkError) {
+          console.error("Error checking for existing sites:", checkError);
+          throw new Error("Failed to verify site URL");
+        }
 
-      // Check if URL already exists (check both website_homepage and cms_site_url)
-      const urlExists = existingSites?.some((site) => {
-        const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, '');
-        const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, '');
-        return existingHomepage === normalizedUrl || existingCmsUrl === normalizedUrl;
-      });
-
-      if (urlExists) {
-        const existingSite = existingSites?.find((site) => {
+        // Check if URL already exists (check both website_homepage and cms_site_url)
+        const urlExists = existingSites?.some((site) => {
           const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, '');
           const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, '');
           return existingHomepage === normalizedUrl || existingCmsUrl === normalizedUrl;
         });
-        
-        toast.error(
-          `A site with this URL already exists: ${existingSite?.title || 'Untitled Site'}. ` +
-          `Please use a different URL or edit the existing site from Settings.`
-        );
-        setLoading(false);
-        return;
+
+        if (urlExists) {
+          const existingSite = existingSites?.find((site) => {
+            const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, '');
+            const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, '');
+            return existingHomepage === normalizedUrl || existingCmsUrl === normalizedUrl;
+          });
+          
+          toast.error(
+            `A site with this URL already exists: ${existingSite?.title || 'Untitled Site'}. ` +
+            `Please use a different URL or edit the existing site from Settings.`
+          );
+          setLoading(false);
+          return;
+        }
       }
 
       // Extract site name from URL for title
@@ -245,46 +301,69 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
         console.warn("⚠️ Storing credentials in plaintext (encryption unavailable)");
       }
 
-      const blogData = {
-        mode: "existing_site",
-        subdomain: null,
-        title: siteName.charAt(0).toUpperCase() + siteName.slice(1),
-        description: `Connected ${selectedPlatform} site`,
-        company_name: siteName,
-        website_homepage: formattedUrl,
-        onboarding_completed: true,
-        is_published: true,
-        cms_platform: selectedPlatform,
-        cms_site_url: formattedUrl,
-        cms_credentials: encryptedCredentials,
-      };
+      // If reconnecting, update existing blog; otherwise create new one
+      if (propBlogId) {
+        // Update existing blog with new CMS credentials
+        const updateData = {
+          cms_platform: selectedPlatform,
+          cms_site_url: formattedUrl,
+          cms_credentials: encryptedCredentials,
+          last_sync_at: new Date().toISOString(),
+        };
 
-      // Always create a new blog (multi-site support)
-      // If editing is needed in the future, we can add a blogId prop
-      const { data: resultData, error } = await supabase
-        .from("blogs")
-        .insert({
-          user_id: user.id,
-          ...blogData,
-        })
-        .select()
-        .single();
+        const { error } = await supabase
+          .from("blogs")
+          .update(updateData)
+          .eq("id", propBlogId);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast.success("CMS connected successfully!");
-      setBlogId(resultData.id);
+        toast.success("CMS reconnected successfully!");
+        setBlogId(propBlogId);
+      } else {
+        // Create new blog
+        const siteName = new URL(formattedUrl).hostname.split(".")[0];
+        const blogData = {
+          mode: "existing_site",
+          subdomain: null,
+          title: siteName.charAt(0).toUpperCase() + siteName.slice(1),
+          description: `Connected ${selectedPlatform} site`,
+          company_name: siteName,
+          website_homepage: formattedUrl,
+          onboarding_completed: true,
+          is_published: true,
+          cms_platform: selectedPlatform,
+          cms_site_url: formattedUrl,
+          cms_credentials: encryptedCredentials,
+        };
 
-      // Automatically generate the first article
-      toast.info("Generating your first article...");
-      try {
-        await supabase.functions.invoke("generate-blog-post", {
-          body: { blogId: resultData.id },
-        });
-        toast.success("First article generated! Check your dashboard.");
-      } catch (genError) {
-        console.error("Error generating first article:", genError);
-        toast.error("CMS connected but article generation failed. You can generate articles from the Articles page.");
+        const { data: resultData, error } = await supabase
+          .from("blogs")
+          .insert({
+            user_id: user.id,
+            ...blogData,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        toast.success("CMS connected successfully!");
+        setBlogId(resultData.id);
+      }
+
+      // Automatically generate the first article only for new sites
+      if (!propBlogId && blogId) {
+        toast.info("Generating your first article...");
+        try {
+          await supabase.functions.invoke("generate-blog-post", {
+            body: { blogId: blogId },
+          });
+          toast.success("First article generated! Check your dashboard.");
+        } catch (genError) {
+          console.error("Error generating first article:", genError);
+          toast.error("CMS connected but article generation failed. You can generate articles from the Articles page.");
+        }
       }
 
       setCurrentStep("article-types");
@@ -317,8 +396,15 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
             variant="ghost"
             size="sm"
             onClick={() => {
-              setSelectedPlatform(null);
-              setCurrentStep("platform");
+              if (propBlogId) {
+                // When reconnecting, go back to sites tab
+                onCancel();
+                navigate("/settings?tab=sites");
+              } else {
+                // When creating new site, go back to platform selection
+                setSelectedPlatform(null);
+                setCurrentStep("platform");
+              }
             }}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -527,13 +613,28 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
     );
   }
 
-  // Connection Form Step
-  if (currentStep === "connection" && selectedPlatform) {
+  // Show loading state when reconnecting and loading existing data
+  if (isLoadingExistingData && propBlogId) {
+    return (
+      <Card className="p-8 bg-card max-w-4xl">
+        <div className="flex items-center justify-center py-12">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-accent" />
+            <p className="text-sm text-muted-foreground">Loading site information...</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // Connection Form Step - show if we're on connection step and have platform, or if reconnecting
+  if ((currentStep === "connection" && selectedPlatform) || (propBlogId && selectedPlatform)) {
     return <Card className="p-8 bg-card max-w-2xl">{renderConnectionForm()}</Card>;
   }
 
-  // Platform Selection Step
-  return (
+  // Platform Selection Step - only show for new sites
+  if (!propBlogId) {
+    return (
     <Card className="p-8 bg-card max-w-4xl">
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your CMS</h2>
@@ -593,6 +694,22 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
+      </div>
+    </Card>
+    );
+  }
+
+  // Fallback: if reconnecting but no platform loaded, show error
+  return (
+    <Card className="p-8 bg-card max-w-4xl">
+      <div className="flex items-center justify-center py-12">
+        <div className="flex flex-col items-center gap-4">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <p className="text-sm text-muted-foreground">Failed to load site information</p>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
       </div>
     </Card>
   );

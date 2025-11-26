@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { CheckCircle2, Loader2, Globe, Plus, Edit, Trash2, Check, AlertCircle, ArrowRight } from "lucide-react";
+import { CheckCircle2, Loader2, Globe, Plus, Edit, Trash2, Check, AlertCircle, ArrowRight, FileText, Search, Wifi, WifiOff, ExternalLink, BarChart3, MoreVertical } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -35,6 +35,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 
 type Subscription = Database['public']['Tables']['subscriptions']['Row'];
@@ -68,6 +75,15 @@ export default function Settings() {
     company_name: "",
     auto_post_enabled: true,
   });
+  const [siteStats, setSiteStats] = useState<Record<string, {
+    total: number;
+    published: number;
+    scheduled: number;
+    pending: number;
+    failed: number;
+  }>>({});
+  const [testingConnection, setTestingConnection] = useState<string | null>(null);
+  const [siteSearchQuery, setSiteSearchQuery] = useState("");
   
   const tabParam = searchParams.get('tab');
   const defaultTab = (tabParam === 'backlinks' || tabParam === 'article-types' || tabParam === 'subscription' || tabParam === 'sites') ? tabParam : 'account';
@@ -231,6 +247,96 @@ export default function Settings() {
   const fetchSiteLimitInfo = async (userId: string) => {
     const info = await getSiteLimitInfo(userId);
     setSiteLimitInfo(info);
+  };
+
+  // Fetch site statistics
+  const fetchSiteStats = async (siteId: string) => {
+    try {
+      const { data: posts, error } = await supabase
+        .from("blog_posts")
+        .select("publishing_status, scheduled_publish_date")
+        .eq("blog_id", siteId);
+
+      if (error) throw error;
+
+      const stats = {
+        total: posts?.length || 0,
+        published: posts?.filter(p => p.publishing_status === 'published').length || 0,
+        scheduled: posts?.filter(p => p.scheduled_publish_date !== null).length || 0,
+        pending: posts?.filter(p => p.publishing_status === 'pending' && !p.scheduled_publish_date).length || 0,
+        failed: posts?.filter(p => p.publishing_status === 'failed').length || 0,
+      };
+
+      setSiteStats(prev => ({ ...prev, [siteId]: stats }));
+    } catch (error) {
+      console.error("Error fetching site stats:", error);
+    }
+  };
+
+  // Fetch stats for all sites
+  useEffect(() => {
+    if (allSites.length > 0) {
+      allSites.forEach(site => {
+        fetchSiteStats(site.id);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allSites.length]);
+
+  // Test CMS connection
+  const handleTestConnection = async (site: typeof allSites[0]) => {
+    if (!site.cms_platform || !site.cms_site_url) {
+      toast.error("CMS is not configured for this site");
+      return;
+    }
+
+    setTestingConnection(site.id);
+    try {
+      const credentials = site.cms_credentials as { 
+        apiKey?: string; 
+        apiSecret?: string; 
+        accessToken?: string;
+        username?: string;
+        password?: string;
+      } || {};
+
+      const { data, error } = await supabase.functions.invoke('test-cms-connection', {
+        body: {
+          platform: site.cms_platform,
+          siteUrl: site.cms_site_url,
+          apiKey: credentials.apiKey,
+          apiSecret: credentials.apiSecret,
+          accessToken: credentials.accessToken,
+          username: credentials.username,
+          password: credentials.password,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success("✅ Connection verified!");
+        // Update last sync time
+        await supabase
+          .from('blogs')
+          .update({ last_sync_at: new Date().toISOString() })
+          .eq('id', site.id);
+        await refreshSites();
+      } else {
+        toast.error("❌ Connection failed: " + (data.error || "Unknown error"));
+      }
+    } catch (error: any) {
+      console.error("Connection test error:", error);
+      toast.error("Connection test failed: " + error.message);
+    } finally {
+      setTestingConnection(null);
+    }
+  };
+
+  // Handle reconnect CMS
+  const handleReconnectCMS = (siteId: string) => {
+    selectSite(siteId);
+    navigate("/dashboard?action=reconnect-cms");
   };
 
   const handleDeleteSite = async () => {
@@ -474,6 +580,19 @@ export default function Settings() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Site Search */}
+                {allSites.length >= 2 && (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search sites by name, URL, or CMS platform..."
+                      value={siteSearchQuery}
+                      onChange={(e) => setSiteSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                )}
+
                 {/* Site Limit Info */}
                 {siteLimitInfo && (
                   <div className="p-4 bg-muted/30 rounded-lg border border-border/50">
@@ -566,6 +685,17 @@ export default function Settings() {
                         </div>
                       </div>
                     )}
+                    {/* General Info: How to Increase Sites */}
+                    {!siteLimitInfo.isOverLimit && siteLimitInfo.count < siteLimitInfo.limit && siteLimitInfo.count > 0 && (
+                      <div className="pt-2 border-t border-border/50">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="h-3.5 w-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-muted-foreground text-left">
+                            Need more sites? Visit <button onClick={handleManageSubscription} className="underline hover:no-underline font-medium text-foreground">Manage Subscription</button> to increase your site limit.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -588,7 +718,20 @@ export default function Settings() {
                   </div>
                 ) : (
                   <div className="grid gap-4">
-                    {allSites.map((site) => {
+                    {allSites
+                      .filter((site) => {
+                        if (!siteSearchQuery) return true;
+                        const query = siteSearchQuery.toLowerCase();
+                        const siteUrl = (site.custom_domain || site.subdomain || site.website_homepage || "").toLowerCase();
+                        const cmsPlatform = (site.cms_platform || "").toLowerCase();
+                        return (
+                          (site.title || "").toLowerCase().includes(query) ||
+                          siteUrl.includes(query) ||
+                          cmsPlatform.includes(query) ||
+                          (site.company_name || "").toLowerCase().includes(query)
+                        );
+                      })
+                      .map((site) => {
                       const isActive = selectedSite?.id === site.id;
                       const siteUrl = site.custom_domain || site.subdomain || site.website_homepage || "No URL";
                       const getCMSName = (platform: string | null) => {
@@ -609,6 +752,8 @@ export default function Settings() {
                       const articleTypesCount = site.article_types 
                         ? Object.values(site.article_types).filter(Boolean).length 
                         : 0;
+                      const stats = siteStats[site.id] || { total: 0, published: 0, scheduled: 0, pending: 0, failed: 0 };
+                      const isTesting = testingConnection === site.id;
                       
                       return (
                         <Card 
@@ -619,47 +764,53 @@ export default function Settings() {
                         >
                           <CardContent className="p-0">
                             {/* Header Section */}
-                            <div className={`p-5 border-b ${isActive ? "bg-accent/5" : "bg-muted/30"}`}>
+                            <div className={`p-4 border-b ${isActive ? "bg-accent/5" : "bg-muted/30"}`}>
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
-                                      <Globe className="w-5 h-5 text-accent" />
+                                  <div className="flex items-center gap-2.5 mb-2">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center flex-shrink-0">
+                                      <Globe className="w-4 h-4 text-accent" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <h3 className="text-lg font-semibold text-foreground truncate">
+                                      <h3 className="text-base font-semibold text-foreground truncate">
                                         {site.title || "Untitled Site"}
                                       </h3>
-                                      <p className="text-sm text-muted-foreground truncate mt-0.5">
+                                      <p className="text-xs text-muted-foreground truncate mt-0.5">
                                         {siteUrl}
                                       </p>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     {isActive && (
-                                      <Badge className="bg-accent text-accent-foreground border-0">
-                                        <Check className="w-3 h-3 mr-1" />
+                                      <Badge className="bg-accent text-accent-foreground border-0 text-xs px-1.5 py-0.5">
+                                        <Check className="w-2.5 h-2.5 mr-1" />
                                         Active
                                       </Badge>
                                     )}
                                     {site.cms_platform ? (
-                                      <Badge variant="default" className="bg-blue-600 text-white border-0">
-                                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                                      <Badge variant="default" className="bg-blue-600 text-white border-0 text-xs px-1.5 py-0.5">
+                                        <CheckCircle2 className="w-2.5 h-2.5 mr-1" />
                                         Connected
                                       </Badge>
                                     ) : (
-                                      <Badge variant="secondary">
+                                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
                                         Disconnected
                                       </Badge>
                                     )}
                                     {site.onboarding_completed && (
-                                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800">
+                                      <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800 text-xs px-1.5 py-0.5">
                                         Onboarded
                                       </Badge>
                                     )}
                                     {articleTypesCount > 0 && (
-                                      <Badge variant="outline">
-                                        {articleTypesCount} Article Types
+                                      <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                                        {articleTypesCount} Types
+                                      </Badge>
+                                    )}
+                                    {stats.total > 0 && (
+                                      <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                                        <FileText className="w-2.5 h-2.5 mr-1" />
+                                        {stats.total} Articles
                                       </Badge>
                                     )}
                                   </div>
@@ -667,156 +818,226 @@ export default function Settings() {
                                 
                                 {/* Action Buttons */}
                                 <div className="flex items-center gap-2 flex-shrink-0">
+                                  {/* Primary Actions */}
                                   <Button
                                     variant="default"
                                     size="sm"
                                     onClick={() => handleViewDashboard(site.id)}
-                                    className="h-9 bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+                                    className="h-8 bg-[#8B7355] hover:bg-[#8B7355]/90 text-white text-xs px-3"
                                   >
-                                    <ArrowRight className="w-4 h-4 mr-1.5" />
-                                    View Dashboard
-                                  </Button>
-                                  {!isActive && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => selectSite(site.id)}
-                                      className="h-9"
-                                    >
-                                      <Check className="w-4 h-4 mr-1.5" />
-                                      Set Active
-                                    </Button>
-                                  )}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleEditSite(site)}
-                                    className="h-9 w-9 p-0"
-                                  >
-                                    <Edit className="w-4 h-4" />
+                                    <ArrowRight className="w-3 h-3 mr-1.5" />
+                                    Dashboard
                                   </Button>
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => setDeleteSiteId(site.id)}
-                                    className="h-9 w-9 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => {
+                                      selectSite(site.id);
+                                      navigate("/articles");
+                                    }}
+                                    className="h-8 text-xs px-3"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <FileText className="w-3 h-3 mr-1.5" />
+                                    Articles
                                   </Button>
+                                  
+                                  {/* More Actions Dropdown */}
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 w-8 p-0"
+                                      >
+                                        <MoreVertical className="w-4 h-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-48">
+                                      {!isActive && (
+                                        <>
+                                          <DropdownMenuItem
+                                            onClick={() => selectSite(site.id)}
+                                          >
+                                            <Check className="w-4 h-4 mr-2" />
+                                            Set Active
+                                          </DropdownMenuItem>
+                                          <DropdownMenuSeparator />
+                                        </>
+                                      )}
+                                      {site.cms_platform && (
+                                        <>
+                                          <DropdownMenuItem
+                                            onClick={() => handleReconnectCMS(site.id)}
+                                          >
+                                            <WifiOff className="w-4 h-4 mr-2" />
+                                            Reconnect CMS
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => handleTestConnection(site)}
+                                            disabled={isTesting}
+                                          >
+                                            {isTesting ? (
+                                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            ) : (
+                                              <Wifi className="w-4 h-4 mr-2" />
+                                            )}
+                                            Test Connection
+                                          </DropdownMenuItem>
+                                          <DropdownMenuSeparator />
+                                        </>
+                                      )}
+                                      <DropdownMenuItem
+                                        onClick={() => handleEditSite(site)}
+                                      >
+                                        <Edit className="w-4 h-4 mr-2" />
+                                        Edit Site
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => setDeleteSiteId(site.id)}
+                                        className="text-destructive focus:text-destructive"
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete Site
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
                               </div>
                             </div>
 
                             {/* Details Section */}
-                            <div className="p-5">
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="p-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Basic Information */}
-                                <div className="space-y-4">
-                                  <div>
-                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                                      Basic Information
-                                    </h4>
-                                    <div className="space-y-3">
-                                      {site.description && (
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-1">Description</p>
-                                          <p className="text-sm text-foreground">{site.description}</p>
-                                        </div>
-                                      )}
-                                      {site.company_name && (
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-1">Company</p>
-                                          <p className="text-sm font-medium text-foreground">{site.company_name}</p>
-                                        </div>
-                                      )}
+                                <div className="space-y-3">
+                                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                    Information
+                                  </h4>
+                                  <div className="space-y-2">
+                                    {site.company_name && (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground w-16">Company:</span>
+                                        <span className="text-xs font-medium text-foreground">{site.company_name}</span>
+                                      </div>
+                                    )}
+                                    {site.description && (
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-xs text-muted-foreground w-16 flex-shrink-0">Desc:</span>
+                                        <span className="text-xs text-foreground">{site.description}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       {site.subdomain && (
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-1">Subdomain</p>
-                                          <p className="text-sm text-foreground font-mono">{site.subdomain}</p>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs text-muted-foreground">Subdomain:</span>
+                                          <span className="text-xs text-foreground font-mono">{site.subdomain}</span>
                                         </div>
                                       )}
                                       {site.custom_domain && (
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-1">Custom Domain</p>
-                                          <p className="text-sm text-foreground font-mono">{site.custom_domain}</p>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-xs text-muted-foreground">Domain:</span>
+                                          <span className="text-xs text-foreground font-mono">{site.custom_domain}</span>
                                         </div>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                      <span>Created {format(new Date(site.created_at), "MMM d, yyyy")}</span>
+                                      {site.last_post_generated_at && (
+                                        <span>• Last post {format(new Date(site.last_post_generated_at), "MMM d")}</span>
                                       )}
                                     </div>
                                   </div>
                                 </div>
 
-                                {/* CMS Configuration */}
-                                {site.cms_platform && (
-                                  <div className="space-y-4">
-                                    <div>
-                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                                        CMS Configuration
+                                {/* CMS & Stats */}
+                                <div className="space-y-3">
+                                  {site.cms_platform && (
+                                    <>
+                                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                        CMS & Stats
                                       </h4>
-                                      <div className="space-y-3">
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-1">Platform</p>
-                                          <p className="text-sm font-medium text-foreground">{getCMSName(site.cms_platform)}</p>
+                                      <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs text-muted-foreground w-16">Platform:</span>
+                                          <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                                            {getCMSName(site.cms_platform)}
+                                          </Badge>
+                                          {site.mode && (
+                                            <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                                              {site.mode.replace('_', ' ')}
+                                            </Badge>
+                                          )}
                                         </div>
                                         {site.cms_site_url && (
-                                          <div>
-                                            <p className="text-xs text-muted-foreground mb-1">CMS URL</p>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground w-16 flex-shrink-0">URL:</span>
                                             <a 
                                               href={site.cms_site_url} 
                                               target="_blank" 
                                               rel="noopener noreferrer"
-                                              className="text-sm text-accent hover:underline truncate block"
+                                              className="text-xs text-accent hover:underline truncate flex items-center gap-1"
                                             >
                                               {site.cms_site_url}
+                                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
                                             </a>
                                           </div>
                                         )}
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-1">Mode</p>
-                                          <Badge variant="outline" className="text-xs">
-                                            {site.mode?.replace('_', ' ') || "N/A"}
-                                          </Badge>
-                                        </div>
+                                        {site.last_sync_at && (
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-xs text-muted-foreground w-16">Last Sync:</span>
+                                            <span className="text-xs text-foreground">
+                                              {format(new Date(site.last_sync_at), "MMM d, h:mm a")}
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Settings & Stats */}
-                                <div className="space-y-4">
-                                  <div>
-                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                                      Settings & Stats
-                                    </h4>
-                                    <div className="space-y-3">
-                                      {site.auto_post_enabled !== null && (
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-1.5">Auto-Post</p>
-                                          {site.auto_post_enabled ? (
-                                            <Badge className="bg-green-600 text-white border-0">
-                                              Enabled
+                                    </>
+                                  )}
+                                  
+                                  {/* Article Statistics - Compact */}
+                                  {stats.total > 0 && (
+                                    <div className="pt-2 border-t">
+                                      <div className="flex items-center gap-3 flex-wrap">
+                                        <span className="text-xs text-muted-foreground">Articles:</span>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-200 dark:border-green-800">
+                                            {stats.published} Published
+                                          </Badge>
+                                          <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400 border-purple-200 dark:border-purple-800">
+                                            {stats.scheduled} Scheduled
+                                          </Badge>
+                                          <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                                            {stats.pending} Pending
+                                          </Badge>
+                                          {stats.failed > 0 && (
+                                            <Badge variant="destructive" className="text-xs px-1.5 py-0.5">
+                                              {stats.failed} Failed
                                             </Badge>
-                                          ) : (
-                                            <Badge variant="secondary">Disabled</Badge>
                                           )}
                                         </div>
-                                      )}
-                                      <div>
-                                        <p className="text-xs text-muted-foreground mb-1">Created</p>
-                                        <p className="text-sm text-foreground">
-                                          {format(new Date(site.created_at), "MMM d, yyyy")}
-                                        </p>
                                       </div>
-                                      {site.last_post_generated_at && (
-                                        <div>
-                                          <p className="text-xs text-muted-foreground mb-1">Last Post Generated</p>
-                                          <p className="text-sm text-foreground">
-                                            {format(new Date(site.last_post_generated_at), "MMM d, yyyy")}
-                                          </p>
-                                        </div>
-                                      )}
                                     </div>
-                                  </div>
+                                  )}
+                                  
+                                  {/* Auto-Post Status */}
+                                  {site.auto_post_enabled !== null && (
+                                    <div className="pt-2 border-t">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-xs text-muted-foreground">Auto-Post:</span>
+                                        {site.auto_post_enabled ? (
+                                          <Badge className="bg-green-600 text-white border-0 text-xs px-1.5 py-0.5">
+                                            On
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
+                                            Off
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
+
                               </div>
                             </div>
                           </CardContent>

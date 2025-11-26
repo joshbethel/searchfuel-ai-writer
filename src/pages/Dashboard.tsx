@@ -181,15 +181,25 @@ export default function Dashboard() {
     fetchSiteCount();
   }, []);
 
-  // Check for action=add-site query parameter
+  // Track if we're reconnecting CMS
+  const [isReconnectingCMS, setIsReconnectingCMS] = useState(false);
+
+  // Check for action query parameters
   useEffect(() => {
     const action = searchParams.get('action');
     if (action === 'add-site') {
       setShowOnboarding(true);
+      setIsReconnectingCMS(false);
+      // Clean up the URL
+      setSearchParams({}, { replace: true });
+    } else if (action === 'reconnect-cms' && selectedSite) {
+      // Open onboarding in reconnect mode for the selected site
+      setShowOnboarding(true);
+      setIsReconnectingCMS(true);
       // Clean up the URL
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, selectedSite]);
 
   // Fetch data when selected site changes
   useEffect(() => {
@@ -842,11 +852,15 @@ export default function Dashboard() {
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-8">
             <p className="text-sm text-muted-foreground mb-2">SEARCHFUEL SETUP</p>
-            <h1 className="text-4xl font-bold text-foreground">Create your AI SEO engine</h1>
+            <h1 className="text-4xl font-bold text-foreground">
+              {isReconnectingCMS ? "Reconnect CMS" : "Create your AI SEO engine"}
+            </h1>
           </div>
           <BlogOnboarding
             open={true}
+            blogId={isReconnectingCMS ? selectedSite?.id || null : null}
             onComplete={async (blogId) => {
+              setIsReconnectingCMS(false);
               setShowOnboarding(false);
               // Refresh sites first to ensure the new site is in the list
               await refreshSites();
