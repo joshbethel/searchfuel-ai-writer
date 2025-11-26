@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useArticles } from "@/hooks/use-articles";
+import { useSiteContext } from "@/contexts/SiteContext";
 import KeywordPanel from '@/components/KeywordPanel';
 import { GenerateArticleDialog } from "@/components/GenerateArticleDialog";
 import { ArticleCalendar } from "@/components/ArticleCalendar";
@@ -66,6 +67,7 @@ interface ScheduledKeyword {
 
 export default function Articles() {
   const navigate = useNavigate();
+  const { selectedSite } = useSiteContext();
   const { articles, isLoading, blogId, fetchArticles, setArticles } = useArticles();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
@@ -127,10 +129,21 @@ export default function Articles() {
     }
   }, [blogId]);
 
+  // Fetch articles on mount and when blogId changes
+  useEffect(() => {
+    if (selectedSite) {
+      fetchArticles();
+    } else {
+      setIsLoadingScheduled(false);
+    }
+  }, [selectedSite, fetchArticles]);
+
   useEffect(() => {
     if (blogId) {
       fetchScheduledKeywords();
       checkCMSConnection();
+    } else {
+      setIsLoadingScheduled(false);
     }
   }, [blogId, fetchScheduledKeywords, checkCMSConnection]);
 
@@ -394,6 +407,30 @@ export default function Articles() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Show "No Blog Found" message when no site is selected
+  if (!selectedSite) {
+    return (
+      <div className="container mx-auto py-12 px-4">
+        <div className="max-w-2xl mx-auto">
+          <Card className="p-12 text-center">
+            <div className="max-w-md mx-auto">
+              <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8 text-accent" />
+              </div>
+              <h3 className="text-xl font-bold text-foreground mb-2">No Blog Found</h3>
+              <p className="text-muted-foreground mb-6">
+                You need to set up your blog first to view and manage articles.
+              </p>
+              <Button onClick={() => navigate("/dashboard")}>
+                Go to Dashboard
+              </Button>
+            </div>
+          </Card>
+        </div>
       </div>
     );
   }
