@@ -58,8 +58,8 @@ serve(async (req) => {
     const body = await req.json();
     if (body && typeof body.quantity === 'number' && body.quantity > 0) {
       quantity = Math.floor(body.quantity);
-      // Cap quantity at reasonable limit (e.g., 50 sites)
-      if (quantity > 50) quantity = 50;
+      // Cap quantity at 5 sites per account
+      if (quantity > 5) quantity = 5;
       console.log(`Quantity requested: ${quantity}`);
     }
   } catch (e) {

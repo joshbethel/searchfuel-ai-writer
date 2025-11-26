@@ -8,7 +8,7 @@ interface SiteContextType {
   selectedSite: Blog | null;
   allSites: Blog[];
   isLoading: boolean;
-  selectSite: (siteId: string) => void;
+  selectSite: (siteId: string) => Promise<void>;
   refreshSites: () => Promise<void>;
 }
 
@@ -86,13 +86,39 @@ export function SiteProvider({ children }: { children: ReactNode }) {
   }, [fetchSites]);
 
   // Select a site
-  const selectSite = useCallback((siteId: string) => {
-    const site = allSites.find(s => s.id === siteId);
+  const selectSite = useCallback(async (siteId: string) => {
+    // First try to find in allSites
+    let site = allSites.find(s => s.id === siteId);
+    
+    // If not found, fetch it directly
+    if (!site) {
+      try {
+        const { data, error } = await supabase
+          .from('blogs')
+          .select('*')
+          .eq('id', siteId)
+          .single();
+        
+        if (!error && data) {
+          site = data as Blog;
+          // Add to allSites if not already there
+          setAllSites(prev => {
+            if (!prev.find(s => s.id === siteId)) {
+              return [site!, ...prev];
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching site:', error);
+      }
+    }
+    
     if (site) {
       setSelectedSite(site);
       localStorage.setItem(STORAGE_KEY, siteId);
     } else {
-      console.warn(`Site ${siteId} not found in allSites`);
+      console.warn(`Site ${siteId} not found`);
     }
   }, [allSites]);
 

@@ -122,7 +122,7 @@ const ARTICLE_TYPE_LABELS: Record<string, { name: string; emoji: string }> = {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { selectedSite, refreshSites } = useSiteContext();
+  const { selectedSite, refreshSites, selectSite } = useSiteContext();
   const [url, setUrl] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [scanData, setScanData] = useState<ScanData | null>(null);
@@ -846,9 +846,19 @@ export default function Dashboard() {
           </div>
           <BlogOnboarding
             open={true}
-            onComplete={async () => {
+            onComplete={async (blogId) => {
               setShowOnboarding(false);
+              // Refresh sites first to ensure the new site is in the list
               await refreshSites();
+              // Set the newly created site as active
+              if (blogId) {
+                // selectSite will fetch the site if it's not in allSites yet
+                await selectSite(blogId);
+                // Refresh dashboard data for the new site
+                await fetchAnalytics(blogId);
+                await fetchBlogPosts(blogId);
+                await fetchKeywordRankings();
+              }
             }}
             onCancel={() => setShowOnboarding(false)}
           />
@@ -1159,11 +1169,15 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground">Sites</span>
-                      <span className="text-sm text-muted-foreground">
+                      <span className={`text-sm ${siteCount > subscription.sites_allowed ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
                         {siteCount} of {subscription.sites_allowed}
                       </span>
                     </div>
-                    {siteCount >= subscription.sites_allowed ? (
+                    {siteCount > subscription.sites_allowed ? (
+                      <Badge variant="outline" className="bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-800">
+                        Over Limit
+                      </Badge>
+                    ) : siteCount >= subscription.sites_allowed ? (
                       <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-800">
                         Limit Reached
                       </Badge>
@@ -1173,7 +1187,18 @@ export default function Dashboard() {
                       </Badge>
                     )}
                   </div>
-                  {siteCount >= subscription.sites_allowed && (
+                  {siteCount > subscription.sites_allowed && (
+                    <div className="pt-2 border-t border-border/50">
+                      <div className="mb-2 p-2 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded">
+                        <p className="text-xs text-red-700 dark:text-red-300">
+                          You have {siteCount} sites but your plan allows {subscription.sites_allowed}. 
+                          Delete {siteCount - subscription.sites_allowed} {siteCount - subscription.sites_allowed === 1 ? 'site' : 'sites'} to get back to your limit, 
+                          or upgrade your plan to keep all sites and add more.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {siteCount === subscription.sites_allowed && (
                     <div className="pt-2 border-t border-border/50">
                       <p className="text-xs text-muted-foreground text-left">
                         You've reached your site limit. Upgrade your plan to add more sites.
@@ -1190,8 +1215,17 @@ export default function Dashboard() {
                     if (user) {
                       const canCreate = await canCreateSite(user.id);
                       if (!canCreate) {
-                        toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
-                        navigate("/plans");
+                        const { getSiteLimitInfo } = await import("@/lib/utils/site-limits");
+                        const siteLimitInfo = await getSiteLimitInfo(user.id);
+                        if (siteLimitInfo.isOverLimit) {
+                          toast.error(
+                            `You have ${siteLimitInfo.count} sites but your plan allows ${siteLimitInfo.limit}. ` +
+                            `Delete ${siteLimitInfo.sitesToDelete} ${siteLimitInfo.sitesToDelete === 1 ? 'site' : 'sites'} to get back to your limit, or upgrade your plan.`
+                          );
+                        } else {
+                          toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+                          navigate("/plans");
+                        }
                         return;
                       }
                     }
@@ -1208,7 +1242,9 @@ export default function Dashboard() {
                     className="text-sm h-auto p-0"
                     onClick={() => navigate('/plans')}
                   >
-                    Upgrade to add more sites →
+                    {siteCount > subscription.sites_allowed 
+                      ? `Delete ${siteCount - subscription.sites_allowed} ${siteCount - subscription.sites_allowed === 1 ? 'site' : 'sites'} or upgrade →`
+                      : 'Upgrade to add more sites →'}
                   </Button>
                 )}
               </div>
@@ -1859,11 +1895,15 @@ export default function Dashboard() {
                   {subscription?.sites_allowed && (
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-muted-foreground">
-                        Sites: <span className="font-medium text-foreground">
+                        Sites: <span className={`font-medium ${siteCount > subscription.sites_allowed ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
                           {siteCount} of {subscription.sites_allowed}
                         </span>
                       </p>
-                      {siteCount >= subscription.sites_allowed ? (
+                      {siteCount > subscription.sites_allowed ? (
+                        <Badge variant="outline" className="bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-800 text-xs">
+                          Over Limit
+                        </Badge>
+                      ) : siteCount >= subscription.sites_allowed ? (
                         <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs">
                           Limit Reached
                         </Badge>

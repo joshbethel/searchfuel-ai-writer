@@ -23,6 +23,8 @@ export function SiteSwitcher() {
     count: number;
     remaining: number;
     canCreate: boolean;
+    isOverLimit: boolean;
+    sitesToDelete: number;
   } | null>(null);
 
   useEffect(() => {
@@ -81,7 +83,11 @@ export function SiteSwitcher() {
           {siteLimitInfo && (
             <div className="text-xs text-muted-foreground">
               {siteLimitInfo.canCreate ? (
-                <span>You can add {siteLimitInfo.limit} {siteLimitInfo.limit === 1 ? 'site' : 'sites'}</span>
+                <span>You can add {siteLimitInfo.remaining} {siteLimitInfo.remaining === 1 ? 'site' : 'sites'}</span>
+              ) : siteLimitInfo.isOverLimit ? (
+                <span className="text-red-600 dark:text-red-400">
+                  Over limit ({siteLimitInfo.count}/{siteLimitInfo.limit})
+                </span>
               ) : (
                 <span>Site limit reached ({siteLimitInfo.count}/{siteLimitInfo.limit})</span>
               )}
@@ -118,8 +124,9 @@ export function SiteSwitcher() {
               </span>
             )}
             {siteLimitInfo && (
-              <span className="text-xs text-muted-foreground mt-0.5">
+              <span className={`text-xs mt-0.5 ${siteLimitInfo.isOverLimit ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
                 {siteLimitInfo.count} of {siteLimitInfo.limit} {siteLimitInfo.limit === 1 ? 'site' : 'sites'}
+                {siteLimitInfo.isOverLimit && ' (over limit)'}
               </span>
             )}
           </div>
@@ -156,8 +163,9 @@ export function SiteSwitcher() {
                     </span>
                   )}
                   {siteLimitInfo && (
-                    <span className="text-xs text-muted-foreground mt-0.5">
+                    <span className={`text-xs mt-0.5 ${siteLimitInfo.isOverLimit ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
                       {siteLimitInfo.count} of {siteLimitInfo.limit} {siteLimitInfo.limit === 1 ? 'site' : 'sites'}
+                      {siteLimitInfo.isOverLimit && ' (over limit)'}
                     </span>
                   )}
                 </div>

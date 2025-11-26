@@ -232,11 +232,11 @@ export default function Plans() {
                     id="quantity"
                     type="number"
                     min={1}
-                    max={10}
+                    max={5}
                     value={quantity}
                     onChange={(e) => {
                       const value = parseInt(e.target.value) || 1;
-                      setQuantity(Math.max(1, Math.min(10, value)));
+                      setQuantity(Math.max(1, Math.min(5, value)));
                     }}
                     className="text-center text-base font-semibold w-16 h-8"
                   />
@@ -244,15 +244,15 @@ export default function Plans() {
                     type="button"
                     variant="outline"
                     size="icon"
-                    onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                    disabled={quantity >= 10}
+                    onClick={() => setQuantity(Math.min(5, quantity + 1))}
+                    disabled={quantity >= 5}
                     className="h-8 w-8"
                   >
                     <Plus className="h-3 w-3" />
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Select how many sites you want to manage (1-10 sites)
+                  Select how many sites you want to manage (1-5 sites)
                 </p>
               </div>
 

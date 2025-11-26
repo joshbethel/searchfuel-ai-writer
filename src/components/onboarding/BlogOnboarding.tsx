@@ -36,7 +36,7 @@ interface CMSConnection {
 
 interface BlogOnboardingProps {
   open: boolean;
-  onComplete: () => void;
+  onComplete: (blogId?: string) => void;
   onCancel: () => void;
 }
 
@@ -297,7 +297,12 @@ export function BlogOnboarding({ open, onComplete, onCancel }: BlogOnboardingPro
 
   const handleArticleTypesSaved = () => {
     toast.success("Article preferences saved!");
-    onComplete();
+    // Pass the blogId to onComplete so the parent can set it as active
+    if (blogId) {
+      onComplete(blogId);
+    } else {
+      onComplete();
+    }
   };
 
   const renderConnectionForm = () => {

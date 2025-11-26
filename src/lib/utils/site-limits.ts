@@ -89,6 +89,8 @@ export async function getSiteLimitInfo(userId: string): Promise<{
   count: number;
   remaining: number;
   canCreate: boolean;
+  isOverLimit: boolean;
+  sitesToDelete: number;
 }> {
   try {
     const [limit, count] = await Promise.all([
@@ -98,12 +100,16 @@ export async function getSiteLimitInfo(userId: string): Promise<{
 
     const remaining = Math.max(0, limit - count);
     const canCreate = count < limit;
+    const isOverLimit = count > limit;
+    const sitesToDelete = Math.max(0, count - limit);
 
     return {
       limit,
       count,
       remaining,
       canCreate,
+      isOverLimit,
+      sitesToDelete,
     };
   } catch (error) {
     console.error('Error in getSiteLimitInfo:', error);
@@ -112,6 +118,8 @@ export async function getSiteLimitInfo(userId: string): Promise<{
       count: 0,
       remaining: 1,
       canCreate: true,
+      isOverLimit: false,
+      sitesToDelete: 0,
     };
   }
 }

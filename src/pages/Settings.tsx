@@ -55,6 +55,8 @@ export default function Settings() {
     count: number;
     remaining: number;
     canCreate: boolean;
+    isOverLimit: boolean;
+    sitesToDelete: number;
   } | null>(null);
   const [deleteSiteId, setDeleteSiteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -267,8 +269,16 @@ export default function Settings() {
 
     const canCreate = await canCreateSite(user.id);
     if (!canCreate) {
-      toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
-      navigate("/plans");
+      const siteLimitInfo = await getSiteLimitInfo(user.id);
+      if (siteLimitInfo.isOverLimit) {
+        toast.error(
+          `You have ${siteLimitInfo.count} sites but your plan allows ${siteLimitInfo.limit}. ` +
+          `Delete ${siteLimitInfo.sitesToDelete} ${siteLimitInfo.sitesToDelete === 1 ? 'site' : 'sites'} to get back to your limit, or upgrade your plan.`
+        );
+      } else {
+        toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+        navigate("/plans");
+      }
       return;
     }
 
@@ -322,9 +332,9 @@ export default function Settings() {
     }
   };
 
-  const handleViewDashboard = (siteId: string) => {
+  const handleViewDashboard = async (siteId: string) => {
     // Set the site as active first
-    selectSite(siteId);
+    await selectSite(siteId);
     // Then navigate to dashboard
     navigate("/dashboard");
   };
@@ -470,11 +480,15 @@ export default function Settings() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground">Sites</span>
-                        <span className="text-sm text-muted-foreground">
+                        <span className={`text-sm ${siteLimitInfo.isOverLimit ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
                           {siteLimitInfo.count} of {siteLimitInfo.limit}
                         </span>
                       </div>
-                      {siteLimitInfo.count >= siteLimitInfo.limit ? (
+                      {siteLimitInfo.isOverLimit ? (
+                        <Badge variant="outline" className="bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-800">
+                          Over Limit
+                        </Badge>
+                      ) : siteLimitInfo.count >= siteLimitInfo.limit ? (
                         <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-800">
                           Limit Reached
                         </Badge>
@@ -484,18 +498,72 @@ export default function Settings() {
                         </Badge>
                       )}
                     </div>
-                    {siteLimitInfo.count >= siteLimitInfo.limit && (
+                    {/* Over Limit Message */}
+                    {siteLimitInfo.isOverLimit && (
                       <div className="pt-2 border-t border-border/50">
+                        <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
+                                Over Site Limit
+                              </p>
+                              <p className="text-xs text-red-700 dark:text-red-300">
+                                You have {siteLimitInfo.count} sites but your plan allows {siteLimitInfo.limit}. 
+                                Delete {siteLimitInfo.sitesToDelete} {siteLimitInfo.sitesToDelete === 1 ? 'site' : 'sites'} to get back to your limit, 
+                                or upgrade your plan to keep all sites and add more.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                         <p className="text-xs text-muted-foreground text-left mb-2">
-                          You've reached your site limit. Upgrade your plan to add more sites.
+                          Your existing sites will continue to work normally. To add new sites, you must either delete sites to get under your limit or upgrade your plan.
                         </p>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => navigate("/plans")}
+                          onClick={handleManageSubscription}
+                          disabled={isOpeningPortal}
+                          className="w-full"
                         >
-                          Upgrade Plan
+                          {isOpeningPortal ? (
+                            <>
+                              <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                              Opening...
+                            </>
+                          ) : (
+                            "Upgrade Plan"
+                          )}
                         </Button>
+                      </div>
+                    )}
+                    {/* At Limit Message */}
+                    {!siteLimitInfo.isOverLimit && siteLimitInfo.count >= siteLimitInfo.limit && (
+                      <div className="pt-2 border-t border-border/50">
+                        <p className="text-xs text-muted-foreground text-left mb-2">
+                          You've reached your site limit. Upgrade your plan to add more sites.
+                        </p>
+                        <div className="space-y-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleManageSubscription}
+                            disabled={isOpeningPortal}
+                            className="w-full"
+                          >
+                            {isOpeningPortal ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                                Opening...
+                              </>
+                            ) : (
+                              "Upgrade Plan"
+                            )}
+                          </Button>
+                          <p className="text-xs text-muted-foreground text-left">
+                            Click "Upgrade Plan" to open the billing portal. Then click "Update subscription" and increase the quantity to add more sites.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>

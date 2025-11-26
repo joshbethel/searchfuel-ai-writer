@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle, CalendarIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useSiteContext } from "@/contexts/SiteContext";
 
 interface Article {
   id: string;
@@ -29,47 +30,35 @@ interface ScheduledItem {
 
 export default function Calendar() {
   const navigate = useNavigate();
+  const { selectedSite } = useSiteContext();
   const [scheduledItems, setScheduledItems] = useState<ScheduledItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [blogId, setBlogId] = useState<string | null>(null);
   const [cmsConnected, setCmsConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetchBlogAndScheduledItems();
-  }, []);
+    if (selectedSite) {
+      fetchScheduledItems();
+    } else {
+      setIsLoading(false);
+    }
+  }, [selectedSite]);
 
-  const fetchBlogAndScheduledItems = async () => {
+  const fetchScheduledItems = async () => {
+    if (!selectedSite) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate("/auth");
-        return;
-      }
-
-      // Get user's blog
-      const { data: blog, error: blogError } = await supabase
-        .from("blogs")
-        .select("id, cms_platform, cms_site_url, cms_credentials")
-        .eq("user_id", user.id)
-        .single();
-
-      if (blogError) throw blogError;
-      if (!blog) {
-        toast.error("No blog found");
-        return;
-      }
-
-      setBlogId(blog.id);
-      
       // Check CMS connection status
-      const isConnected = !!(blog?.cms_platform && blog?.cms_site_url && blog?.cms_credentials);
+      const isConnected = !!(selectedSite.cms_platform && selectedSite.cms_site_url && selectedSite.cms_credentials);
       setCmsConnected(isConnected);
 
       // Fetch blog posts
       const { data: posts, error: postsError } = await supabase
         .from("blog_posts")
         .select("*")
-        .eq("blog_id", blog.id)
+        .eq("blog_id", selectedSite.id)
         .not("scheduled_publish_date", "is", null)
         .order("scheduled_publish_date", { ascending: true });
 
@@ -79,7 +68,7 @@ export default function Calendar() {
       const { data: scheduledKeywords, error: keywordsError } = await supabase
         .from("scheduled_keywords")
         .select("*")
-        .eq("blog_id", blog.id)
+        .eq("blog_id", selectedSite.id)
         .order("scheduled_date", { ascending: true });
 
       if (keywordsError) throw keywordsError;
@@ -128,7 +117,7 @@ export default function Calendar() {
     );
   }
 
-  if (!blogId) {
+  if (!selectedSite) {
     return (
       <div className="container mx-auto py-12 px-4">
         <div className="max-w-2xl mx-auto">
