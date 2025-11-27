@@ -15,6 +15,24 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // Helper function to create Stripe customer (non-blocking)
+  const createStripeCustomer = async () => {
+    try {
+      const { error: stripeError } = await supabase.functions.invoke('create-stripe-customer', {
+        body: {}
+      });
+      
+      if (stripeError) {
+        console.error('Error creating Stripe customer:', stripeError);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Error calling create-stripe-customer:', err);
+      return false;
+    }
+  };
+
   // Helper function to check subscription and redirect
   const checkSubscriptionAndRedirect = async (userId: string) => {
     try {
@@ -55,8 +73,23 @@ export default function Auth() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session && event === 'SIGNED_IN') {
+        // If this is a new user (just confirmed email), create Stripe customer
+        // Check if user already has a subscription record
+        const { data: existingSubscription } = await supabase
+          .from('subscriptions')
+          .select('stripe_customer_id')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+        
+        // If no Stripe customer exists, create one (this handles email confirmation flow)
+        if (!existingSubscription?.stripe_customer_id) {
+          createStripeCustomer().catch(err => {
+            console.error('Failed to create Stripe customer after email confirmation:', err);
+          });
+        }
+        
         // Check subscription status and redirect accordingly
         checkSubscriptionAndRedirect(session.user.id);
       }
@@ -100,53 +133,34 @@ export default function Auth() {
         });
         if (signUpError) throw signUpError;
         
-        // Create Stripe customer and subscription record immediately after signup
+        // Create Stripe customer only if we have a session (auto-confirm enabled)
+        // Otherwise, it will be created when user confirms their email
         if (signUpData.user) {
-          try {
-            const { error: stripeError } = await supabase.functions.invoke('create-stripe-customer', {
-              body: {}
+          if (signUpData.session) {
+            // We have a session - create Stripe customer now
+            createStripeCustomer().catch(err => {
+              console.error('Failed to create Stripe customer:', err);
             });
-            
-            if (stripeError) {
-              console.error('Error creating Stripe customer:', stripeError);
-              // Don't block signup if Stripe customer creation fails - can be created later
-              toast.warning("Account created, but there was an issue setting up billing. You can complete this later.");
-            } else {
-              toast.success("Account created! Please check your email to confirm.");
-            }
-
-            // Send account creation notifications (non-blocking)
-            // This sends welcome email to user and internal notification to team
-            supabase.functions.invoke('send-account-notifications', {
-              body: {
-                user_id: signUpData.user.id,
-                email: signUpData.user.email || email,
-                created_at: signUpData.user.created_at,
-                user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name
-              }
-            }).catch(err => {
-              // Log but don't block signup - notifications are non-critical
-              console.error('Failed to send account creation notifications:', err);
-            });
-          } catch (err) {
-            console.error('Error calling create-stripe-customer:', err);
-            // Don't block signup - Stripe customer can be created later
+            toast.success("Account created successfully!");
+          } else {
+            // No session - email confirmation required
+            // Stripe customer will be created after email confirmation via auth state change handler
             toast.success("Account created! Please check your email to confirm.");
-            
-            // Still try to send notifications even if Stripe customer creation failed
-            if (signUpData.user) {
-              supabase.functions.invoke('send-account-notifications', {
-                body: {
-                  user_id: signUpData.user.id,
-                  email: signUpData.user.email || email,
-                  created_at: signUpData.user.created_at,
-                  user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name
-                }
-              }).catch(err => {
-                console.error('Failed to send account creation notifications:', err);
-              });
-            }
           }
+
+          // Send account creation notifications (non-blocking)
+          // This sends welcome email to user and internal notification to team
+          supabase.functions.invoke('send-account-notifications', {
+            body: {
+              user_id: signUpData.user.id,
+              email: signUpData.user.email || email,
+              created_at: signUpData.user.created_at,
+              user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name
+            }
+          }).catch(err => {
+            // Log but don't block signup - notifications are non-critical
+            console.error('Failed to send account creation notifications:', err);
+          });
         } else {
           toast.success("Account created! Please check your email to confirm.");
         }

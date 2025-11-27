@@ -127,6 +127,7 @@ serve(async (req) => {
         signupDate: created_at
       });
 
+      console.log(`[Welcome Email] From: ${fromEmail}, To: ${email}`);
       const welcomeResult = await resend.emails.send({
         from: fromEmail,
         to: email,
@@ -157,6 +158,7 @@ serve(async (req) => {
         dailySignups
       });
 
+      console.log(`[Internal Notification] From: ${fromEmail}, To: ${internalEmails.join(", ")}`);
       const internalResult = await resend.emails.send({
         from: fromEmail,
         to: internalEmails,
