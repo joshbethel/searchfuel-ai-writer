@@ -3,7 +3,7 @@
  * Provides a shared Resend client instance for all Edge Functions
  */
 
-import { Resend } from "npm:resend@^3.0.0";
+import { Resend } from "npm:resend@4.0.0";
 
 /**
  * Get Resend API key from environment variables
