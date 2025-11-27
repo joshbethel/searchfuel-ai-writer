@@ -114,10 +114,38 @@ export default function Auth() {
             } else {
               toast.success("Account created! Please check your email to confirm.");
             }
+
+            // Send account creation notifications (non-blocking)
+            // This sends welcome email to user and internal notification to team
+            supabase.functions.invoke('send-account-notifications', {
+              body: {
+                user_id: signUpData.user.id,
+                email: signUpData.user.email || email,
+                created_at: signUpData.user.created_at,
+                user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name
+              }
+            }).catch(err => {
+              // Log but don't block signup - notifications are non-critical
+              console.error('Failed to send account creation notifications:', err);
+            });
           } catch (err) {
             console.error('Error calling create-stripe-customer:', err);
             // Don't block signup - Stripe customer can be created later
             toast.success("Account created! Please check your email to confirm.");
+            
+            // Still try to send notifications even if Stripe customer creation failed
+            if (signUpData.user) {
+              supabase.functions.invoke('send-account-notifications', {
+                body: {
+                  user_id: signUpData.user.id,
+                  email: signUpData.user.email || email,
+                  created_at: signUpData.user.created_at,
+                  user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name
+                }
+              }).catch(err => {
+                console.error('Failed to send account creation notifications:', err);
+              });
+            }
           }
         } else {
           toast.success("Account created! Please check your email to confirm.");
