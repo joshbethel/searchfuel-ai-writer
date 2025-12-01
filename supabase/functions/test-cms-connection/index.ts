@@ -226,13 +226,23 @@ serve(async (req: Request) => {
         break;
 
       case "wix":
-        // Test Wix site accessibility
+        // Test Wix CMS connection
         try {
+          if (!apiKey) {
+            error = "Client ID is required";
+            break;
+          }
+          
+          // For now, just verify site accessibility and credentials are provided
+          // Full SDK integration would require OAuth flow which is complex for test endpoint
           const response = await fetch(siteUrl);
-          success = response.ok;
-          if (!success) error = "Cannot access Wix site. Verify URL is correct.";
+          success = response.ok && !!apiKey;
+          
+          if (!success) {
+            error = "Cannot access Wix site or invalid credentials. Verify URL and Client ID are correct.";
+          }
         } catch (e) {
-          error = "Failed to access Wix site";
+          error = "Failed to connect to Wix site";
         }
         break;
 
