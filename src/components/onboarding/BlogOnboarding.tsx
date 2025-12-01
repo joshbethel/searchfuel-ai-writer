@@ -272,6 +272,11 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       } else if (selectedPlatform === "framer") {
         // Framer only needs URL, use empty credentials object
         credentials = { connected: true };
+      } else if (selectedPlatform === "wix") {
+        credentials = {
+          clientId: connectionData.apiKey,
+          collectionId: connectionData.storeId,
+        };
       } else {
         credentials = {
           apiKey: connectionData.apiKey,
@@ -557,6 +562,49 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                 ✓ Framer connection only requires your website URL. Click "Continue" to proceed.
               </p>
             </div>
+          )}
+
+          {selectedPlatform === "wix" && (
+            <>
+              <div>
+                <Label htmlFor="apiKey">Client ID *</Label>
+                <Input
+                  id="apiKey"
+                  type="password"
+                  placeholder="Enter your Wix Client ID"
+                  value={connectionData.apiKey}
+                  onChange={(e) => setConnectionData({ ...connectionData, apiKey: e.target.value })}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Get from Wix Dev Center → Your App → OAuth
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="collectionId">Collection ID *</Label>
+                <Input
+                  id="collectionId"
+                  type="text"
+                  placeholder="Enter your Wix Collection ID"
+                  value={connectionData.storeId}
+                  onChange={(e) => setConnectionData({ ...connectionData, storeId: e.target.value })}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Find in Wix CMS → Collections → Your Collection
+                </p>
+              </div>
+              <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-foreground mb-2">How to get your credentials:</h4>
+                <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
+                  <li>Go to Wix Dev Center (dev.wix.com)</li>
+                  <li>Create or select your app</li>
+                  <li>Copy the Client ID from OAuth section</li>
+                  <li>Go to your Wix site → CMS → Collections</li>
+                  <li>Open your collection and copy the Collection ID</li>
+                </ol>
+              </div>
+            </>
           )}
 
           {/* Connection Steps Info */}
