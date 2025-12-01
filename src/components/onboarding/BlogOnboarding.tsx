@@ -46,7 +46,7 @@ const CMS_PLATFORMS = [
   // { id: "webflow" as const, name: "Webflow", icon: "⚡", description: "Sync with Webflow CMS" },
   // { id: "ghost" as const, name: "Ghost", icon: "👻", description: "Integrate Ghost publishing" },
   { id: "shopify" as const, name: "Shopify", icon: "🛍️", description: "Connect your Shopify store" },
-  // { id: "wix" as const, name: "WIX", icon: "🌐", description: "Sync with WIX website" },
+  { id: "wix" as const, name: "WIX", icon: "🌐", description: "Sync with WIX website" },
   { id: "framer" as const, name: "Framer", icon: "🎨", description: "Connect Framer site" },
   // { id: "notion" as const, name: "Notion", icon: "📝", description: "Sync with Notion database" },
   // { id: "hubspot" as const, name: "HubSpot", icon: "🎯", description: "Connect HubSpot CMS" },
@@ -62,7 +62,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   const [isLoadingExistingData, setIsLoadingExistingData] = useState(false);
   // Set initial step based on whether we're reconnecting
   const [currentStep, setCurrentStep] = useState<"platform" | "connection" | "article-types">(
-    propBlogId ? "connection" : "platform"
+    propBlogId ? "connection" : "platform",
   );
   const [blogId, setBlogId] = useState<string | null>(propBlogId || null);
   const [siteLimitInfo, setSiteLimitInfo] = useState<{
@@ -114,7 +114,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
       if (blog.cms_platform) {
         setSelectedPlatform(blog.cms_platform as CMSPlatform);
-        setConnectionData(prev => ({
+        setConnectionData((prev) => ({
           ...prev,
           platform: blog.cms_platform as CMSPlatform,
           siteUrl: blog.cms_site_url || "",
@@ -133,7 +133,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
   const checkSiteLimit = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       const info = await getSiteLimitInfo(user.id);
@@ -213,7 +215,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       // Only check for duplicate URLs when creating a new site (not reconnecting)
       if (!propBlogId) {
         // Normalize URL for comparison (remove trailing slash, convert to lowercase)
-        const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, '');
+        const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, "");
 
         // Check if a site with the same URL already exists for this user
         const { data: existingSites, error: checkError } = await supabase
@@ -228,21 +230,21 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
         // Check if URL already exists (check both website_homepage and cms_site_url)
         const urlExists = existingSites?.some((site) => {
-          const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, '');
-          const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, '');
+          const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, "");
+          const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, "");
           return existingHomepage === normalizedUrl || existingCmsUrl === normalizedUrl;
         });
 
         if (urlExists) {
           const existingSite = existingSites?.find((site) => {
-            const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, '');
-            const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, '');
+            const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, "");
+            const existingCmsUrl = site.cms_site_url?.toLowerCase().replace(/\/$/, "");
             return existingHomepage === normalizedUrl || existingCmsUrl === normalizedUrl;
           });
-          
+
           toast.error(
-            `A site with this URL already exists: ${existingSite?.title || 'Untitled Site'}. ` +
-            `Please use a different URL or edit the existing site from Settings.`
+            `A site with this URL already exists: ${existingSite?.title || "Untitled Site"}. ` +
+              `Please use a different URL or edit the existing site from Settings.`,
           );
           setLoading(false);
           return;
@@ -311,10 +313,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           last_sync_at: new Date().toISOString(),
         };
 
-        const { error } = await supabase
-          .from("blogs")
-          .update(updateData)
-          .eq("id", propBlogId);
+        const { error } = await supabase.from("blogs").update(updateData).eq("id", propBlogId);
 
         if (error) throw error;
 
@@ -635,67 +634,68 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   // Platform Selection Step - only show for new sites
   if (!propBlogId) {
     return (
-    <Card className="p-8 bg-card max-w-4xl">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your CMS</h2>
-        <p className="text-muted-foreground">
-          Choose your platform to automatically sync and publish SEO-optimized content
-        </p>
-      </div>
+      <Card className="p-8 bg-card max-w-4xl">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your CMS</h2>
+          <p className="text-muted-foreground">
+            Choose your platform to automatically sync and publish SEO-optimized content
+          </p>
+        </div>
 
-      {/* Site Limit Warning */}
-      {siteLimitInfo && !siteLimitInfo.canCreate && (
-        <Alert className="mb-6 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
-          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <AlertTitle className="text-amber-800 dark:text-amber-200">Site Limit Reached</AlertTitle>
-          <AlertDescription className="text-amber-700 dark:text-amber-300">
-            You've reached your site limit ({siteLimitInfo.count} of {siteLimitInfo.limit} sites). 
-            Please upgrade your plan to add more sites.
-            <Button
-              variant="link"
-              className="p-0 h-auto ml-2 text-amber-700 dark:text-amber-300 underline"
+        {/* Site Limit Warning */}
+        {siteLimitInfo && !siteLimitInfo.canCreate && (
+          <Alert className="mb-6 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertTitle className="text-amber-800 dark:text-amber-200">Site Limit Reached</AlertTitle>
+            <AlertDescription className="text-amber-700 dark:text-amber-300">
+              You've reached your site limit ({siteLimitInfo.count} of {siteLimitInfo.limit} sites). Please upgrade your
+              plan to add more sites.
+              <Button
+                variant="link"
+                className="p-0 h-auto ml-2 text-amber-700 dark:text-amber-300 underline"
+                onClick={() => {
+                  onCancel();
+                  navigate("/plans");
+                }}
+              >
+                Upgrade Now →
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {siteLimitInfo && siteLimitInfo.remaining > 0 && (
+          <Alert className="mb-6 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+            <AlertDescription className="text-blue-700 dark:text-blue-300">
+              You can add {siteLimitInfo.remaining} more {siteLimitInfo.remaining === 1 ? "site" : "sites"} (
+              {siteLimitInfo.count} of {siteLimitInfo.limit} used).
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 gap-10">
+          {CMS_PLATFORMS.map((platform) => (
+            <button
+              key={platform.id}
               onClick={() => {
-                onCancel();
-                navigate("/plans");
+                setSelectedPlatform(platform.id);
+                setConnectionData({ ...connectionData, platform: platform.id });
+                setCurrentStep("connection");
               }}
+              className="p-4 rounded-lg border-2 border-border hover:border-accent transition-all bg-card hover:bg-accent/5 flex flex-col items-center gap-2 text-center"
             >
-              Upgrade Now →
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+              <span className="text-3xl">{platform.icon}</span>
+              <span className="text-sm font-medium text-foreground">{platform.name}</span>
+            </button>
+          ))}
+        </div>
 
-      {siteLimitInfo && siteLimitInfo.remaining > 0 && (
-        <Alert className="mb-6 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
-          <AlertDescription className="text-blue-700 dark:text-blue-300">
-            You can add {siteLimitInfo.remaining} more {siteLimitInfo.remaining === 1 ? 'site' : 'sites'} ({siteLimitInfo.count} of {siteLimitInfo.limit} used).
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 gap-10">
-        {CMS_PLATFORMS.map((platform) => (
-          <button
-            key={platform.id}
-            onClick={() => {
-              setSelectedPlatform(platform.id);
-              setConnectionData({ ...connectionData, platform: platform.id });
-              setCurrentStep("connection");
-            }}
-            className="p-4 rounded-lg border-2 border-border hover:border-accent transition-all bg-card hover:bg-accent/5 flex flex-col items-center gap-2 text-center"
-          >
-            <span className="text-3xl">{platform.icon}</span>
-            <span className="text-sm font-medium text-foreground">{platform.name}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-8 flex justify-end">
-        <Button variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </Card>
+        <div className="mt-8 flex justify-end">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </Card>
     );
   }
 
