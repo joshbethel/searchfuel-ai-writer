@@ -74,7 +74,9 @@ export default function Auth() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session && event === 'SIGNED_IN') {
+      console.log('Auth state change:', event, session?.user?.id);
+      
+      if (event === 'SIGNED_IN' && session) {
         // If this is a new user (just confirmed email), create Stripe customer
         // Check if user already has a subscription record
         const { data: existingSubscription } = await supabase
@@ -91,7 +93,7 @@ export default function Auth() {
         }
         
         // Check subscription status and redirect accordingly
-        checkSubscriptionAndRedirect(session.user.id);
+        await checkSubscriptionAndRedirect(session.user.id);
       }
     });
 
