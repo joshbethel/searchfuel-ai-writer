@@ -109,20 +109,9 @@ export default function Auth() {
           password,
         });
         if (error) throw error;
-        if (!data.session) throw new Error('No session created after login');
-        
-        // Verify the session is valid
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        if (!session) throw new Error('Session verification failed');
         
         toast.success("Logged in successfully!");
-        // Check subscription status and redirect accordingly
-        if (data.user) {
-          await checkSubscriptionAndRedirect(data.user.id);
-        } else {
-          navigate("/plans");
-        }
+        // Navigation will be handled by onAuthStateChange
       } else {
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
