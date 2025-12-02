@@ -102,9 +102,9 @@ serve(async (req) => {
       );
     }
 
-    // Generate confirmation link - use 'signup' type for email confirmation
+    // Generate confirmation link - use 'magiclink' type for email confirmation
     const { data: linkData, error: linkError } = await supabaseService.auth.admin.generateLink({
-      type: 'signup',
+      type: 'magiclink',
       email: email,
       options: {
         redirectTo: redirectUrl,
