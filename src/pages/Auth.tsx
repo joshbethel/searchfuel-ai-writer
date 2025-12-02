@@ -112,8 +112,13 @@ export default function Auth() {
         });
         if (error) throw error;
         
-        toast.success("Logged in successfully!");
-        // Navigation will be handled by onAuthStateChange
+        if (data.session?.user) {
+          toast.success("Logged in successfully!");
+          // Manually trigger navigation after successful login
+          await checkSubscriptionAndRedirect(data.session.user.id);
+        } else {
+          throw new Error("No session created after login");
+        }
       } else {
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
