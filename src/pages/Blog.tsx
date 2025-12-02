@@ -159,7 +159,7 @@ export default function Blog() {
             Save time and boost your search rankings with AI-powered content.
           </p>
           <Button size="lg" asChild>
-            <Link to="/auth">Get Started Free</Link>
+            <Link to="/">Get Started Free</Link>
           </Button>
         </div>
       </main>

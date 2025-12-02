@@ -109,7 +109,7 @@ export default function Plans() {
   const handleSelectPlan = async () => {
     if (!user) {
       toast.error("Please sign in to select a plan");
-      navigate("/auth");
+      navigate("/");
       return;
     }
 
@@ -126,7 +126,7 @@ export default function Plans() {
       
       if (sessionError || !session) {
         toast.error("Please sign in to select a plan");
-        navigate("/auth");
+        navigate("/");
         setLoading(false);
         return;
       }
@@ -313,7 +313,7 @@ export default function Plans() {
               ) : !user ? (
                 <>
                   <Button
-                    onClick={() => navigate("/auth")}
+                    onClick={() => navigate("/")}
                     className="w-full text-base py-5"
                     size="lg"
                   >

@@ -109,7 +109,7 @@ const Index = () => {
 
   const handleSignUpToGenerate = () => {
     toast.info("Sign up to generate articles from these recommendations");
-    navigate("/auth?mode=signup");
+    navigate("/?mode=signup");
   };
 
   return (
@@ -140,10 +140,10 @@ const Index = () => {
               </>
             ) : (
               <>
-                <Button variant="outline" onClick={() => navigate("/auth?mode=signin")} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+                <Button variant="outline" onClick={() => navigate("/?mode=signin")} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
                   Sign In
                 </Button>
-                <Button onClick={() => navigate("/auth?mode=signup")} className="bg-accent hover:bg-accent/90">
+                <Button onClick={() => navigate("/?mode=signup")} className="bg-accent hover:bg-accent/90">
                   Sign Up
                 </Button>
               </>
@@ -275,7 +275,7 @@ const Index = () => {
                   Sign in to automatically generate SEO-optimized articles and start ranking higher in search results.
                 </p>
                 <Button 
-                  onClick={() => navigate("/auth?mode=signin")} 
+                  onClick={() => navigate("/?mode=signin")} 
                   size="lg" 
                   className="bg-accent hover:bg-accent/90"
                 >

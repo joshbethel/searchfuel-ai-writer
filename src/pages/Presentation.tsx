@@ -121,7 +121,7 @@ export default function Presentation() {
             From keyword research to publishing - automate your entire content workflow and dominate search rankings
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" onClick={() => navigate("/auth")} className="h-14 px-8">
+            <Button size="lg" onClick={() => navigate("/")} className="h-14 px-8">
               Get Started Free
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
@@ -249,7 +249,7 @@ export default function Presentation() {
             Join thousands of businesses growing their organic traffic with AI
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" onClick={() => navigate("/auth?mode=signup")} className="h-14 px-8">
+            <Button size="lg" onClick={() => navigate("/?mode=signup")} className="h-14 px-8">
               <Sparkles className="mr-2 h-5 w-5" />
               Start Free Trial
             </Button>

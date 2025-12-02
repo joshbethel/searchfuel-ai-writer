@@ -24,7 +24,7 @@ export const FinalCTA = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
               size="lg"
-              onClick={() => navigate("/auth?mode=signup")}
+              onClick={() => navigate("/?mode=signup")}
               className="bg-accent hover:bg-accent/90 text-accent-foreground text-lg px-8 h-14 shadow-xl"
             >
               <Zap className="w-5 h-5 mr-2" />
