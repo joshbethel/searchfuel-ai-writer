@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ export default function Auth() {
   };
 
   // Helper function to check subscription and redirect
-  const checkSubscriptionAndRedirect = async (userId: string) => {
+  const checkSubscriptionAndRedirect = useCallback(async (userId: string) => {
     try {
       const { data: subscription } = await supabase
         .from('subscriptions')
@@ -53,7 +53,7 @@ export default function Auth() {
       // On error, redirect to plans to be safe
       navigate("/plans");
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     // Check URL params for mode
@@ -98,7 +98,7 @@ export default function Auth() {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, checkSubscriptionAndRedirect]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,41 +125,16 @@ export default function Auth() {
         if (signUpError) throw signUpError;
         
         if (signUpData.user) {
-          // Even if auto-confirm is enabled (which creates a session),
-          // we want to require email confirmation before allowing sign-in
+          // Confirmation email functionality is currently disabled
+          // Auto-confirm is enabled, so user is automatically signed in
           if (signUpData.session) {
-            // Auto-confirm is enabled, so we got a session
-            // Sign the user out immediately and unconfirm their email
-            await supabase.auth.signOut();
-            
-            // Send confirmation email and set email_verified to false
-            supabase.functions.invoke('send-confirmation-email', {
-              body: {
-                user_id: signUpData.user.id,
-                email: signUpData.user.email || email,
-                user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name,
-                redirect_to: `${window.location.origin}/plans`,
-                unconfirm_email: true // Flag to unconfirm the email
-              }
-            }).catch(err => {
-              console.error('Failed to send custom confirmation email:', err);
+            // We have a session - create Stripe customer now
+            createStripeCustomer().catch(err => {
+              console.error('Failed to create Stripe customer:', err);
             });
-            
-            toast.success("Account created! Please check your email to confirm.");
+            toast.success("Account created successfully!");
           } else {
-            // No session - email confirmation already required
-            // Send custom confirmation email (replaces Supabase's default)
-            supabase.functions.invoke('send-confirmation-email', {
-              body: {
-                user_id: signUpData.user.id,
-                email: signUpData.user.email || email,
-                user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name,
-                redirect_to: `${window.location.origin}/plans`
-              }
-            }).catch(err => {
-              console.error('Failed to send custom confirmation email:', err);
-            });
-            
+            // No session - email confirmation would be required, but it's disabled
             toast.success("Account created! Please check your email to confirm.");
           }
           
