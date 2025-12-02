@@ -108,7 +108,7 @@ serve(async (req) => {
     if (unconfirm_email && userData.user.email_confirmed_at !== null) {
       console.log("Unconfirming email for user (auto-confirm was enabled):", user_id);
       const { error: updateError } = await supabaseService.auth.admin.updateUserById(user_id, {
-        email_confirm: false
+        email_verified: false,
       });
       
       if (updateError) {
