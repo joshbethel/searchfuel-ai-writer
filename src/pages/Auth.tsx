@@ -35,23 +35,41 @@ export default function Auth() {
 
   // Helper function to check subscription and redirect
   const checkSubscriptionAndRedirect = useCallback(async (userId: string) => {
+    console.log('Checking subscription for user:', userId);
+    
     try {
-      const { data: subscription } = await supabase
+      const queryStart = Date.now();
+      const { data: subscription, error: subscriptionError } = await supabase
         .from('subscriptions')
         .select('status, plan_name')
         .eq('user_id', userId)
         .maybeSingle();
+      
+      const queryTime = Date.now() - queryStart;
+      console.log(`Subscription query completed in ${queryTime}ms`);
 
+      if (subscriptionError) {
+        console.error('Subscription query error:', subscriptionError);
+        console.log('Navigating to /plans due to query error');
+        navigate("/plans", { replace: true });
+        return;
+      }
+
+      console.log('Subscription data:', subscription);
+      
       // If no subscription or no active plan, redirect to plans page
       if (!subscription || subscription.status !== 'active' || !subscription.plan_name) {
-        navigate("/plans");
+        console.log('No active subscription, redirecting to /plans');
+        navigate("/plans", { replace: true });
       } else {
-        navigate("/dashboard");
+        console.log('Active subscription found, redirecting to /dashboard');
+        navigate("/dashboard", { replace: true });
       }
     } catch (error) {
       console.error('Error checking subscription:', error);
       // On error, redirect to plans to be safe
-      navigate("/plans");
+      console.log('Error occurred, redirecting to /plans as fallback');
+      navigate("/plans", { replace: true });
     }
   }, [navigate]);
 
@@ -77,23 +95,46 @@ export default function Auth() {
       console.log('Auth state change:', event, session?.user?.id);
       
       if (event === 'SIGNED_IN' && session) {
-        // If this is a new user (just confirmed email), create Stripe customer
-        // Check if user already has a subscription record
-        const { data: existingSubscription } = await supabase
+        console.log('User signed in, checking subscription and redirecting...');
+        
+        // Create Stripe customer in background (non-blocking)
+        supabase
           .from('subscriptions')
           .select('stripe_customer_id')
           .eq('user_id', session.user.id)
-          .maybeSingle();
-        
-        // If no Stripe customer exists, create one (this handles email confirmation flow)
-        if (!existingSubscription?.stripe_customer_id) {
-          createStripeCustomer().catch(err => {
-            console.error('Failed to create Stripe customer after email confirmation:', err);
+          .maybeSingle()
+          .then(({ data: existingSubscription }) => {
+            if (!existingSubscription?.stripe_customer_id) {
+              createStripeCustomer().catch(err => {
+                console.error('Failed to create Stripe customer:', err);
+              });
+            }
+          })
+          .catch(err => {
+            console.error('Error checking for existing subscription:', err);
           });
-        }
         
         // Check subscription status and redirect accordingly
-        await checkSubscriptionAndRedirect(session.user.id);
+        // Use timeout to ensure navigation always happens
+        const redirectWithTimeout = async () => {
+          try {
+            await checkSubscriptionAndRedirect(session.user.id);
+          } catch (err) {
+            console.error('Error in checkSubscriptionAndRedirect:', err);
+            navigate("/plans", { replace: true });
+          }
+        };
+        
+        // Set timeout fallback
+        const timeoutId = setTimeout(() => {
+          console.warn('Redirect timeout after 2 seconds, navigating to /plans');
+          navigate("/plans", { replace: true });
+        }, 2000);
+        
+        // Start redirect (will clear timeout if successful)
+        redirectWithTimeout().finally(() => {
+          clearTimeout(timeoutId);
+        });
       }
     });
 
