@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { createResendClient, getFromEmail } from "../_shared/resend-client.ts";
 import { getConfirmationEmailTemplate } from "../_shared/email-templates.ts";
+import { sendEmailWithRetry } from "../_shared/resend-retry.ts";
 
 // CORS handling with allowed origins
 const allowedOrigins = [
@@ -136,16 +137,14 @@ serve(async (req) => {
     });
 
     console.log(`[Confirmation Email] From: ${fromEmail}, To: ${email}`);
-    const emailResult = await resend.emails.send({
+    
+    // Send email with retry logic for rate limits
+    const emailResult = await sendEmailWithRetry(resend, {
       from: fromEmail,
       to: email,
       subject: "Confirm your email - SearchFuel",
       html: confirmationHtml,
     });
-
-    if (emailResult.error) {
-      throw new Error(emailResult.error.message || "Failed to send confirmation email");
-    }
 
     console.log(`Confirmation email sent successfully to ${email}`);
 

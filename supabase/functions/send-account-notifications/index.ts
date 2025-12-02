@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { createResendClient, getFromEmail, getInternalNotificationEmails } from "../_shared/resend-client.ts";
 import { getWelcomeEmailTemplate, getInternalNotificationTemplate } from "../_shared/email-templates.ts";
+import { sendEmailWithRetry } from "../_shared/resend-retry.ts";
 
 // CORS handling with allowed origins
 const allowedOrigins = [
@@ -128,16 +129,12 @@ serve(async (req) => {
       });
 
       console.log(`[Welcome Email] From: ${fromEmail}, To: ${email}`);
-      const welcomeResult = await resend.emails.send({
+      const welcomeResult = await sendEmailWithRetry(resend, {
         from: fromEmail,
         to: email,
         subject: "Welcome to SearchFuel! 🚀",
         html: welcomeHtml,
       });
-
-      if (welcomeResult.error) {
-        throw new Error(welcomeResult.error.message || "Failed to send welcome email");
-      }
 
       results.welcomeEmail.success = true;
       console.log(`Welcome email sent successfully to ${email}`);
@@ -159,16 +156,12 @@ serve(async (req) => {
       });
 
       console.log(`[Internal Notification] From: ${fromEmail}, To: ${internalEmails.join(", ")}`);
-      const internalResult = await resend.emails.send({
+      const internalResult = await sendEmailWithRetry(resend, {
         from: fromEmail,
         to: internalEmails,
         subject: `🎉 New SearchFuel Signup: ${email}`,
         html: internalHtml,
       });
-
-      if (internalResult.error) {
-        throw new Error(internalResult.error.message || "Failed to send internal notification");
-      }
 
       results.internalNotification.success = true;
       console.log(`Internal notification sent successfully to ${internalEmails.join(", ")}`);
