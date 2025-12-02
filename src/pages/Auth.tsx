@@ -135,6 +135,19 @@ export default function Auth() {
             toast.success("Account created successfully!");
           } else {
             // No session - email confirmation required
+            // Send custom confirmation email (replaces Supabase's default)
+            supabase.functions.invoke('send-confirmation-email', {
+              body: {
+                user_id: signUpData.user.id,
+                email: signUpData.user.email || email,
+                user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name,
+                redirect_to: `${window.location.origin}/plans`
+              }
+            }).catch(err => {
+              // Log but don't block signup - Supabase will send default email as fallback
+              console.error('Failed to send custom confirmation email:', err);
+            });
+            
             // Stripe customer will be created after email confirmation via auth state change handler
             toast.success("Account created! Please check your email to confirm.");
           }
