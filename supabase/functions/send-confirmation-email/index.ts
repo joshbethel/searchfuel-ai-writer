@@ -38,6 +38,7 @@ interface ConfirmationEmailRequest {
   email: string;
   user_name?: string;
   redirect_to?: string;
+  unconfirm_email?: boolean; // Flag to unconfirm email (when auto-confirm is enabled)
 }
 
 serve(async (req) => {
@@ -63,7 +64,7 @@ serve(async (req) => {
   try {
     // Parse request body
     const body: ConfirmationEmailRequest = await req.json();
-    const { user_id, email, user_name, redirect_to } = body;
+    const { user_id, email, user_name, redirect_to, unconfirm_email } = body;
 
     // Validate required fields
     if (!user_id || !email) {
@@ -100,6 +101,39 @@ serve(async (req) => {
         JSON.stringify({ error: "User not found", details: userError?.message }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // If unconfirm_email flag is set, we need to unconfirm the email
+    // This happens when auto-confirm is enabled but we still want email verification
+    if (unconfirm_email && userData.user.email_confirmed_at !== null) {
+      console.log("Unconfirming email for user (auto-confirm was enabled):", user_id);
+      const { error: updateError } = await supabaseService.auth.admin.updateUserById(user_id, {
+        email_confirm: false
+      });
+      
+      if (updateError) {
+        console.error("Failed to unconfirm email:", updateError);
+        // Continue anyway - try to send the email
+      } else {
+        console.log("Successfully unconfirmed email for user:", user_id);
+        // Refresh user data after update
+        const { data: refreshedUserData } = await supabaseService.auth.admin.getUserById(user_id);
+        if (refreshedUserData?.user) {
+          userData.user = refreshedUserData.user;
+        }
+      }
+    }
+
+    // If email is already confirmed and we're not unconfirming it, skip sending confirmation email
+    if (userData.user.email_confirmed_at !== null && !unconfirm_email) {
+      console.log("User email already confirmed, skipping confirmation email");
+      return new Response(JSON.stringify({
+        success: true,
+        message: "Email already confirmed, no confirmation email needed"
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     }
 
     // Generate confirmation link - use 'magiclink' type for email confirmation

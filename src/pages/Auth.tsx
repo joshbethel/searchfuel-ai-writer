@@ -124,17 +124,30 @@ export default function Auth() {
         });
         if (signUpError) throw signUpError;
         
-        // Create Stripe customer only if we have a session (auto-confirm enabled)
-        // Otherwise, it will be created when user confirms their email
         if (signUpData.user) {
+          // Even if auto-confirm is enabled (which creates a session),
+          // we want to require email confirmation before allowing sign-in
           if (signUpData.session) {
-            // We have a session - create Stripe customer now
-            createStripeCustomer().catch(err => {
-              console.error('Failed to create Stripe customer:', err);
+            // Auto-confirm is enabled, so we got a session
+            // Sign the user out immediately and unconfirm their email
+            await supabase.auth.signOut();
+            
+            // Send confirmation email and set email_verified to false
+            supabase.functions.invoke('send-confirmation-email', {
+              body: {
+                user_id: signUpData.user.id,
+                email: signUpData.user.email || email,
+                user_name: signUpData.user.user_metadata?.full_name || signUpData.user.user_metadata?.name,
+                redirect_to: `${window.location.origin}/plans`,
+                unconfirm_email: true // Flag to unconfirm the email
+              }
+            }).catch(err => {
+              console.error('Failed to send custom confirmation email:', err);
             });
-            toast.success("Account created successfully!");
+            
+            toast.success("Account created! Please check your email to confirm.");
           } else {
-            // No session - email confirmation required
+            // No session - email confirmation already required
             // Send custom confirmation email (replaces Supabase's default)
             supabase.functions.invoke('send-confirmation-email', {
               body: {
@@ -144,13 +157,13 @@ export default function Auth() {
                 redirect_to: `${window.location.origin}/plans`
               }
             }).catch(err => {
-              // Log but don't block signup - Supabase will send default email as fallback
               console.error('Failed to send custom confirmation email:', err);
             });
             
-            // Stripe customer will be created after email confirmation via auth state change handler
             toast.success("Account created! Please check your email to confirm.");
           }
+          
+          // Stripe customer will be created after email confirmation via auth state change handler
 
           // Send account creation notifications (non-blocking)
           // This sends welcome email to user and internal notification to team
