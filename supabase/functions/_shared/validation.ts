@@ -94,7 +94,10 @@ export const testCmsConnectionSchema = z.object({
     "shopify",
     "hubspot",
     "rest_api",
-    "framer"
+    "framer",
+    "wix",
+    "nextjs",
+    "notion"
   ], {
     errorMap: () => ({ message: "Invalid CMS platform" })
   }),
@@ -104,11 +107,16 @@ export const testCmsConnectionSchema = z.object({
   accessToken: z.string().optional(),
   username: z.string().optional(),
   password: z.string().optional(),
+  storeId: z.string().optional(),
 }).refine(
   (data) => {
-    // Framer only needs URL, others need credentials
+    // Framer only needs URL
     if (data.platform === 'framer') {
       return !!data.siteUrl;
+    }
+    // Wix needs apiKey (API Key) and apiSecret (Site ID)
+    if (data.platform === 'wix') {
+      return !!(data.apiKey && data.apiSecret);
     }
     // At least one credential field should be present for other platforms
     return !!(data.apiKey || data.apiSecret || data.accessToken || 
