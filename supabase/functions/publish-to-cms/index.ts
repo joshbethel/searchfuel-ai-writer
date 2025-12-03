@@ -1183,11 +1183,69 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     }
   };
   
-  // Note: Wix requires images to be uploaded to their media manager first
-  // External URLs and base64 images cannot be used directly
-  // Images must be uploaded via Wix Media API to get a media ID
-  if (post.featured_image) {
-    console.log(`Skipping featured image for Wix - requires media upload to Wix Media Manager`);
+  // Upload featured image to Wix Media Manager and add to post
+  if (post.featured_image && !post.featured_image.startsWith('data:')) {
+    console.log(`Uploading featured image to Wix Media Manager: ${post.featured_image.substring(0, 80)}...`);
+    
+    try {
+      const mediaResponse = await fetch(
+        'https://www.wixapis.com/site-media/v1/files/import',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`,
+            'wix-site-id': siteId,
+            'wix-account-id': credentials.accountId || '',
+          },
+          body: JSON.stringify({
+            url: post.featured_image,
+            mediaType: 'IMAGE',
+            displayName: `${post.title.substring(0, 50)}.jpg`,
+            private: false
+          })
+        }
+      );
+      
+      if (mediaResponse.ok) {
+        const mediaData = await mediaResponse.json();
+        const mediaId = mediaData.file?.id;
+        
+        if (mediaId) {
+          console.log(`Successfully uploaded image to Wix Media. ID: ${mediaId}`);
+          
+          // Add image as first node in rich content
+          richContentNodes.unshift({
+            type: "IMAGE",
+            id: crypto.randomUUID(),
+            nodes: [],
+            imageData: {
+              containerData: {
+                width: { size: "FULL_WIDTH" },
+                alignment: "CENTER"
+              },
+              image: {
+                src: { id: mediaId },
+                width: 1200,
+                height: 630
+              },
+              altText: post.title
+            }
+          });
+          
+          // Update the blog post's richContent with the image
+          blogPost.post.richContent.nodes = richContentNodes;
+          console.log(`Added featured image to blog post content`);
+        }
+      } else {
+        const errorText = await mediaResponse.text();
+        console.error(`Failed to upload image to Wix Media: ${mediaResponse.status} - ${errorText}`);
+      }
+    } catch (mediaError) {
+      console.error(`Error uploading image to Wix Media Manager:`, mediaError);
+    }
+  } else if (post.featured_image) {
+    console.log(`Skipping base64 featured image - requires external URL for Wix Media import`);
   }
   
   console.log("Sending data to Wix Blog API v3...");
