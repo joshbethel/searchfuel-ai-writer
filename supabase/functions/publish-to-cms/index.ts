@@ -1057,7 +1057,7 @@ async function publishToFramer(blog: any, post: any): Promise<string> {
 }
 
 async function publishToWix(blog: any, post: any): Promise<string> {
-  console.log(`Starting Wix CMS publishing for post: ${post.title}`);
+  console.log(`Starting Wix Blog publishing for post: ${post.title}`);
   
   // 🔓 Decrypt credentials
   const encryptedCredentials = blog.cms_credentials;
@@ -1069,13 +1069,12 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   
   const apiKey = credentials.apiKey;
   const siteId = credentials.siteId;
-  const collectionId = credentials.collectionId;
   
-  if (!apiKey || !siteId || !collectionId) {
-    throw new Error("Wix API Key, Site ID, and Collection ID are required. Please reconnect your Wix site.");
+  if (!apiKey || !siteId) {
+    throw new Error("Wix API Key and Site ID are required. Please reconnect your Wix site.");
   }
   
-  console.log(`Publishing to Wix collection: ${collectionId} on site: ${siteId}`);
+  console.log(`Publishing to Wix Blog on site: ${siteId}`);
   
   // Extract actual content from JSON-wrapped format and convert to HTML
   const markdownContent = extractContent(post.content);
@@ -1085,27 +1084,86 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   // Generate a URL-friendly slug
   const slug = post.slug || post.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   
-  // Prepare the data item for Wix CMS
-  // Common blog collection fields - adjust based on your collection schema
-  const dataItem = {
-    data: {
+  // Prepare the blog post for Wix Blog API v3
+  const blogPost = {
+    post: {
       title: post.title,
-      content: htmlContent,
-      slug: slug,
+      richContent: {
+        nodes: [
+          {
+            type: "PARAGRAPH",
+            id: crypto.randomUUID(),
+            nodes: [],
+            paragraphData: {
+              textStyle: {
+                textAlignment: "AUTO"
+              }
+            }
+          }
+        ]
+      },
       excerpt: post.excerpt || "",
-      metaTitle: post.meta_title || post.title,
-      metaDescription: post.meta_description || post.excerpt || "",
-      publishedAt: new Date().toISOString(),
-      // Add featured image if available
-      ...(post.featured_image && { featuredImage: post.featured_image }),
-    }
+      featured: false,
+      commentingEnabled: true,
+      // SEO settings
+      seoData: {
+        tags: [
+          {
+            type: "title",
+            children: post.meta_title || post.title,
+            custom: false,
+            disabled: false
+          },
+          {
+            type: "meta",
+            props: {
+              name: "description",
+              content: post.meta_description || post.excerpt || ""
+            },
+            custom: false,
+            disabled: false
+          }
+        ]
+      },
+      // URL slug
+      slug: slug,
+      // Set to published status
+      memberId: null
+    },
+    // Publish immediately
+    publish: true
   };
   
-  console.log("Sending data to Wix API...");
+  // If we have HTML content, we need to convert it to rich content format
+  // For simplicity, we'll use a code block to preserve the HTML
+  if (htmlContent) {
+    blogPost.post.richContent = {
+      nodes: [
+        {
+          type: "HTML",
+          id: crypto.randomUUID(),
+          nodes: [],
+          htmlData: {
+            containerData: {
+              width: {
+                size: "CONTENT"
+              },
+              alignment: "CENTER",
+              textWrap: true
+            },
+            source: "HTML",
+            html: htmlContent
+          }
+        }
+      ]
+    };
+  }
   
-  // Insert the item into Wix CMS collection
+  console.log("Sending data to Wix Blog API v3...");
+  
+  // Create the blog post using Wix Blog API v3
   const response = await fetch(
-    `https://www.wixapis.com/wix-data/v2/items`,
+    `https://www.wixapis.com/blog/v3/posts`,
     {
       method: 'POST',
       headers: {
@@ -1113,16 +1171,13 @@ async function publishToWix(blog: any, post: any): Promise<string> {
         'Authorization': apiKey,
         'wix-site-id': siteId,
       },
-      body: JSON.stringify({
-        dataCollectionId: collectionId,
-        dataItem: dataItem,
-      })
+      body: JSON.stringify(blogPost)
     }
   );
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Wix API Error Response:", {
+    console.error("Wix Blog API Error Response:", {
       status: response.status,
       statusText: response.statusText,
       body: errorText
@@ -1131,18 +1186,19 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     if (response.status === 401 || response.status === 403) {
       throw new Error("Wix authentication failed - please check your API Key and permissions");
     } else if (response.status === 404) {
-      throw new Error("Wix collection not found - check your Collection ID");
+      throw new Error("Wix Blog API not found - ensure your site has the Wix Blog app installed");
     } else {
-      throw new Error(`Wix API error (${response.status}): ${errorText}`);
+      throw new Error(`Wix Blog API error (${response.status}): ${errorText}`);
     }
   }
   
   const data = await response.json();
   
-  console.log(`Successfully published to Wix CMS:`, {
-    itemId: data.dataItem?._id,
-    title: post.title
+  console.log(`Successfully published to Wix Blog:`, {
+    postId: data.post?.id,
+    title: post.title,
+    slug: data.post?.slug
   });
   
-  return data.dataItem?._id || "published";
+  return data.post?.id || "published";
 }
