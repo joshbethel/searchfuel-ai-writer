@@ -273,14 +273,13 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         // Framer only needs URL, use empty credentials object
         credentials = { connected: true };
       } else if (selectedPlatform === "wix") {
-        if (!connectionData.apiKey || !connectionData.apiSecret || !connectionData.storeId) {
-          toast.error("Please provide API Key, Site ID, and Collection ID");
+        if (!connectionData.apiKey || !connectionData.apiSecret) {
+          toast.error("Please provide API Key and Site ID");
           return;
         }
         credentials = {
           apiKey: connectionData.apiKey,
           siteId: connectionData.apiSecret,
-          collectionId: connectionData.storeId,
         };
       } else {
         credentials = {
