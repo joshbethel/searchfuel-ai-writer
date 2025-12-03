@@ -1155,14 +1155,33 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     }
   };
   
-  // Add hero image if featured image exists
-  if (post.featured_image) {
-    console.log(`Adding hero image: ${post.featured_image}`);
-    blogPost.post.heroImage = {
-      src: post.featured_image,
-      width: 1200,
-      height: 630
-    };
+  // Note: Wix requires images to be uploaded to their media manager first
+  // We can't directly use external URLs for heroImage
+  // Instead, add the image inline in the content if available
+  if (post.featured_image && post.featured_image.startsWith('data:')) {
+    console.log(`Featured image is base64 - skipping for Wix (requires media upload)`);
+  } else if (post.featured_image) {
+    // Add as an inline image at the top of content
+    console.log(`Adding featured image as inline content: ${post.featured_image.substring(0, 50)}...`);
+    richContentNodes.unshift({
+      type: "IMAGE",
+      id: crypto.randomUUID(),
+      nodes: [],
+      imageData: {
+        containerData: {
+          width: { size: "FULL_WIDTH" },
+          alignment: "CENTER"
+        },
+        image: {
+          src: { url: post.featured_image },
+          width: 1200,
+          height: 630
+        },
+        altText: post.title
+      }
+    });
+    // Update the post's richContent with the image
+    blogPost.post.richContent.nodes = richContentNodes;
   }
   
   console.log("Sending data to Wix Blog API v3...");
