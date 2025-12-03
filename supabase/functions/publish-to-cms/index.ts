@@ -1164,9 +1164,10 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   // Ensure API key has Bearer prefix
   const authHeader = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
   
-  // Create the blog post using Wix Blog API v3
-  const response = await fetch(
-    `https://www.wixapis.com/blog/v3/posts`,
+  // Step 1: Create a draft post first using Wix Blog API v3
+  console.log("Step 1: Creating draft post...");
+  const draftResponse = await fetch(
+    `https://www.wixapis.com/blog/v3/draft-posts`,
     {
       method: 'POST',
       headers: {
@@ -1174,34 +1175,68 @@ async function publishToWix(blog: any, post: any): Promise<string> {
         'Authorization': authHeader,
         'wix-site-id': siteId,
       },
-      body: JSON.stringify(blogPost)
+      body: JSON.stringify({ draftPost: blogPost.post })
     }
   );
   
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Wix Blog API Error Response:", {
-      status: response.status,
-      statusText: response.statusText,
+  if (!draftResponse.ok) {
+    const errorText = await draftResponse.text();
+    console.error("Wix Draft API Error Response:", {
+      status: draftResponse.status,
+      statusText: draftResponse.statusText,
       body: errorText
     });
     
-    if (response.status === 401 || response.status === 403) {
+    if (draftResponse.status === 401 || draftResponse.status === 403) {
       throw new Error("Wix authentication failed - please check your API Key and permissions");
-    } else if (response.status === 404) {
+    } else if (draftResponse.status === 404) {
       throw new Error("Wix Blog API not found - ensure your site has the Wix Blog app installed");
     } else {
-      throw new Error(`Wix Blog API error (${response.status}): ${errorText}`);
+      throw new Error(`Wix Draft API error (${draftResponse.status}): ${errorText}`);
     }
   }
   
-  const data = await response.json();
+  const draftData = await draftResponse.json();
+  const draftPostId = draftData.draftPost?.id;
+  
+  if (!draftPostId) {
+    console.error("No draft post ID returned:", draftData);
+    throw new Error("Failed to create Wix draft post - no ID returned");
+  }
+  
+  console.log(`Draft created with ID: ${draftPostId}`);
+  
+  // Step 2: Publish the draft
+  console.log("Step 2: Publishing draft...");
+  const publishResponse = await fetch(
+    `https://www.wixapis.com/blog/v3/draft-posts/${draftPostId}/publish`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+        'wix-site-id': siteId,
+      }
+    }
+  );
+  
+  if (!publishResponse.ok) {
+    const errorText = await publishResponse.text();
+    console.error("Wix Publish API Error Response:", {
+      status: publishResponse.status,
+      statusText: publishResponse.statusText,
+      body: errorText
+    });
+    throw new Error(`Wix Publish API error (${publishResponse.status}): ${errorText}`);
+  }
+  
+  const publishData = await publishResponse.json();
+  const postId = publishData.post?.id || draftPostId;
   
   console.log(`Successfully published to Wix Blog:`, {
-    postId: data.post?.id,
-    title: post.title,
-    slug: data.post?.slug
+    postId: postId,
+    title: post.title
   });
   
-  return data.post?.id || "published";
+  return postId;
 }
