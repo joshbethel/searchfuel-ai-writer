@@ -226,23 +226,57 @@ serve(async (req: Request) => {
         break;
 
       case "wix":
-        // Test Wix CMS connection
+        // Test Wix CMS connection using Data Items API
         try {
           if (!apiKey) {
-            error = "Client ID is required";
+            error = "API Key is required";
+            break;
+          }
+          if (!storeId) {
+            error = "Collection ID is required";
+            break;
+          }
+          // apiSecret stores the Site ID for Wix
+          if (!apiSecret) {
+            error = "Site ID is required";
             break;
           }
           
-          // For now, just verify site accessibility and credentials are provided
-          // Full SDK integration would require OAuth flow which is complex for test endpoint
-          const response = await fetch(siteUrl);
-          success = response.ok && !!apiKey;
+          // Test connection by querying the collection (limit to 1 item)
+          const wixResponse = await fetch(
+            `https://www.wixapis.com/wix-data/v2/items/query`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': apiKey,
+                'wix-site-id': apiSecret,
+              },
+              body: JSON.stringify({
+                dataCollectionId: storeId,
+                query: {
+                  paging: { limit: 1 }
+                }
+              })
+            }
+          );
           
-          if (!success) {
-            error = "Cannot access Wix site or invalid credentials. Verify URL and Client ID are correct.";
+          if (wixResponse.ok) {
+            success = true;
+          } else {
+            const errorData = await wixResponse.text();
+            console.error("Wix API error:", wixResponse.status, errorData);
+            if (wixResponse.status === 401 || wixResponse.status === 403) {
+              error = "Invalid API Key or insufficient permissions. Ensure 'Write Data Items' permission is granted.";
+            } else if (wixResponse.status === 404) {
+              error = "Collection not found. Verify the Collection ID is correct.";
+            } else {
+              error = `Wix API error (${wixResponse.status}): ${errorData}`;
+            }
           }
         } catch (e) {
-          error = "Failed to connect to Wix site";
+          console.error("Wix connection error:", e);
+          error = "Failed to connect to Wix. Check your credentials.";
         }
         break;
 

@@ -209,6 +209,11 @@ serve(async (req: any) => {
         publishSuccess = true;
         break;
 
+      case "wix":
+        externalPostId = await publishToWix(blog, post);
+        publishSuccess = true;
+        break;
+
       default:
         throw new Error(`Unsupported CMS platform: ${blog.cms_platform}`);
     }
@@ -1049,4 +1054,95 @@ async function publishToFramer(blog: any, post: any): Promise<string> {
   // Return the blog post ID as the external ID
   // Users will use this ID to sync manually in Framer
   return post.id;
+}
+
+async function publishToWix(blog: any, post: any): Promise<string> {
+  console.log(`Starting Wix CMS publishing for post: ${post.title}`);
+  
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("Wix credentials not found in database");
+  }
+  
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
+  
+  const apiKey = credentials.apiKey;
+  const siteId = credentials.siteId;
+  const collectionId = credentials.collectionId;
+  
+  if (!apiKey || !siteId || !collectionId) {
+    throw new Error("Wix API Key, Site ID, and Collection ID are required. Please reconnect your Wix site.");
+  }
+  
+  console.log(`Publishing to Wix collection: ${collectionId} on site: ${siteId}`);
+  
+  // Extract actual content from JSON-wrapped format and convert to HTML
+  const markdownContent = extractContent(post.content);
+  const htmlContent = markdownToHtml(markdownContent);
+  console.log(`Content converted to HTML, length: ${htmlContent.length} characters`);
+  
+  // Generate a URL-friendly slug
+  const slug = post.slug || post.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  
+  // Prepare the data item for Wix CMS
+  // Common blog collection fields - adjust based on your collection schema
+  const dataItem = {
+    data: {
+      title: post.title,
+      content: htmlContent,
+      slug: slug,
+      excerpt: post.excerpt || "",
+      metaTitle: post.meta_title || post.title,
+      metaDescription: post.meta_description || post.excerpt || "",
+      publishedAt: new Date().toISOString(),
+      // Add featured image if available
+      ...(post.featured_image && { featuredImage: post.featured_image }),
+    }
+  };
+  
+  console.log("Sending data to Wix API...");
+  
+  // Insert the item into Wix CMS collection
+  const response = await fetch(
+    `https://www.wixapis.com/wix-data/v2/items`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiKey,
+        'wix-site-id': siteId,
+      },
+      body: JSON.stringify({
+        dataCollectionId: collectionId,
+        dataItem: dataItem,
+      })
+    }
+  );
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Wix API Error Response:", {
+      status: response.status,
+      statusText: response.statusText,
+      body: errorText
+    });
+    
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Wix authentication failed - please check your API Key and permissions");
+    } else if (response.status === 404) {
+      throw new Error("Wix collection not found - check your Collection ID");
+    } else {
+      throw new Error(`Wix API error (${response.status}): ${errorText}`);
+    }
+  }
+  
+  const data = await response.json();
+  
+  console.log(`Successfully published to Wix CMS:`, {
+    itemId: data.dataItem?._id,
+    title: post.title
+  });
+  
+  return data.dataItem?._id || "published";
 }
