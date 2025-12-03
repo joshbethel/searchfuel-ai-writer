@@ -1084,147 +1084,30 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   // Generate a URL-friendly slug
   const slug = post.slug || post.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   
-  // Convert markdown/HTML to Wix rich content nodes
+  // Build rich content nodes - use HTML node for proper rendering
   const richContentNodes: any[] = [];
   
-  // Add featured image as cover media if available
-  if (post.featured_image) {
-    console.log(`Adding featured image: ${post.featured_image}`);
+  // Add the HTML content as a single full-width block
+  if (htmlContent) {
+    richContentNodes.push({
+      type: "HTML",
+      id: crypto.randomUUID(),
+      nodes: [],
+      htmlData: {
+        containerData: {
+          width: {
+            size: "FULL_WIDTH"
+          },
+          alignment: "CENTER",
+          textWrap: false
+        },
+        source: "HTML",
+        html: `<div style="width:100%;max-width:100%;">${htmlContent}</div>`
+      }
+    });
   }
   
-  // Parse the HTML content and convert to Wix rich content nodes
-  // Split content by common HTML tags and convert
-  const contentParts = htmlContent
-    .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '|||H1|||$1|||/H1|||')
-    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '|||H2|||$1|||/H2|||')
-    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '|||H3|||$1|||/H3|||')
-    .replace(/<h4[^>]*>(.*?)<\/h4>/gi, '|||H4|||$1|||/H4|||')
-    .replace(/<p[^>]*>(.*?)<\/p>/gi, '|||P|||$1|||/P|||')
-    .replace(/<ul[^>]*>(.*?)<\/ul>/gis, '|||UL|||$1|||/UL|||')
-    .replace(/<ol[^>]*>(.*?)<\/ol>/gis, '|||OL|||$1|||/OL|||')
-    .replace(/<li[^>]*>(.*?)<\/li>/gi, '|||LI|||$1|||/LI|||')
-    .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
-    .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
-    .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
-    .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '') // Remove remaining HTML tags
-    .split('|||');
-
-  let i = 0;
-  while (i < contentParts.length) {
-    const part = contentParts[i].trim();
-    
-    if (part === 'H1' || part === 'H2' || part === 'H3' || part === 'H4') {
-      const level = part.replace('H', '');
-      const text = contentParts[i + 1]?.trim() || '';
-      if (text) {
-        richContentNodes.push({
-          type: "HEADING",
-          id: crypto.randomUUID(),
-          nodes: [{
-            type: "TEXT",
-            id: crypto.randomUUID(),
-            textData: { text: text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1') }
-          }],
-          headingData: {
-            level: parseInt(level),
-            textStyle: { textAlignment: "AUTO" }
-          }
-        });
-      }
-      i += 3; // Skip H#, content, /H#
-    } else if (part === 'P') {
-      const text = contentParts[i + 1]?.trim() || '';
-      if (text) {
-        // Parse text for bold/italic decorations
-        const textNodes: any[] = [];
-        const segments = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
-        
-        segments.forEach(segment => {
-          if (segment.startsWith('**') && segment.endsWith('**')) {
-            textNodes.push({
-              type: "TEXT",
-              id: crypto.randomUUID(),
-              textData: { 
-                text: segment.slice(2, -2),
-                decorations: [{ type: "BOLD" }]
-              }
-            });
-          } else if (segment.startsWith('*') && segment.endsWith('*') && !segment.startsWith('**')) {
-            textNodes.push({
-              type: "TEXT",
-              id: crypto.randomUUID(),
-              textData: { 
-                text: segment.slice(1, -1),
-                decorations: [{ type: "ITALIC" }]
-              }
-            });
-          } else if (segment.trim()) {
-            textNodes.push({
-              type: "TEXT",
-              id: crypto.randomUUID(),
-              textData: { text: segment }
-            });
-          }
-        });
-        
-        if (textNodes.length > 0) {
-          richContentNodes.push({
-            type: "PARAGRAPH",
-            id: crypto.randomUUID(),
-            nodes: textNodes,
-            paragraphData: { textStyle: { textAlignment: "AUTO" } }
-          });
-        }
-      }
-      i += 3; // Skip P, content, /P
-    } else if (part === 'UL' || part === 'OL') {
-      const listContent = contentParts[i + 1] || '';
-      const listItems = listContent.split('|||LI|||').filter(item => item && !item.includes('/LI'));
-      
-      if (listItems.length > 0) {
-        richContentNodes.push({
-          type: "BULLETED_LIST",
-          id: crypto.randomUUID(),
-          nodes: listItems.map(item => ({
-            type: "LIST_ITEM",
-            id: crypto.randomUUID(),
-            nodes: [{
-              type: "PARAGRAPH",
-              id: crypto.randomUUID(),
-              nodes: [{
-                type: "TEXT",
-                id: crypto.randomUUID(),
-                textData: { text: item.replace('|||/LI|||', '').trim() }
-              }],
-              paragraphData: { textStyle: { textAlignment: "AUTO" } }
-            }]
-          }))
-        });
-      }
-      i += 3;
-    } else if (part && !part.startsWith('/')) {
-      // Plain text that wasn't wrapped in tags
-      if (part.trim()) {
-        richContentNodes.push({
-          type: "PARAGRAPH",
-          id: crypto.randomUUID(),
-          nodes: [{
-            type: "TEXT",
-            id: crypto.randomUUID(),
-            textData: { text: part.trim() }
-          }],
-          paragraphData: { textStyle: { textAlignment: "AUTO" } }
-        });
-      }
-      i++;
-    } else {
-      i++;
-    }
-  }
-  
-  // Fallback: if no nodes were created, use simple paragraph
+  // Fallback if no content
   if (richContentNodes.length === 0) {
     const plainText = htmlContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     richContentNodes.push({
@@ -1233,7 +1116,7 @@ async function publishToWix(blog: any, post: any): Promise<string> {
       nodes: [{
         type: "TEXT",
         id: crypto.randomUUID(),
-        textData: { text: plainText }
+        textData: { text: plainText || "No content" }
       }],
       paragraphData: { textStyle: { textAlignment: "AUTO" } }
     });
@@ -1272,13 +1155,13 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     }
   };
   
-  // Add cover media if featured image exists
+  // Add hero image if featured image exists
   if (post.featured_image) {
-    blogPost.post.media = {
-      coverMedia: {
-        image: post.featured_image,
-        displayed: true
-      }
+    console.log(`Adding hero image: ${post.featured_image}`);
+    blogPost.post.heroImage = {
+      src: post.featured_image,
+      width: 1200,
+      height: 630
     };
   }
   
