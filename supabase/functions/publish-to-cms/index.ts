@@ -1161,6 +1161,9 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   
   console.log("Sending data to Wix Blog API v3...");
   
+  // Ensure API key has Bearer prefix
+  const authHeader = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
+  
   // Create the blog post using Wix Blog API v3
   const response = await fetch(
     `https://www.wixapis.com/blog/v3/posts`,
@@ -1168,7 +1171,7 @@ async function publishToWix(blog: any, post: any): Promise<string> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': apiKey,
+        'Authorization': authHeader,
         'wix-site-id': siteId,
       },
       body: JSON.stringify(blogPost)
