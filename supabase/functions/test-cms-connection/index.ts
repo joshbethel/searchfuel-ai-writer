@@ -25,7 +25,7 @@ serve(async (req: Request) => {
       return createValidationErrorResponse(validationResult, corsHeaders);
     }
 
-    const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password } = validationResult.data;
+    const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password, accountId } = validationResult.data;
 
     // Basic URL validation for security
     if (siteUrl) {
@@ -237,6 +237,10 @@ serve(async (req: Request) => {
             error = "Site ID is required";
             break;
           }
+          if (!accountId) {
+            error = "Account ID is required";
+            break;
+          }
           
           // Test connection by listing blog posts (limit to 1)
           const wixResponse = await fetch(
@@ -245,8 +249,9 @@ serve(async (req: Request) => {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': apiKey,
+                'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`,
                 'wix-site-id': apiSecret,
+                'wix-account-id': accountId,
               }
             }
           );

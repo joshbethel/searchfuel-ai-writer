@@ -1160,8 +1160,13 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   // Ensure API key has Bearer prefix
   const authHeader = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
   
+  // Get account ID from credentials or use site ID as fallback
+  const accountId = credentials.accountId || siteId;
+  
   // Step 1: Create a draft post first using Wix Blog API v3
   console.log("Step 1: Creating draft post...");
+  console.log("Using account ID:", accountId);
+  
   const draftResponse = await fetch(
     `https://www.wixapis.com/blog/v3/draft-posts`,
     {
@@ -1170,6 +1175,7 @@ async function publishToWix(blog: any, post: any): Promise<string> {
         'Content-Type': 'application/json',
         'Authorization': authHeader,
         'wix-site-id': siteId,
+        'wix-account-id': accountId,
       },
       body: JSON.stringify({ draftPost: blogPost.post })
     }
@@ -1212,6 +1218,7 @@ async function publishToWix(blog: any, post: any): Promise<string> {
         'Content-Type': 'application/json',
         'Authorization': authHeader,
         'wix-site-id': siteId,
+        'wix-account-id': accountId,
       }
     }
   );

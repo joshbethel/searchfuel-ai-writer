@@ -32,6 +32,7 @@ interface CMSConnection {
   accessToken?: string;
   username?: string;
   password?: string;
+  accountId?: string; // For Wix Account ID
 }
 
 interface BlogOnboardingProps {
@@ -273,13 +274,14 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         // Framer only needs URL, use empty credentials object
         credentials = { connected: true };
       } else if (selectedPlatform === "wix") {
-        if (!connectionData.apiKey || !connectionData.apiSecret) {
-          toast.error("Please provide API Key and Site ID");
+        if (!connectionData.apiKey || !connectionData.apiSecret || !connectionData.accountId) {
+          toast.error("Please provide API Key, Site ID, and Account ID");
           return;
         }
         credentials = {
           apiKey: connectionData.apiKey,
           siteId: connectionData.apiSecret,
+          accountId: connectionData.accountId,
         };
       } else {
         credentials = {
@@ -598,13 +600,27 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                   Found in Wix Dashboard → Settings → Site Properties
                 </p>
               </div>
+              <div>
+                <Label htmlFor="accountId">Account ID *</Label>
+                <Input
+                  id="accountId"
+                  type="text"
+                  placeholder="Enter your Wix Account ID"
+                  value={connectionData.accountId}
+                  onChange={(e) => setConnectionData({ ...connectionData, accountId: e.target.value })}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Found in Wix Dashboard → Settings → Site Properties (Account ID)
+                </p>
+              </div>
               <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-foreground mb-2">How to get your credentials:</h4>
                 <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
                   <li>Go to your Wix Dashboard → Settings</li>
                   <li>Navigate to "API Keys" and create a new key</li>
                   <li>Grant "Wix Blog" read & write permissions</li>
-                  <li>Copy your Site ID from Settings → Site Properties</li>
+                  <li>Copy your Site ID and Account ID from Settings → Site Properties</li>
                 </ol>
                 <p className="text-xs text-muted-foreground mt-2">
                   <strong>Note:</strong> Your site must have the Wix Blog app installed.
