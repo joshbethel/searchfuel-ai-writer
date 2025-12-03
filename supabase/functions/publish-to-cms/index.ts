@@ -1126,12 +1126,8 @@ async function publishToWix(blog: any, post: any): Promise<string> {
         ]
       },
       // URL slug
-      slug: slug,
-      // Set to published status
-      memberId: null
-    },
-    // Publish immediately
-    publish: true
+      slug: slug
+    }
   };
   
   // If we have HTML content, we need to convert it to rich content format
