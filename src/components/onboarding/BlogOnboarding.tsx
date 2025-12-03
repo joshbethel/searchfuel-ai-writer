@@ -596,21 +596,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Found in Wix Dashboard → Settings → Site ID (or URL)
-                </p>
-              </div>
-              <div>
-                <Label htmlFor="collectionId">Collection ID *</Label>
-                <Input
-                  id="collectionId"
-                  type="text"
-                  placeholder="Enter your Wix Collection ID (e.g., Blog/Posts)"
-                  value={connectionData.storeId}
-                  onChange={(e) => setConnectionData({ ...connectionData, storeId: e.target.value })}
-                  className="mt-1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Find in Wix CMS → Collections → Your Collection
+                  Found in Wix Dashboard → Settings → Site Properties
                 </p>
               </div>
               <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
@@ -618,10 +604,12 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                 <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
                   <li>Go to your Wix Dashboard → Settings</li>
                   <li>Navigate to "API Keys" and create a new key</li>
-                  <li>Grant "Write Data Items" permission</li>
-                  <li>Copy your Site ID from Settings</li>
-                  <li>Go to CMS → Collections to find Collection ID</li>
+                  <li>Grant "Wix Blog" read & write permissions</li>
+                  <li>Copy your Site ID from Settings → Site Properties</li>
                 </ol>
+                <p className="text-xs text-muted-foreground mt-2">
+                  <strong>Note:</strong> Your site must have the Wix Blog app installed.
+                </p>
               </div>
             </>
           )}

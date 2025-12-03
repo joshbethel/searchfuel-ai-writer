@@ -226,14 +226,10 @@ serve(async (req: Request) => {
         break;
 
       case "wix":
-        // Test Wix CMS connection using Data Items API
+        // Test Wix Blog API connection
         try {
           if (!apiKey) {
             error = "API Key is required";
-            break;
-          }
-          if (!storeId) {
-            error = "Collection ID is required";
             break;
           }
           // apiSecret stores the Site ID for Wix
@@ -242,22 +238,16 @@ serve(async (req: Request) => {
             break;
           }
           
-          // Test connection by querying the collection (limit to 1 item)
+          // Test connection by listing blog posts (limit to 1)
           const wixResponse = await fetch(
-            `https://www.wixapis.com/wix-data/v2/items/query`,
+            `https://www.wixapis.com/blog/v3/posts?paging.limit=1`,
             {
-              method: 'POST',
+              method: 'GET',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': apiKey,
                 'wix-site-id': apiSecret,
-              },
-              body: JSON.stringify({
-                dataCollectionId: storeId,
-                query: {
-                  paging: { limit: 1 }
-                }
-              })
+              }
             }
           );
           
@@ -265,18 +255,18 @@ serve(async (req: Request) => {
             success = true;
           } else {
             const errorData = await wixResponse.text();
-            console.error("Wix API error:", wixResponse.status, errorData);
+            console.error("Wix Blog API error:", wixResponse.status, errorData);
             if (wixResponse.status === 401 || wixResponse.status === 403) {
-              error = "Invalid API Key or insufficient permissions. Ensure 'Write Data Items' permission is granted.";
+              error = "Invalid API Key or insufficient permissions. Ensure Blog permissions are granted.";
             } else if (wixResponse.status === 404) {
-              error = "Collection not found. Verify the Collection ID is correct.";
+              error = "Wix Blog not found. Ensure your site has the Wix Blog app installed.";
             } else {
-              error = `Wix API error (${wixResponse.status}): ${errorData}`;
+              error = `Wix Blog API error (${wixResponse.status}): ${errorData}`;
             }
           }
         } catch (e) {
           console.error("Wix connection error:", e);
-          error = "Failed to connect to Wix. Check your credentials.";
+          error = "Failed to connect to Wix Blog. Check your credentials.";
         }
         break;
 
