@@ -597,37 +597,59 @@ Format: 16:9 aspect ratio, centered single subject.`;
           console.log(`  - Publishing Status: pending`);
           // Article stays as "pending" - no auto-publish to Framer
         } else if (blog.cms_platform && blog.cms_credentials) {
-          // Auto-publish to other CMS platforms (WordPress, Shopify, etc.)
+          // Auto-publish to other CMS platforms (WordPress, Shopify, Wix, etc.)
           console.log(`Auto-publishing to ${blog.cms_platform}...`);
           
-          // Update status to publishing
-          await supabase
-            .from('blog_posts')
-            .update({ publishing_status: 'publishing' })
-            .eq('id', post.id);
+          // Small delay to ensure database has fully committed the insert
+          await new Promise(resolve => setTimeout(resolve, 1500));
           
-          try {
-            // Invoke publish function
-            const { data: publishResult, error: publishError } = await supabase.functions.invoke(
-              'publish-to-cms',
-              { body: { blog_post_id: post.id } }
-            );
+          // Verify post exists before publishing
+          const { data: postCheck, error: postCheckErr } = await supabase
+            .from('blog_posts')
+            .select('id, title, content, featured_image')
+            .eq('id', post.id)
+            .single();
+          
+          if (postCheckErr || !postCheck) {
+            console.error('Post not found for publishing:', postCheckErr);
+          } else {
+            console.log(`Post verified: ${postCheck.title}, has image: ${!!postCheck.featured_image}`);
             
-            if (publishError) {
-              console.error('Failed to publish to CMS:', publishError);
+            // Update status to publishing
+            await supabase
+              .from('blog_posts')
+              .update({ publishing_status: 'publishing' })
+              .eq('id', post.id);
+            
+            try {
+              // Invoke publish function
+              const { data: publishResult, error: publishError } = await supabase.functions.invoke(
+                'publish-to-cms',
+                { body: { blog_post_id: post.id } }
+              );
+              
+              if (publishError) {
+                console.error('Failed to publish to CMS:', publishError);
+                await supabase
+                  .from('blog_posts')
+                  .update({ publishing_status: 'failed' })
+                  .eq('id', post.id);
+              } else if (publishResult?.success) {
+                console.log(`Successfully published to ${blog.cms_platform}`);
+              } else {
+                console.error('Publish returned failure:', publishResult);
+                await supabase
+                  .from('blog_posts')
+                  .update({ publishing_status: 'failed' })
+                  .eq('id', post.id);
+              }
+            } catch (publishErr) {
+              console.error('Error during CMS publishing:', publishErr);
               await supabase
                 .from('blog_posts')
                 .update({ publishing_status: 'failed' })
                 .eq('id', post.id);
-            } else {
-              console.log(`Successfully published to ${blog.cms_platform}`);
             }
-          } catch (publishErr) {
-            console.error('Error during CMS publishing:', publishErr);
-            await supabase
-              .from('blog_posts')
-              .update({ publishing_status: 'failed' })
-              .eq('id', post.id);
           }
         } else {
           // No CMS connected - article stays pending
