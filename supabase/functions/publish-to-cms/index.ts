@@ -327,16 +327,44 @@ function extractContent(rawContent: string): string {
   
   // Check if content is wrapped in ```json code blocks
   if (rawContent.trim().startsWith('```json')) {
+    // First try to extract the content field using regex (more reliable)
+    const contentMatch = rawContent.match(/"content"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*\})/);
+    if (contentMatch && contentMatch[1]) {
+      // Unescape the content
+      const extracted = contentMatch[1]
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
+        .replace(/\\t/g, '\t');
+      console.log(`Extracted content via regex, length: ${extracted.length}`);
+      return extracted;
+    }
+    
+    // Fallback: try JSON parsing
     try {
-      // Extract JSON from code blocks
       const jsonMatch = rawContent.match(/```json\s*\n([\s\S]*?)\n```/);
       if (jsonMatch && jsonMatch[1]) {
         const parsed = JSON.parse(jsonMatch[1]);
-        // Return the content field from the JSON
         return parsed.content || rawContent;
       }
     } catch (e) {
       console.error('Failed to parse JSON content:', e);
+    }
+    
+    // Last resort: strip the JSON wrapper and extract markdown content
+    const strippedMatch = rawContent.match(/```json[\s\S]*?"content"\s*:\s*"([\s\S]+)$/);
+    if (strippedMatch) {
+      // Find where the actual content starts after "content": "
+      let content = strippedMatch[1];
+      // Remove trailing JSON artifacts
+      content = content.replace(/"\s*,?\s*"(?:excerpt|title|featured_image)"[\s\S]*$/, '');
+      content = content.replace(/"\s*\}\s*\n?```\s*$/, '');
+      content = content
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+      console.log(`Extracted content via stripping, length: ${content.length}`);
+      return content;
     }
   }
   
@@ -1156,32 +1184,10 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   };
   
   // Note: Wix requires images to be uploaded to their media manager first
-  // We can't directly use external URLs for heroImage
-  // Instead, add the image inline in the content if available
-  if (post.featured_image && post.featured_image.startsWith('data:')) {
-    console.log(`Featured image is base64 - skipping for Wix (requires media upload)`);
-  } else if (post.featured_image) {
-    // Add as an inline image at the top of content
-    console.log(`Adding featured image as inline content: ${post.featured_image.substring(0, 50)}...`);
-    richContentNodes.unshift({
-      type: "IMAGE",
-      id: crypto.randomUUID(),
-      nodes: [],
-      imageData: {
-        containerData: {
-          width: { size: "FULL_WIDTH" },
-          alignment: "CENTER"
-        },
-        image: {
-          src: { url: post.featured_image },
-          width: 1200,
-          height: 630
-        },
-        altText: post.title
-      }
-    });
-    // Update the post's richContent with the image
-    blogPost.post.richContent.nodes = richContentNodes;
+  // External URLs and base64 images cannot be used directly
+  // Images must be uploaded via Wix Media API to get a media ID
+  if (post.featured_image) {
+    console.log(`Skipping featured image for Wix - requires media upload to Wix Media Manager`);
   }
   
   console.log("Sending data to Wix Blog API v3...");
