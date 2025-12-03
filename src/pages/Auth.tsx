@@ -98,21 +98,21 @@ export default function Auth() {
         console.log('User signed in, checking subscription and redirecting...');
         
         // Create Stripe customer in background (non-blocking)
-        supabase
-          .from('subscriptions')
-          .select('stripe_customer_id')
-          .eq('user_id', session.user.id)
-          .maybeSingle()
-          .then(({ data: existingSubscription }) => {
+        (async () => {
+          try {
+            const { data: existingSubscription } = await supabase
+              .from('subscriptions')
+              .select('stripe_customer_id')
+              .eq('user_id', session.user.id)
+              .maybeSingle();
+            
             if (!existingSubscription?.stripe_customer_id) {
-              createStripeCustomer().catch(err => {
-                console.error('Failed to create Stripe customer:', err);
-              });
+              await createStripeCustomer();
             }
-          })
-          .catch(err => {
-            console.error('Error checking for existing subscription:', err);
-          });
+          } catch (err) {
+            console.error('Error checking/creating Stripe customer:', err);
+          }
+        })();
         
         // Check subscription status and redirect accordingly
         // Use timeout to ensure navigation always happens

@@ -273,8 +273,13 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         // Framer only needs URL, use empty credentials object
         credentials = { connected: true };
       } else if (selectedPlatform === "wix") {
+        if (!connectionData.apiKey || !connectionData.apiSecret || !connectionData.storeId) {
+          toast.error("Please provide API Key, Site ID, and Collection ID");
+          return;
+        }
         credentials = {
-          clientId: connectionData.apiKey,
+          apiKey: connectionData.apiKey,
+          siteId: connectionData.apiSecret,
           collectionId: connectionData.storeId,
         };
       } else {
@@ -567,17 +572,31 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           {selectedPlatform === "wix" && (
             <>
               <div>
-                <Label htmlFor="apiKey">Client ID *</Label>
+                <Label htmlFor="apiKey">API Key *</Label>
                 <Input
                   id="apiKey"
                   type="password"
-                  placeholder="Enter your Wix Client ID"
+                  placeholder="Enter your Wix API Key"
                   value={connectionData.apiKey}
                   onChange={(e) => setConnectionData({ ...connectionData, apiKey: e.target.value })}
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Get from Wix Dev Center → Your App → OAuth
+                  Get from Wix Dashboard → Settings → API Keys
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="siteId">Site ID *</Label>
+                <Input
+                  id="siteId"
+                  type="text"
+                  placeholder="Enter your Wix Site ID"
+                  value={connectionData.apiSecret}
+                  onChange={(e) => setConnectionData({ ...connectionData, apiSecret: e.target.value })}
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Found in Wix Dashboard → Settings → Site ID (or URL)
                 </p>
               </div>
               <div>
@@ -585,7 +604,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                 <Input
                   id="collectionId"
                   type="text"
-                  placeholder="Enter your Wix Collection ID"
+                  placeholder="Enter your Wix Collection ID (e.g., Blog/Posts)"
                   value={connectionData.storeId}
                   onChange={(e) => setConnectionData({ ...connectionData, storeId: e.target.value })}
                   className="mt-1"
@@ -597,11 +616,11 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
               <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-foreground mb-2">How to get your credentials:</h4>
                 <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
-                  <li>Go to Wix Dev Center (dev.wix.com)</li>
-                  <li>Create or select your app</li>
-                  <li>Copy the Client ID from OAuth section</li>
-                  <li>Go to your Wix site → CMS → Collections</li>
-                  <li>Open your collection and copy the Collection ID</li>
+                  <li>Go to your Wix Dashboard → Settings</li>
+                  <li>Navigate to "API Keys" and create a new key</li>
+                  <li>Grant "Write Data Items" permission</li>
+                  <li>Copy your Site ID from Settings</li>
+                  <li>Go to CMS → Collections to find Collection ID</li>
                 </ol>
               </div>
             </>
