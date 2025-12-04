@@ -1186,55 +1186,124 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   // Upload featured image to Wix Media Manager FIRST before creating post
   let coverImageUrl: string | null = null;
   
-  if (post.featured_image && !post.featured_image.startsWith('data:')) {
+  if (post.featured_image) {
     console.log(`Step 0: Uploading featured image to Wix Media Manager...`);
-    console.log(`Image URL: ${post.featured_image.substring(0, 100)}...`);
+    
+    const authHeader = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
     
     try {
-      const mediaResponse = await fetch(
-        'https://www.wixapis.com/site-media/v1/files/import',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`,
-            'wix-site-id': siteId,
-            'wix-account-id': credentials.accountId || '',
-          },
-          body: JSON.stringify({
-            url: post.featured_image,
-            mediaType: 'IMAGE',
-            displayName: `blog-cover-${Date.now()}.jpg`
-          })
-        }
-      );
-      
-      const mediaResponseText = await mediaResponse.text();
-      console.log(`Wix Media API response status: ${mediaResponse.status}`);
-      console.log(`Wix Media API response: ${mediaResponseText}`);
-      
-      if (mediaResponse.ok) {
-        const mediaData = JSON.parse(mediaResponseText);
+      if (post.featured_image.startsWith('data:')) {
+        // Handle base64 image - use direct upload
+        console.log(`Processing base64 image for Wix upload...`);
         
-        // Extract the wixstatic URL - check multiple possible paths
-        coverImageUrl = mediaData.file?.url || 
-                       mediaData.file?.fileUrl || 
-                       mediaData.file?.media?.image?.url ||
-                       null;
-        
-        if (coverImageUrl) {
-          console.log(`✓ Successfully uploaded image to Wix Media. Cover URL: ${coverImageUrl}`);
-        } else {
-          console.error(`Wix Media response structure:`, JSON.stringify(mediaData, null, 2));
+        // Extract base64 data and mime type
+        const matches = post.featured_image.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          const mimeType = matches[1];
+          const base64Data = matches[2];
+          
+          // Convert base64 to binary
+          const binaryString = atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          // Step 1: Get upload URL from Wix
+          console.log(`Getting Wix upload URL...`);
+          const uploadUrlResponse = await fetch(
+            'https://www.wixapis.com/site-media/v1/files/upload-url',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': authHeader,
+                'wix-site-id': siteId,
+                'wix-account-id': credentials.accountId || '',
+              },
+              body: JSON.stringify({
+                mimeType: mimeType,
+                fileName: `blog-cover-${Date.now()}.${mimeType.split('/')[1] || 'jpg'}`
+              })
+            }
+          );
+          
+          const uploadUrlText = await uploadUrlResponse.text();
+          console.log(`Wix upload URL response status: ${uploadUrlResponse.status}`);
+          console.log(`Wix upload URL response: ${uploadUrlText}`);
+          
+          if (uploadUrlResponse.ok) {
+            const uploadUrlData = JSON.parse(uploadUrlText);
+            const uploadUrl = uploadUrlData.uploadUrl;
+            
+            if (uploadUrl) {
+              // Step 2: Upload binary data to the upload URL
+              console.log(`Uploading binary data to: ${uploadUrl.substring(0, 80)}...`);
+              
+              const uploadResponse = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': mimeType,
+                },
+                body: bytes
+              });
+              
+              const uploadResponseText = await uploadResponse.text();
+              console.log(`Wix binary upload response status: ${uploadResponse.status}`);
+              console.log(`Wix binary upload response: ${uploadResponseText}`);
+              
+              if (uploadResponse.ok) {
+                const uploadData = JSON.parse(uploadResponseText);
+                coverImageUrl = uploadData.file?.url || uploadData.file?.fileUrl || uploadData.url || null;
+                
+                if (coverImageUrl) {
+                  console.log(`✓ Successfully uploaded base64 image to Wix Media. Cover URL: ${coverImageUrl}`);
+                }
+              }
+            }
+          }
         }
       } else {
-        console.error(`Failed to upload image to Wix Media: ${mediaResponse.status} - ${mediaResponseText}`);
+        // Handle external URL - use import endpoint
+        console.log(`Importing image URL to Wix Media: ${post.featured_image.substring(0, 100)}...`);
+        
+        const mediaResponse = await fetch(
+          'https://www.wixapis.com/site-media/v1/files/import',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader,
+              'wix-site-id': siteId,
+              'wix-account-id': credentials.accountId || '',
+            },
+            body: JSON.stringify({
+              url: post.featured_image,
+              mediaType: 'IMAGE',
+              displayName: `blog-cover-${Date.now()}.jpg`
+            })
+          }
+        );
+        
+        const mediaResponseText = await mediaResponse.text();
+        console.log(`Wix Media import response status: ${mediaResponse.status}`);
+        console.log(`Wix Media import response: ${mediaResponseText}`);
+        
+        if (mediaResponse.ok) {
+          const mediaData = JSON.parse(mediaResponseText);
+          coverImageUrl = mediaData.file?.url || 
+                         mediaData.file?.fileUrl || 
+                         mediaData.file?.media?.image?.url ||
+                         null;
+          
+          if (coverImageUrl) {
+            console.log(`✓ Successfully imported image to Wix Media. Cover URL: ${coverImageUrl}`);
+          }
+        }
       }
     } catch (mediaError) {
       console.error(`Error uploading image to Wix Media Manager:`, mediaError);
     }
-  } else if (post.featured_image) {
-    console.log(`Skipping base64 featured image - requires external URL for Wix Media import`);
   }
   
   console.log("Sending data to Wix Blog API v3...");
