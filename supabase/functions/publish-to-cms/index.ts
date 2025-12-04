@@ -1183,7 +1183,7 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     }
   };
   
-  // Upload featured image to Wix Media Manager and add to post
+  // Upload featured image to Wix Media Manager and set as coverImage
   if (post.featured_image && !post.featured_image.startsWith('data:')) {
     console.log(`Uploading featured image to Wix Media Manager: ${post.featured_image.substring(0, 80)}...`);
     
@@ -1209,33 +1209,21 @@ async function publishToWix(blog: any, post: any): Promise<string> {
       
       if (mediaResponse.ok) {
         const mediaData = await mediaResponse.json();
-        const mediaId = mediaData.file?.id;
+        console.log(`Wix Media upload response:`, JSON.stringify(mediaData));
         
-        if (mediaId) {
-          console.log(`Successfully uploaded image to Wix Media. ID: ${mediaId}`);
+        // Get the wixstatic URL from the response
+        const fileUrl = mediaData.file?.url || mediaData.file?.fileUrl;
+        
+        if (fileUrl) {
+          console.log(`Successfully uploaded image to Wix Media. URL: ${fileUrl}`);
           
-          // Add image as first node in rich content
-          richContentNodes.unshift({
-            type: "IMAGE",
-            id: crypto.randomUUID(),
-            nodes: [],
-            imageData: {
-              containerData: {
-                width: { size: "FULL_WIDTH" },
-                alignment: "CENTER"
-              },
-              image: {
-                src: { id: mediaId },
-                width: 1200,
-                height: 630
-              },
-              altText: post.title
-            }
-          });
-          
-          // Update the blog post's richContent with the image
-          blogPost.post.richContent.nodes = richContentNodes;
-          console.log(`Added featured image to blog post content`);
+          // Set coverImage with the wixstatic URL
+          (blogPost.post as any).coverImage = {
+            src: fileUrl
+          };
+          console.log(`Set coverImage for blog post`);
+        } else {
+          console.error(`Wix Media response missing URL:`, JSON.stringify(mediaData));
         }
       } else {
         const errorText = await mediaResponse.text();
