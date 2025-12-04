@@ -1193,7 +1193,7 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     
     try {
       if (post.featured_image.startsWith('data:')) {
-        // Handle base64 image - use direct upload
+        // Handle base64 image - use multipart/form-data upload
         console.log(`Processing base64 image for Wix upload...`);
         
         // Extract base64 data and mime type
@@ -1201,6 +1201,8 @@ async function publishToWix(blog: any, post: any): Promise<string> {
         if (matches) {
           const mimeType = matches[1];
           const base64Data = matches[2];
+          const extension = mimeType.split('/')[1] || 'jpg';
+          const fileName = `blog-cover-${Date.now()}.${extension}`;
           
           // Convert base64 to binary
           const binaryString = atob(base64Data);
@@ -1209,58 +1211,56 @@ async function publishToWix(blog: any, post: any): Promise<string> {
             bytes[i] = binaryString.charCodeAt(i);
           }
           
-          // Step 1: Get upload URL from Wix
-          console.log(`Getting Wix upload URL...`);
-          const uploadUrlResponse = await fetch(
-            'https://www.wixapis.com/site-media/v1/files/upload-url',
+          // Create FormData with the file
+          const formData = new FormData();
+          const blob = new Blob([bytes], { type: mimeType });
+          formData.append('file', blob, fileName);
+          
+          console.log(`Uploading image to Wix Media via multipart upload...`);
+          console.log(`File name: ${fileName}, Size: ${bytes.length} bytes, Type: ${mimeType}`);
+          
+          const uploadResponse = await fetch(
+            'https://www.wixapis.com/site-media/v1/files/upload',
             {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json',
                 'Authorization': authHeader,
                 'wix-site-id': siteId,
                 'wix-account-id': credentials.accountId || '',
               },
-              body: JSON.stringify({
-                mimeType: mimeType,
-                fileName: `blog-cover-${Date.now()}.${mimeType.split('/')[1] || 'jpg'}`
-              })
+              body: formData
             }
           );
           
-          const uploadUrlText = await uploadUrlResponse.text();
-          console.log(`Wix upload URL response status: ${uploadUrlResponse.status}`);
-          console.log(`Wix upload URL response: ${uploadUrlText}`);
+          const uploadResponseText = await uploadResponse.text();
+          console.log(`Wix Media upload response status: ${uploadResponse.status}`);
+          console.log(`Wix Media upload response: ${uploadResponseText}`);
           
-          if (uploadUrlResponse.ok) {
-            const uploadUrlData = JSON.parse(uploadUrlText);
-            const uploadUrl = uploadUrlData.uploadUrl;
-            
-            if (uploadUrl) {
-              // Step 2: Upload binary data to the upload URL
-              console.log(`Uploading binary data to: ${uploadUrl.substring(0, 80)}...`);
+          if (uploadResponse.ok) {
+            try {
+              const uploadData = JSON.parse(uploadResponseText);
+              // Try various response paths for the URL
+              coverImageUrl = uploadData.file?.url || 
+                             uploadData.file?.fileUrl || 
+                             uploadData.file?.media?.image?.url ||
+                             uploadData.url ||
+                             null;
               
-              const uploadResponse = await fetch(uploadUrl, {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': mimeType,
-                },
-                body: bytes
-              });
-              
-              const uploadResponseText = await uploadResponse.text();
-              console.log(`Wix binary upload response status: ${uploadResponse.status}`);
-              console.log(`Wix binary upload response: ${uploadResponseText}`);
-              
-              if (uploadResponse.ok) {
-                const uploadData = JSON.parse(uploadResponseText);
-                coverImageUrl = uploadData.file?.url || uploadData.file?.fileUrl || uploadData.url || null;
-                
-                if (coverImageUrl) {
-                  console.log(`✓ Successfully uploaded base64 image to Wix Media. Cover URL: ${coverImageUrl}`);
-                }
+              // If we got a file ID/key, construct the wixstatic URL
+              if (!coverImageUrl && uploadData.file?.id) {
+                coverImageUrl = `https://static.wixstatic.com/media/${uploadData.file.id}`;
               }
+              
+              if (coverImageUrl) {
+                console.log(`✓ Successfully uploaded image to Wix Media. Cover URL: ${coverImageUrl}`);
+              } else {
+                console.log(`Warning: Upload succeeded but couldn't extract URL from response`);
+              }
+            } catch (parseError) {
+              console.error(`Error parsing upload response: ${parseError}`);
             }
+          } else {
+            console.error(`Failed to upload image to Wix Media: ${uploadResponse.status}`);
           }
         }
       } else {
