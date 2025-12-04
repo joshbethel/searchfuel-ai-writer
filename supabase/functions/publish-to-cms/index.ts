@@ -1378,28 +1378,24 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     (blogPost.post as any).memberId = memberId;
   }
   
-  // Add coverMedia if we successfully uploaded to Wix Media
-  // Wix Blog API v3 expects coverMedia with specific structure
+  // Add media (cover image) if we successfully uploaded to Wix Media
+  // Wix Blog API v3 uses 'media' field for post cover media
   if (coverImageUrl) {
     // Extract the image ID from the URL (format: de7539_xxx~mv2.png)
     const imageIdMatch = coverImageUrl.match(/media\/([^/]+)$/);
     const imageId = imageIdMatch ? imageIdMatch[1] : null;
     
-    // Wix Blog v3 API expects coverMedia in this format
-    (blogPost.post as any).coverMedia = {
-      image: coverImageUrl,
-      displayed: true
+    // Wix Blog API v3 expects 'media' object with wixMedia structure
+    // The image ID should be in wix:image:// format or just the media ID
+    (blogPost.post as any).media = {
+      wixMedia: {
+        image: imageId || coverImageUrl
+      },
+      displayed: true,
+      custom: false
     };
     
-    // Also try the legacy format as fallback
-    (blogPost.post as any).heroImage = {
-      id: imageId || '',
-      url: coverImageUrl,
-      width: 1024,
-      height: 1024
-    };
-    
-    console.log(`Added coverMedia to post: ${coverImageUrl}, imageId: ${imageId}`);
+    console.log(`Added media to post: ${coverImageUrl}, imageId: ${imageId}`);
   }
   
   // Step 2: Create a draft post using Wix Blog API v3
