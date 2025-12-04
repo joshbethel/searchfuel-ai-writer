@@ -1115,8 +1115,42 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   // Build rich content nodes - use HTML node for proper rendering
   const richContentNodes: any[] = [];
   
+  // Process HTML content to add min-width to iframes and HTML embed components
+  const processHtmlForEmbeds = (html: string): string => {
+    // Add min-width to iframes
+    let processed = html.replace(
+      /<iframe([^>]*)>/gi,
+      (match, attrs) => {
+        // Check if style attribute exists
+        if (/style\s*=/i.test(attrs)) {
+          // Add min-width to existing style
+          return `<iframe${attrs.replace(/style\s*=\s*["']([^"']*)["']/i, 'style="$1; min-width: 800px;"')}>`;
+        } else {
+          // Add new style attribute
+          return `<iframe${attrs} style="min-width: 800px;">`;
+        }
+      }
+    );
+    
+    // Add min-width to divs with data-hook="html-component" (Wix HTML embeds)
+    processed = processed.replace(
+      /<div([^>]*data-hook\s*=\s*["']html-component["'][^>]*)>/gi,
+      (match, attrs) => {
+        if (/style\s*=/i.test(attrs)) {
+          return `<div${attrs.replace(/style\s*=\s*["']([^"']*)["']/i, 'style="$1; min-width: 800px;"')}>`;
+        } else {
+          return `<div${attrs} style="min-width: 800px;">`;
+        }
+      }
+    );
+    
+    return processed;
+  };
+  
+  const processedHtmlContent = processHtmlForEmbeds(htmlContent);
+  
   // Add the HTML content as a single full-width block
-  if (htmlContent) {
+  if (processedHtmlContent) {
     richContentNodes.push({
       type: "HTML",
       id: crypto.randomUUID(),
@@ -1130,7 +1164,7 @@ async function publishToWix(blog: any, post: any): Promise<string> {
           textWrap: false
         },
         source: "HTML",
-        html: `<div style="width:100%;max-width:100%;">${htmlContent}</div>`
+        html: `<div style="width:100%;max-width:100%;">${processedHtmlContent}</div>`
       }
     });
   }
