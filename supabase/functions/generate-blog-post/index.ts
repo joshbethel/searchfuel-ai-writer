@@ -632,10 +632,16 @@ Format: 16:9 aspect ratio, centered single subject.`;
               try {
                 console.log(`Publish attempt ${attempt}/${maxRetries} for ${blog.cms_platform}...`);
                 
-                // Invoke publish function
+                // Invoke publish function with service role auth for function-to-function call
+                const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
                 const { data: publishResult, error: publishError } = await supabase.functions.invoke(
                   'publish-to-cms',
-                  { body: { blog_post_id: post.id } }
+                  { 
+                    body: { blog_post_id: post.id },
+                    headers: {
+                      Authorization: `Bearer ${serviceRoleKey}`
+                    }
+                  }
                 );
                 
                 if (publishError) {

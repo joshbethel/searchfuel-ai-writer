@@ -72,17 +72,27 @@ serve(async (req: any) => {
     } else {
       // Bearer token auth (existing flow)
       const token = authHeader.replace("Bearer ", "");
-      const { data, error: authError } = await supabaseClient.auth.getUser(token);
       
-      if (authError || !data.user) {
-        return new Response(
-          JSON.stringify({ error: "Unauthorized" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      // Check if this is a service role key (for internal function-to-function calls)
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (token === serviceRoleKey) {
+        // Service role auth - this is an internal call, we'll get the user from the blog post
+        console.log("Authenticated via service role key (internal call)");
+        userId = "service_role"; // Will be overridden by blog post owner
+      } else {
+        // Regular user token
+        const { data, error: authError } = await supabaseClient.auth.getUser(token);
+        
+        if (authError || !data.user) {
+          return new Response(
+            JSON.stringify({ error: "Unauthorized" }),
+            { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
-      userId = data.user.id;
-      console.log(`Authenticated user via Bearer token: ${userId}`);
+        userId = data.user.id;
+        console.log(`Authenticated user via Bearer token: ${userId}`);
+      }
     }
 
     // Validate request body with Zod schema
@@ -102,13 +112,18 @@ serve(async (req: any) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Fetch the blog post WITH authorization check - verify user owns the blog
-    // Use inner join to verify ownership, then fetch full blog data
-    const { data: post, error: postError } = await supabase
+    // For service role calls (internal), skip user verification
+    let postQuery = supabase
       .from("blog_posts")
       .select("*, blogs!inner(id, user_id)")
-      .eq("id", blog_post_id)
-      .eq("blogs.user_id", userId)  // CRITICAL: Verify ownership
-      .single();
+      .eq("id", blog_post_id);
+    
+    // Only add user_id check for non-service-role calls
+    if (userId !== "service_role") {
+      postQuery = postQuery.eq("blogs.user_id", userId);
+    }
+    
+    const { data: post, error: postError } = await postQuery.single();
 
     if (postError) {
       console.error("Error fetching post:", postError);
@@ -128,12 +143,17 @@ serve(async (req: any) => {
     console.log(`Found post: ${post.title} for blog ID: ${post.blog_id}`);
 
     // Now fetch the full blog data (ownership already verified above)
-    const { data: blog, error: blogError } = await supabase
+    let blogQuery = supabase
       .from("blogs")
       .select("*")
-      .eq("id", post.blog_id)
-      .eq("user_id", userId)  // Double-check ownership
-      .single();
+      .eq("id", post.blog_id);
+    
+    // Only add user_id check for non-service-role calls
+    if (userId !== "service_role") {
+      blogQuery = blogQuery.eq("user_id", userId);
+    }
+    
+    const { data: blog, error: blogError } = await blogQuery.single();
 
     if (blogError) {
       console.error("Error fetching blog:", blogError);
