@@ -600,8 +600,10 @@ Format: 16:9 aspect ratio, centered single subject.`;
           // Auto-publish to other CMS platforms (WordPress, Shopify, Wix, etc.)
           console.log(`Auto-publishing to ${blog.cms_platform}...`);
           
-          // Small delay to ensure database has fully committed the insert
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // Wix needs longer delay due to API latency
+          const initialDelay = blog.cms_platform === 'wix' ? 2500 : 1500;
+          console.log(`Waiting ${initialDelay}ms before publishing (${blog.cms_platform})...`);
+          await new Promise(resolve => setTimeout(resolve, initialDelay));
           
           // Verify post exists before publishing
           const { data: postCheck, error: postCheckErr } = await supabase
@@ -621,30 +623,54 @@ Format: 16:9 aspect ratio, centered single subject.`;
               .update({ publishing_status: 'publishing' })
               .eq('id', post.id);
             
-            try {
-              // Invoke publish function
-              const { data: publishResult, error: publishError } = await supabase.functions.invoke(
-                'publish-to-cms',
-                { body: { blog_post_id: post.id } }
-              );
-              
-              if (publishError) {
-                console.error('Failed to publish to CMS:', publishError);
-                await supabase
-                  .from('blog_posts')
-                  .update({ publishing_status: 'failed' })
-                  .eq('id', post.id);
-              } else if (publishResult?.success) {
-                console.log(`Successfully published to ${blog.cms_platform}`);
-              } else {
-                console.error('Publish returned failure:', publishResult);
-                await supabase
-                  .from('blog_posts')
-                  .update({ publishing_status: 'failed' })
-                  .eq('id', post.id);
+            // Retry logic for Wix (race condition on first attempt)
+            const maxRetries = blog.cms_platform === 'wix' ? 3 : 1;
+            let lastError: any = null;
+            let publishSuccess = false;
+            
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+              try {
+                console.log(`Publish attempt ${attempt}/${maxRetries} for ${blog.cms_platform}...`);
+                
+                // Invoke publish function
+                const { data: publishResult, error: publishError } = await supabase.functions.invoke(
+                  'publish-to-cms',
+                  { body: { blog_post_id: post.id } }
+                );
+                
+                if (publishError) {
+                  lastError = publishError;
+                  console.error(`Publish attempt ${attempt} failed:`, publishError);
+                } else if (publishResult?.success) {
+                  console.log(`Successfully published to ${blog.cms_platform} on attempt ${attempt}`);
+                  publishSuccess = true;
+                  break;
+                } else {
+                  lastError = publishResult?.error || 'Unknown publish error';
+                  console.error(`Publish attempt ${attempt} returned failure:`, publishResult);
+                }
+                
+                // Wait before retry (exponential backoff)
+                if (attempt < maxRetries) {
+                  const retryDelay = 2000 * attempt;
+                  console.log(`Waiting ${retryDelay}ms before retry...`);
+                  await new Promise(resolve => setTimeout(resolve, retryDelay));
+                }
+              } catch (publishErr) {
+                lastError = publishErr;
+                console.error(`Publish attempt ${attempt} threw error:`, publishErr);
+                
+                if (attempt < maxRetries) {
+                  const retryDelay = 2000 * attempt;
+                  console.log(`Waiting ${retryDelay}ms before retry...`);
+                  await new Promise(resolve => setTimeout(resolve, retryDelay));
+                }
               }
-            } catch (publishErr) {
-              console.error('Error during CMS publishing:', publishErr);
+            }
+            
+            // Update final status
+            if (!publishSuccess) {
+              console.error('All publish attempts failed. Last error:', lastError);
               await supabase
                 .from('blog_posts')
                 .update({ publishing_status: 'failed' })
