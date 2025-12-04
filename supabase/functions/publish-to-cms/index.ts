@@ -1183,9 +1183,12 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     }
   };
   
-  // Upload featured image to Wix Media Manager and set as coverImage
+  // Upload featured image to Wix Media Manager FIRST before creating post
+  let coverImageUrl: string | null = null;
+  
   if (post.featured_image && !post.featured_image.startsWith('data:')) {
-    console.log(`Uploading featured image to Wix Media Manager: ${post.featured_image.substring(0, 80)}...`);
+    console.log(`Step 0: Uploading featured image to Wix Media Manager...`);
+    console.log(`Image URL: ${post.featured_image.substring(0, 100)}...`);
     
     try {
       const mediaResponse = await fetch(
@@ -1201,33 +1204,31 @@ async function publishToWix(blog: any, post: any): Promise<string> {
           body: JSON.stringify({
             url: post.featured_image,
             mediaType: 'IMAGE',
-            displayName: `${post.title.substring(0, 50)}.jpg`,
-            private: false
+            displayName: `blog-cover-${Date.now()}.jpg`
           })
         }
       );
       
+      const mediaResponseText = await mediaResponse.text();
+      console.log(`Wix Media API response status: ${mediaResponse.status}`);
+      console.log(`Wix Media API response: ${mediaResponseText}`);
+      
       if (mediaResponse.ok) {
-        const mediaData = await mediaResponse.json();
-        console.log(`Wix Media upload response:`, JSON.stringify(mediaData));
+        const mediaData = JSON.parse(mediaResponseText);
         
-        // Get the wixstatic URL from the response
-        const fileUrl = mediaData.file?.url || mediaData.file?.fileUrl;
+        // Extract the wixstatic URL - check multiple possible paths
+        coverImageUrl = mediaData.file?.url || 
+                       mediaData.file?.fileUrl || 
+                       mediaData.file?.media?.image?.url ||
+                       null;
         
-        if (fileUrl) {
-          console.log(`Successfully uploaded image to Wix Media. URL: ${fileUrl}`);
-          
-          // Set coverImage with the wixstatic URL
-          (blogPost.post as any).coverImage = {
-            src: fileUrl
-          };
-          console.log(`Set coverImage for blog post`);
+        if (coverImageUrl) {
+          console.log(`✓ Successfully uploaded image to Wix Media. Cover URL: ${coverImageUrl}`);
         } else {
-          console.error(`Wix Media response missing URL:`, JSON.stringify(mediaData));
+          console.error(`Wix Media response structure:`, JSON.stringify(mediaData, null, 2));
         }
       } else {
-        const errorText = await mediaResponse.text();
-        console.error(`Failed to upload image to Wix Media: ${mediaResponse.status} - ${errorText}`);
+        console.error(`Failed to upload image to Wix Media: ${mediaResponse.status} - ${mediaResponseText}`);
       }
     } catch (mediaError) {
       console.error(`Error uploading image to Wix Media Manager:`, mediaError);
@@ -1279,6 +1280,14 @@ async function publishToWix(blog: any, post: any): Promise<string> {
   // Add memberId to post if available
   if (memberId) {
     (blogPost.post as any).memberId = memberId;
+  }
+  
+  // Add coverImage if we successfully uploaded to Wix Media
+  if (coverImageUrl) {
+    (blogPost.post as any).coverImage = {
+      src: coverImageUrl
+    };
+    console.log(`Added coverImage to post: ${coverImageUrl}`);
   }
   
   // Step 2: Create a draft post using Wix Blog API v3
