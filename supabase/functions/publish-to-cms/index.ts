@@ -1386,10 +1386,15 @@ async function publishToWix(blog: any, post: any): Promise<string> {
     const imageId = imageIdMatch ? imageIdMatch[1] : null;
     
     // Wix Blog API v3 expects 'media' object with wixMedia structure
-    // The image ID should be in wix:image:// format or just the media ID
+    // wixMedia.image must be an object with id, url, width, height
     (blogPost.post as any).media = {
       wixMedia: {
-        image: imageId || coverImageUrl
+        image: {
+          id: imageId || '',
+          url: coverImageUrl,
+          width: 1024,
+          height: 1024
+        }
       },
       displayed: true,
       custom: false
