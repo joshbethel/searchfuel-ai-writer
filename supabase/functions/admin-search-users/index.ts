@@ -146,18 +146,31 @@ serve(async (req) => {
       .select('user_id, id, status, plan_name, current_period_end, is_manual, stripe_subscription_id, sites_allowed')
       .in('user_id', userIds);
 
+    // Get admin status for matching users
+    const { data: adminUsers } = await supabaseService
+      .from('admin_users')
+      .select('user_id')
+      .in('user_id', userIds);
+
     // Create a map of user_id -> subscription
     const subscriptionMap = new Map();
     (subscriptions || []).forEach((sub: any) => {
       subscriptionMap.set(sub.user_id, sub);
     });
 
-    // Combine user data with subscription data
+    // Create a map of user_id -> is_admin
+    const adminMap = new Map();
+    (adminUsers || []).forEach((admin: any) => {
+      adminMap.set(admin.user_id, true);
+    });
+
+    // Combine user data with subscription data and admin status
     const results = matchingUsers.map((user: any) => ({
       id: user.id,
       email: user.email,
       user_metadata: user.user_metadata,
       subscription: subscriptionMap.get(user.id) || null,
+      is_admin: adminMap.has(user.id) || false,
     }));
 
     return new Response(JSON.stringify({

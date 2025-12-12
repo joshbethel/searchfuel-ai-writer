@@ -25,6 +25,9 @@ import {
   UserX,
   Info,
   ChevronDown,
+  Shield,
+  ShieldCheck,
+  ShieldX,
 } from "lucide-react";
 import {
   Table,
@@ -99,6 +102,7 @@ interface UserWithSubscription {
     stripe_subscription_id: string | null;
     sites_allowed?: number;
   } | null;
+  is_admin?: boolean;
 }
 
 type SubscriptionFilter = "all" | "paid" | "manual" | "no_subscription";
@@ -302,6 +306,38 @@ export default function Admin() {
     }
   };
 
+  const handleAdminRoleAction = async (user: UserWithSubscription, action: "grant" | "revoke") => {
+    if (!confirm(`Are you sure you want to ${action === "grant" ? "grant" : "revoke"} admin role for ${user.email}?`)) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-manage-roles", {
+        body: {
+          action: action,
+          target_user_id: user.id,
+          reason: `Admin role ${action === "grant" ? "granted" : "revoked"} via admin dashboard`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success(data.message || `Admin role ${action === "grant" ? "granted" : "revoked"} successfully`);
+        // Refresh all users
+        loadAllUsers();
+      } else {
+        throw new Error(data?.error || "Action failed");
+      }
+    } catch (error: any) {
+      console.error("Error managing admin role:", error);
+      toast.error(error.message || "Failed to manage admin role");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Calculate statistics
   const stats = {
     totalUsers: users.length,
@@ -481,6 +517,7 @@ export default function Admin() {
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
+                  <TableHead>Admin</TableHead>
                   <TableHead>Subscription</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Remaining Days</TableHead>
@@ -515,6 +552,16 @@ export default function Admin() {
                             {user.id.substring(0, 8)}...
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {user.is_admin ? (
+                          <Badge variant="default" className="bg-purple-600 hover:bg-purple-700">
+                            <Shield className="h-3 w-3 mr-1" />
+                            Admin
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {hasSubscription ? (
@@ -574,7 +621,7 @@ export default function Admin() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2 flex-wrap">
                           {!hasPro && (
                             <Button
                               size="sm"
@@ -621,6 +668,28 @@ export default function Admin() {
                                 </>
                               )}
                             </>
+                          )}
+                          {/* Admin role management buttons */}
+                          {user.is_admin ? (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleAdminRoleAction(user, "revoke")}
+                              className="gap-1"
+                            >
+                              <ShieldX className="h-4 w-4" />
+                              Revoke Admin
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAdminRoleAction(user, "grant")}
+                              className="gap-1 border-purple-600 text-purple-600 hover:bg-purple-50"
+                            >
+                              <ShieldCheck className="h-4 w-4" />
+                              Grant Admin
+                            </Button>
                           )}
                         </div>
                       </TableCell>
