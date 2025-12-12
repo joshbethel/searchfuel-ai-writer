@@ -20,7 +20,9 @@ import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import { ProtectedRoute } from "./layouts/ProtectedRoute";
 import { SubscriptionProtectedRoute } from "./layouts/SubscriptionProtectedRoute";
+import { AdminProtectedRoute } from "./layouts/AdminProtectedRoute";
 import { SiteProvider } from "./contexts/SiteContext";
+import Admin from "./pages/Admin";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +46,9 @@ const App = () => (
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/debug" element={<WordPressDebug />} />
+            </Route>
+            <Route element={<AdminProtectedRoute><DashboardLayout /></AdminProtectedRoute>}>
+              <Route path="/admin" element={<Admin />} />
             </Route>
             {/* SearchFuel blog routes */}
             <Route path="/blog" element={<Blog />} />
