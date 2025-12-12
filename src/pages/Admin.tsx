@@ -18,6 +18,10 @@ import {
   CheckCircle2,
   XCircle,
   Edit,
+  Users,
+  CreditCard,
+  UserCog,
+  UserX,
 } from "lucide-react";
 import {
   Table,
@@ -58,6 +62,13 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface UserWithSubscription {
   id: string;
@@ -76,8 +87,11 @@ interface UserWithSubscription {
   } | null;
 }
 
+type SubscriptionFilter = "all" | "paid" | "manual" | "no_subscription";
+
 export default function Admin() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [subscriptionFilter, setSubscriptionFilter] = useState<SubscriptionFilter>("all");
   const [users, setUsers] = useState<UserWithSubscription[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<UserWithSubscription[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,23 +108,43 @@ export default function Admin() {
     loadAllUsers();
   }, []);
 
-  // Filter users based on search query
+  // Filter users based on search query and subscription type
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredUsers(users);
-      setCurrentPage(1);
-    } else {
+    let filtered = users;
+
+    // Apply subscription type filter
+    if (subscriptionFilter !== "all") {
+      filtered = filtered.filter((user) => {
+        const hasSubscription = !!user.subscription;
+        const isManual = user.subscription?.is_manual || false;
+
+        switch (subscriptionFilter) {
+          case "paid":
+            return hasSubscription && !isManual;
+          case "manual":
+            return hasSubscription && isManual;
+          case "no_subscription":
+            return !hasSubscription;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply search query filter
+    if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      const filtered = users.filter((user) => {
+      filtered = filtered.filter((user) => {
         const email = (user.email || '').toLowerCase();
         const name = (user.user_metadata?.name || user.user_metadata?.full_name || '').toLowerCase();
         const userId = user.id.toLowerCase();
         return email.includes(query) || name.includes(query) || userId.includes(query);
       });
-      setFilteredUsers(filtered);
-      setCurrentPage(1);
     }
-  }, [searchQuery, users]);
+
+    setFilteredUsers(filtered);
+    setCurrentPage(1);
+  }, [searchQuery, subscriptionFilter, users]);
 
   const loadAllUsers = async () => {
     setLoading(true);
@@ -208,11 +242,70 @@ export default function Admin() {
     }
   };
 
+  // Calculate statistics
+  const stats = {
+    totalUsers: users.length,
+    usersWithPaidSub: users.filter(
+      (user) => user.subscription && !user.subscription.is_manual
+    ).length,
+    usersWithManualSub: users.filter(
+      (user) => user.subscription && user.subscription.is_manual
+    ).length,
+    usersWithoutSub: users.filter((user) => !user.subscription).length,
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
         <p className="text-muted-foreground">Manage user Pro access and subscriptions</p>
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalUsers}</div>
+            <p className="text-xs text-muted-foreground">All registered users</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Paid Subscriptions</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.usersWithPaidSub}</div>
+            <p className="text-xs text-muted-foreground">Users with paid plans</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Manual Subscriptions</CardTitle>
+            <UserCog className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.usersWithManualSub}</div>
+            <p className="text-xs text-muted-foreground">Admin-granted access</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">No Subscription</CardTitle>
+            <UserX className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.usersWithoutSub}</div>
+            <p className="text-xs text-muted-foreground">Users without access</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="mb-6">
@@ -236,6 +329,17 @@ export default function Admin() {
                 className="pl-10"
               />
             </div>
+            <Select value={subscriptionFilter} onValueChange={(value) => setSubscriptionFilter(value as SubscriptionFilter)}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Filter by type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                <SelectItem value="paid">Paid Subscriptions</SelectItem>
+                <SelectItem value="manual">Manual Subscriptions</SelectItem>
+                <SelectItem value="no_subscription">No Subscription</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               onClick={loadAllUsers}
@@ -279,6 +383,7 @@ export default function Admin() {
                   .map((user) => {
                   const remainingDays = calculateRemainingDays(user.subscription?.current_period_end || null);
                   const hasPro = user.subscription?.plan_name === "pro" && user.subscription?.status === "active";
+                  const hasSubscription = !!user.subscription;
                   const isManual = user.subscription?.is_manual || false;
 
                   return (
@@ -295,22 +400,30 @@ export default function Admin() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={hasPro ? "default" : "secondary"}>
-                          {user.subscription?.plan_name || "free"}
-                        </Badge>
+                        {hasSubscription ? (
+                          <Badge variant={hasPro ? "default" : "secondary"}>
+                            {user.subscription?.plan_name || "—"}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            user.subscription?.status === "active"
-                              ? "default"
-                              : user.subscription?.status === "canceled"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                        >
-                          {user.subscription?.status || "inactive"}
-                        </Badge>
+                        {hasSubscription ? (
+                          <Badge
+                            variant={
+                              user.subscription?.status === "active"
+                                ? "default"
+                                : user.subscription?.status === "canceled"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                          >
+                            {user.subscription?.status || "—"}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {remainingDays !== null ? (
@@ -323,7 +436,9 @@ export default function Admin() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {isManual ? (
+                        {!hasSubscription ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : isManual ? (
                           <Badge variant="outline" className="text-orange-600 border-orange-600">
                             Manual
                           </Badge>
