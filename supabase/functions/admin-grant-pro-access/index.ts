@@ -333,7 +333,9 @@ serve(async (req) => {
           sites_allowed: existingSubscription?.sites_allowed || 1,
         }, {
           onConflict: 'user_id'
-        });
+        })
+        .select()
+        .single();
 
       if (updateError) {
         console.error('Failed to update subscription:', updateError);
