@@ -125,6 +125,9 @@ export default function Admin() {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isDialogInfoOpen, setIsDialogInfoOpen] = useState(false);
   const [isRevokeDialogInfoOpen, setIsRevokeDialogInfoOpen] = useState(false);
+  const [adminRoleDialogOpen, setAdminRoleDialogOpen] = useState(false);
+  const [adminRoleAction, setAdminRoleAction] = useState<"grant" | "revoke">("grant");
+  const [adminRoleUser, setAdminRoleUser] = useState<UserWithSubscription | null>(null);
 
   // Load all users on mount
   useEffect(() => {
@@ -306,25 +309,31 @@ export default function Admin() {
     }
   };
 
-  const handleAdminRoleAction = async (user: UserWithSubscription, action: "grant" | "revoke") => {
-    if (!confirm(`Are you sure you want to ${action === "grant" ? "grant" : "revoke"} admin role for ${user.email}?`)) {
-      return;
-    }
+  const handleAdminRoleAction = (user: UserWithSubscription, action: "grant" | "revoke") => {
+    setAdminRoleUser(user);
+    setAdminRoleAction(action);
+    setAdminRoleDialogOpen(true);
+  };
+
+  const processAdminRoleAction = async () => {
+    if (!adminRoleUser) return;
 
     setIsProcessing(true);
     try {
       const { data, error } = await supabase.functions.invoke("admin-manage-roles", {
         body: {
-          action: action,
-          target_user_id: user.id,
-          reason: `Admin role ${action === "grant" ? "granted" : "revoked"} via admin dashboard`,
+          action: adminRoleAction,
+          target_user_id: adminRoleUser.id,
+          reason: `Admin role ${adminRoleAction === "grant" ? "granted" : "revoked"} via admin dashboard`,
         },
       });
 
       if (error) throw error;
 
       if (data?.success) {
-        toast.success(data.message || `Admin role ${action === "grant" ? "granted" : "revoked"} successfully`);
+        toast.success(data.message || `Admin role ${adminRoleAction === "grant" ? "granted" : "revoked"} successfully`);
+        setAdminRoleDialogOpen(false);
+        setAdminRoleUser(null);
         // Refresh all users
         loadAllUsers();
       } else {
@@ -1064,6 +1073,33 @@ export default function Admin() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Admin Role Management Confirmation Dialog */}
+      <AlertDialog open={adminRoleDialogOpen} onOpenChange={setAdminRoleDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {adminRoleAction === "grant" ? "Grant Admin Role" : "Revoke Admin Role"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {adminRoleAction === "grant" 
+                ? `Are you sure you want to grant admin role to ${adminRoleUser?.email}? They will have full access to the admin dashboard and can manage users and subscriptions.`
+                : `Are you sure you want to revoke admin role from ${adminRoleUser?.email}? They will lose access to the admin dashboard.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={processAdminRoleAction}
+              disabled={isProcessing}
+              className={adminRoleAction === "revoke" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+            >
+              {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {adminRoleAction === "grant" ? "Grant Admin Role" : "Revoke Admin Role"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
