@@ -313,3 +313,227 @@ export function getInternalNotificationTemplate(data: {
   `.trim();
 }
 
+
+/**
+ * Pro access granted email template
+ */
+export function getProAccessGrantedEmailTemplate(data: {
+  userEmail: string;
+  userName?: string;
+  periodEnd: string; // ISO timestamp
+  remainingDays?: number;
+}): string {
+  const { userEmail, userName, periodEnd, remainingDays } = data;
+  const appUrl = getAppUrl();
+  const dashboardUrl = \`\${appUrl}/dashboard\`;
+  const displayName = userName || userEmail.split("@")[0];
+  const periodEndDate = new Date(periodEnd);
+  const formattedDate = periodEndDate.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  const daysText = remainingDays !== undefined 
+    ? \`\${remainingDays} \${remainingDays === 1 ? 'day' : 'days'}\`
+    : 'until the end of your subscription period';
+
+  return \`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your SearchFuel Pro Access Has Been Activated</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f5f5;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" style="max-width: 600px; width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #1a2332 0%, #e67e4f 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">Your Pro Access Has Been Activated 🎉</h1>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
+                Hi \${displayName},
+              </p>
+              
+              <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
+                Great news! Your SearchFuel Pro access has been activated by an administrator.
+              </p>
+              
+              <!-- Subscription Details -->
+              <div style="background-color: #f8f9fa; border-left: 4px solid #e67e4f; padding: 20px; margin: 0 0 30px; border-radius: 4px;">
+                <h2 style="margin: 0 0 15px; color: #333333; font-size: 18px; font-weight: 600;">Subscription Details:</h2>
+                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: 600; width: 140px;">Plan:</td>
+                    <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">Pro</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: 600;">Period End:</td>
+                    <td style="padding: 8px 0; color: #333333; font-size: 14px;">\${formattedDate}</td>
+                  </tr>
+                  \${remainingDays !== undefined ? \`
+                  <tr>
+                    <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: 600;">Remaining:</td>
+                    <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">\${daysText}</td>
+                  </tr>
+                  \` : ''}
+                </table>
+              </div>
+              
+              <p style="margin: 0 0 30px; color: #333333; font-size: 16px; line-height: 1.6;">
+                You now have access to all Pro features, including:
+              </p>
+              
+              <!-- Features List -->
+              <ul style="margin: 0 0 30px; padding-left: 20px; color: #555555; font-size: 15px; line-height: 1.8;">
+                <li style="margin-bottom: 10px;">Unlimited article generation</li>
+                <li style="margin-bottom: 10px;">Advanced SEO optimization</li>
+                <li style="margin-bottom: 10px;">Priority support</li>
+                <li>And much more!</li>
+              </ul>
+              
+              <!-- CTA Button -->
+              <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 0 0 30px;">
+                <tr>
+                  <td align="center">
+                    <a href="\${dashboardUrl}" style="display: inline-block; padding: 16px 32px; background-color: #e67e4f; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="margin: 0 0 20px; color: #666666; font-size: 14px; line-height: 1.6;">
+                If you have any questions, please email us at <a href="mailto:team@trysearchfuel.com" style="color: #e67e4f; text-decoration: none;">team@trysearchfuel.com</a>.
+              </p>
+              
+              <p style="margin: 0; color: #666666; font-size: 14px; line-height: 1.6;">
+                Best regards,<br>
+                The SearchFuel Team
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0 0 10px; color: #999999; font-size: 12px;">
+                This email was sent to \${userEmail}
+              </p>
+              <p style="margin: 0; color: #999999; font-size: 12px;">
+                © \${new Date().getFullYear()} SearchFuel. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  \`.trim();
+}
+
+/**
+ * Pro access revoked email template
+ */
+export function getProAccessRevokedEmailTemplate(data: {
+  userEmail: string;
+  userName?: string;
+}): string {
+  const { userEmail, userName } = data;
+  const appUrl = getAppUrl();
+  const dashboardUrl = \`\${appUrl}/dashboard\`;
+  const displayName = userName || userEmail.split("@")[0];
+
+  return \`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your SearchFuel Pro Access Has Been Removed</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f5f5f5;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" style="max-width: 600px; width: 100%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background-color: #1a2332; border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">Your Pro Access Has Been Removed</h1>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
+                Hi \${displayName},
+              </p>
+              
+              <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
+                This email is to notify you that your SearchFuel Pro access has been removed by an administrator.
+              </p>
+              
+              <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
+                Your account has been downgraded to the <strong>Free plan</strong>. You can continue using SearchFuel with the features available on the Free plan.
+              </p>
+              
+              <!-- What Happens Next -->
+              <div style="background-color: #f8f9fa; border-left: 4px solid #e67e4f; padding: 20px; margin: 0 0 30px; border-radius: 4px;">
+                <h2 style="margin: 0 0 15px; color: #333333; font-size: 18px; font-weight: 600;">What happens next?</h2>
+                <ul style="margin: 0; padding-left: 20px; color: #555555; font-size: 15px; line-height: 1.8;">
+                  <li style="margin-bottom: 10px;">Your existing content remains accessible</li>
+                  <li style="margin-bottom: 10px;">You can upgrade to Pro again at any time</li>
+                  <li style="margin-bottom: 10px;">Free plan features continue to be available</li>
+                </ul>
+              </div>
+              
+              <!-- CTA Button -->
+              <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 0 0 30px;">
+                <tr>
+                  <td align="center">
+                    <a href="\${dashboardUrl}" style="display: inline-block; padding: 16px 32px; background-color: #e67e4f; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="margin: 0 0 20px; color: #666666; font-size: 14px; line-height: 1.6;">
+                If you have any questions about this change, please contact us at <a href="mailto:team@trysearchfuel.com" style="color: #e67e4f; text-decoration: none;">team@trysearchfuel.com</a>.
+              </p>
+              
+              <p style="margin: 0; color: #666666; font-size: 14px; line-height: 1.6;">
+                Best regards,<br>
+                The SearchFuel Team
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0 0 10px; color: #999999; font-size: 12px;">
+                This email was sent to \${userEmail}
+              </p>
+              <p style="margin: 0; color: #999999; font-size: 12px;">
+                © \${new Date().getFullYear()} SearchFuel. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  \`.trim();
+}
