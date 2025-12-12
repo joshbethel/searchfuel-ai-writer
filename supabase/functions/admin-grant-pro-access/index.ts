@@ -301,11 +301,32 @@ serve(async (req) => {
       
       // Create or update Stripe subscription
       let stripeSubscription;
-      if (existingSubscription?.stripe_subscription_id) {
-        // Update existing subscription
-        stripeSubscription = await stripe.subscriptions.update(
-          existingSubscription.stripe_subscription_id,
-          {
+      const hasActiveStripeSubscription = existingSubscription?.stripe_subscription_id && 
+                                          existingSubscription?.status !== 'canceled';
+      
+      if (hasActiveStripeSubscription) {
+        try {
+          // Try to update existing active subscription
+          stripeSubscription = await stripe.subscriptions.update(
+            existingSubscription.stripe_subscription_id,
+            {
+              items: [{
+                price: proPriceId,
+              }],
+              metadata: {
+                is_manual: 'true',
+                granted_by_admin: adminUserId,
+              },
+              cancel_at: Math.floor(periodEndDate.getTime() / 1000),
+              collection_method: 'send_invoice',
+              days_until_due: Math.max(1, daysUntilDue), // Ensure at least 1 day
+            }
+          );
+        } catch (updateError: any) {
+          // If update fails (e.g., subscription is canceled), create a new one
+          console.log('Failed to update existing subscription, creating new one:', updateError.message);
+          stripeSubscription = await stripe.subscriptions.create({
+            customer: customerId,
             items: [{
               price: proPriceId,
             }],
@@ -316,11 +337,12 @@ serve(async (req) => {
             cancel_at: Math.floor(periodEndDate.getTime() / 1000),
             collection_method: 'send_invoice',
             days_until_due: Math.max(1, daysUntilDue), // Ensure at least 1 day
-          }
-        );
+          });
+        }
       } else {
         // Create new subscription with send_invoice collection method
         // This allows subscriptions without payment methods for manual grants
+        // Also used when existing subscription is canceled
         stripeSubscription = await stripe.subscriptions.create({
           customer: customerId,
           items: [{
