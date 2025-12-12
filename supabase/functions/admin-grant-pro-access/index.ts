@@ -295,6 +295,66 @@ serve(async (req) => {
       }
 
 
+      // Helper function to mark invoices as paid for manual grants (prevents invoice emails)
+      const markInvoiceAsPaid = async (subscriptionId: string) => {
+        try {
+          // Wait a moment for Stripe to create the invoice
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Get the latest invoice for this subscription
+          const invoices = await stripe.invoices.list({
+            subscription: subscriptionId,
+            limit: 1,
+          });
+
+          if (invoices.data.length > 0) {
+            const invoice = invoices.data[0];
+            
+            // Only mark as paid if it's not already paid/voided
+            if (invoice.status === 'draft' || invoice.status === 'open') {
+              // Finalize the invoice first if it's a draft
+              if (invoice.status === 'draft') {
+                await stripe.invoices.finalizeInvoice(invoice.id);
+              }
+              
+              // Mark as paid (this prevents email from being sent)
+              // Using paid_out_of_band: true marks it as paid without charging a payment method
+              await stripe.invoices.pay(invoice.id, {
+                paid_out_of_band: true,
+              });
+              
+              console.log(`Marked invoice ${invoice.id} as paid for manual grant (prevents invoice email)`);
+            } else if (invoice.status === 'paid') {
+              console.log(`Invoice ${invoice.id} is already paid`);
+            }
+          } else {
+            // If no invoice found, try again after a longer delay
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const retryInvoices = await stripe.invoices.list({
+              subscription: subscriptionId,
+              limit: 1,
+            });
+            
+            if (retryInvoices.data.length > 0) {
+              const invoice = retryInvoices.data[0];
+              if (invoice.status === 'draft' || invoice.status === 'open') {
+                if (invoice.status === 'draft') {
+                  await stripe.invoices.finalizeInvoice(invoice.id);
+                }
+                await stripe.invoices.pay(invoice.id, {
+                  paid_out_of_band: true,
+                });
+                console.log(`Marked invoice ${invoice.id} as paid for manual grant (after retry)`);
+              }
+            }
+          }
+        } catch (error: any) {
+          // Log error but don't fail the operation - invoice marking is best effort
+          // The subscription will still work, user just might receive an invoice email
+          console.error('Error marking invoice as paid (non-critical):', error.message);
+        }
+      };
+
       // Calculate days until due (difference between now and period end)
       const now = new Date();
       const daysUntilDue = Math.ceil((periodEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -323,6 +383,8 @@ serve(async (req) => {
               days_until_due: Math.max(1, daysUntilDue), // Ensure at least 1 day
             }
           );
+          // Mark invoice as paid to prevent email
+          await markInvoiceAsPaid(stripeSubscription.id);
         } catch (updateError: any) {
           // If update fails (e.g., subscription is canceled), create a new one
           console.log('Failed to update existing subscription, creating new one:', updateError.message);
@@ -340,6 +402,8 @@ serve(async (req) => {
             collection_method: 'send_invoice',
             days_until_due: Math.max(1, daysUntilDue), // Ensure at least 1 day
           });
+          // Mark invoice as paid to prevent email
+          await markInvoiceAsPaid(stripeSubscription.id);
         }
       } else {
         // Create new subscription with send_invoice collection method
@@ -359,6 +423,8 @@ serve(async (req) => {
           collection_method: 'send_invoice',
           days_until_due: Math.max(1, daysUntilDue), // Ensure at least 1 day
         });
+        // Mark invoice as paid to prevent email
+        await markInvoiceAsPaid(stripeSubscription.id);
       }
 
       // Update database subscription
