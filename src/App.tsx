@@ -23,6 +23,7 @@ import { SubscriptionProtectedRoute } from "./layouts/SubscriptionProtectedRoute
 import { AdminProtectedRoute } from "./layouts/AdminProtectedRoute";
 import { SiteProvider } from "./contexts/SiteContext";
 import Admin from "./pages/Admin";
+import AdminUserContent from "./pages/admin/AdminUserContent";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,8 @@ const App = () => (
             </Route>
             <Route element={<AdminProtectedRoute><DashboardLayout /></AdminProtectedRoute>}>
               <Route path="/admin" element={<Admin />} />
+              <Route path="/admin/users/:userId/content" element={<AdminUserContent />} />
+              {/* Additional admin content routes will be added as components are created */}
             </Route>
             {/* SearchFuel blog routes */}
             <Route path="/blog" element={<Blog />} />

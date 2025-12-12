@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,8 @@ import {
   Shield,
   ShieldCheck,
   ShieldX,
+  Eye,
+  FileText,
 } from "lucide-react";
 import {
   Table,
@@ -108,6 +111,7 @@ interface UserWithSubscription {
 type SubscriptionFilter = "all" | "paid" | "manual" | "no_subscription";
 
 export default function Admin() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [subscriptionFilter, setSubscriptionFilter] = useState<SubscriptionFilter>("all");
   const [users, setUsers] = useState<UserWithSubscription[]>([]);
@@ -631,6 +635,15 @@ export default function Admin() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2 flex-wrap">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/admin/users/${user.id}/content`)}
+                            className="gap-1"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Content
+                          </Button>
                           {!hasPro && (
                             <Button
                               size="sm"
