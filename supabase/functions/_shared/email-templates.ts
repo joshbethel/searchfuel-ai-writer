@@ -485,16 +485,16 @@ export function getProAccessRevokedEmailTemplate(data: {
               </p>
               
               <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
-                Your account has been downgraded to the <strong>Free plan</strong>. You can continue using SearchFuel with the features available on the Free plan.
+                Your Pro subscription has been canceled and you no longer have access to Pro features. To regain access, you'll need to subscribe to a Pro plan.
               </p>
               
               <!-- What Happens Next -->
               <div style="background-color: #f8f9fa; border-left: 4px solid #e67e4f; padding: 20px; margin: 0 0 30px; border-radius: 4px;">
                 <h2 style="margin: 0 0 15px; color: #333333; font-size: 18px; font-weight: 600;">What happens next?</h2>
                 <ul style="margin: 0; padding-left: 20px; color: #555555; font-size: 15px; line-height: 1.8;">
-                  <li style="margin-bottom: 10px;">Your existing content remains accessible</li>
-                  <li style="margin-bottom: 10px;">You can upgrade to Pro again at any time</li>
-                  <li style="margin-bottom: 10px;">Free plan features continue to be available</li>
+                  <li style="margin-bottom: 10px;">Your Pro subscription has been canceled</li>
+                  <li style="margin-bottom: 10px;">You no longer have access to Pro features</li>
+                  <li style="margin-bottom: 10px;">You can subscribe to Pro again at any time to regain access</li>
                 </ul>
               </div>
               

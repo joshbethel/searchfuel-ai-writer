@@ -116,6 +116,7 @@ export default function Admin() {
   const [usersPerPage] = useState(20);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [isDialogInfoOpen, setIsDialogInfoOpen] = useState(false);
+  const [isRevokeDialogInfoOpen, setIsRevokeDialogInfoOpen] = useState(false);
 
   // Load all users on mount
   useEffect(() => {
@@ -660,7 +661,7 @@ export default function Admin() {
             </DialogTitle>
             <DialogDescription>
               {actionType === "grant" && `Grant Pro access to ${selectedUser?.email}`}
-              {actionType === "revoke" && `Revoke Pro access from ${selectedUser?.email}. This will downgrade them to Free plan.`}
+              {actionType === "revoke" && `Revoke Pro access from ${selectedUser?.email}. This will remove their access to the platform.`}
               {actionType === "update_period_end" && `Update the subscription period end date for ${selectedUser?.email}`}
             </DialogDescription>
           </DialogHeader>
@@ -699,6 +700,52 @@ export default function Admin() {
                       <li><strong>Audit Log:</strong> All actions are logged in the audit system with your admin user ID and timestamp.</li>
                       <li><strong>Manual Flag:</strong> The subscription is marked as "Manual" in both our database and Stripe, distinguishing it from paid subscriptions.</li>
                       <li><strong>Automatic Cancellation:</strong> The subscription will automatically cancel on the end date you specify.</li>
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
+          {actionType === "revoke" && (
+            <Collapsible open={isRevokeDialogInfoOpen} onOpenChange={setIsRevokeDialogInfoOpen} className="mb-4">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-between border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30"
+                >
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    <span className="text-orange-800 dark:text-orange-200 font-medium text-sm">
+                      What happens when revoking Pro access?
+                    </span>
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 text-orange-600 dark:text-orange-400 transition-transform duration-200",
+                      isRevokeDialogInfoOpen && "transform rotate-180"
+                    )}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Alert className="mt-2 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20">
+                  <Info className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                  <AlertTitle className="text-orange-800 dark:text-orange-200 text-sm">How Revoking Pro Access Works</AlertTitle>
+                  <AlertDescription className="text-orange-700 dark:text-orange-300 mt-2 space-y-2 text-xs">
+                    <p className="font-semibold">When you revoke Pro access from a user, here's what happens:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li><strong>Immediate Cancellation:</strong> The Stripe subscription is immediately canceled, removing Pro access.</li>
+                      <li><strong>Access Removed:</strong> The user loses all Pro features and no longer has access to the platform.</li>
+                      <li><strong>Email Notification:</strong> The user receives an email notification informing them that Pro access has been revoked.</li>
+                      <li><strong>Audit Log:</strong> The revocation action is logged in the audit system with your admin user ID and timestamp.</li>
+                      <li><strong>Database Update:</strong> The subscription record is updated to reflect the canceled status.</li>
+                    </ul>
+                    <p className="mt-2 font-semibold">Important Notes:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Only manual subscriptions (admin-granted) can be revoked through this dashboard.</li>
+                      <li>Paid subscriptions must be canceled through Stripe or the user's account.</li>
+                      <li>This action cannot be undone - you'll need to grant access again if needed.</li>
                     </ul>
                   </AlertDescription>
                 </Alert>
