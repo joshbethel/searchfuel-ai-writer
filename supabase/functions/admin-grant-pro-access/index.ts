@@ -255,6 +255,15 @@ serve(async (req) => {
     // Handle different actions
     if (action === 'grant') {
       // GRANT PRO ACCESS
+      // Validate sites_allowed
+      const finalSitesAllowed = sites_allowed !== undefined ? sites_allowed : 1;
+      if (finalSitesAllowed < 1 || finalSitesAllowed > 5) {
+        return new Response(
+          JSON.stringify({ error: "sites_allowed must be between 1 and 5" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const periodEndDate = current_period_end 
         ? new Date(current_period_end)
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default: 30 days from now
@@ -357,7 +366,7 @@ serve(async (req) => {
           current_period_start: periodStart.toISOString(),
           current_period_end: periodEnd.toISOString(),
           is_manual: true,
-          sites_allowed: sites_allowed !== undefined ? sites_allowed : (existingSubscription?.sites_allowed || 1),
+          sites_allowed: finalSitesAllowed,
         }, {
           onConflict: 'user_id'
         })
@@ -391,7 +400,7 @@ serve(async (req) => {
                 current_period_start: periodStart.toISOString(),
                 current_period_end: periodEnd.toISOString(),
                 is_manual: true,
-                sites_allowed: sites_allowed !== undefined ? sites_allowed : (existingSubscription?.sites_allowed || 1),
+                sites_allowed: finalSitesAllowed,
               })
               .eq('id', conflictingSub.id)
               .select()
@@ -666,6 +675,13 @@ serve(async (req) => {
       if (sites_allowed === undefined || sites_allowed < 1) {
         return new Response(
           JSON.stringify({ error: "sites_allowed is required and must be at least 1" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (sites_allowed > 5) {
+        return new Response(
+          JSON.stringify({ error: "Maximum allowed sites is 5" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

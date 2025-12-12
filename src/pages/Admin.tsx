@@ -237,9 +237,15 @@ export default function Admin() {
       return;
     }
 
-    if (actionType === "update_sites" && sitesAllowed < 1) {
-      toast.error("Sites allowed must be at least 1");
-      return;
+    if (actionType === "update_sites" || actionType === "grant") {
+      if (sitesAllowed < 1) {
+        toast.error("Sites allowed must be at least 1");
+        return;
+      }
+      if (sitesAllowed > 5) {
+        toast.error("Maximum allowed sites is 5");
+        return;
+      }
     }
 
     // For paid subscriptions, only allow increasing sites_allowed
@@ -841,12 +847,16 @@ export default function Admin() {
                 <Input
                   type="number"
                   min="1"
+                  max="5"
                   value={sitesAllowed}
-                  onChange={(e) => setSitesAllowed(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 1;
+                    setSitesAllowed(Math.max(1, Math.min(5, value)));
+                  }}
                   className="w-full"
                 />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Number of websites this user can manage. Default: 1.
+                  Number of websites this user can manage. Range: 1-5 sites. Default: 1.
                 </p>
               </div>
             </div>
@@ -887,17 +897,38 @@ export default function Admin() {
               <Input
                 type="number"
                 min="1"
+                max="5"
                 value={sitesAllowed}
-                onChange={(e) => setSitesAllowed(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full"
+                onChange={(e) => {
+                  const value = parseInt(e.target.value) || 1;
+                  setSitesAllowed(Math.max(1, Math.min(5, value)));
+                }}
+                className={cn(
+                  "w-full",
+                  selectedUser?.subscription && !selectedUser.subscription.is_manual && sitesAllowed < (selectedUser.subscription.sites_allowed || 1) && "border-red-500"
+                )}
               />
               {selectedUser?.subscription && !selectedUser.subscription.is_manual && (
-                <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
-                  Note: For paid subscriptions, you can only increase the number of sites.
+                <>
+                  {sitesAllowed < (selectedUser.subscription.sites_allowed || 1) && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
+                      Error: For paid subscriptions, you can only increase the number of sites.
+                    </p>
+                  )}
+                  {sitesAllowed >= (selectedUser.subscription.sites_allowed || 1) && (
+                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                      Note: For paid subscriptions, you can only increase the number of sites.
+                    </p>
+                  )}
+                </>
+              )}
+              {sitesAllowed > 5 && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
+                  Error: Maximum allowed sites is 5.
                 </p>
               )}
               <p className="text-xs text-muted-foreground mt-2">
-                Current: {selectedUser?.subscription?.sites_allowed || 1} site(s)
+                Current: {selectedUser?.subscription?.sites_allowed || 1} site(s) | Max: 5 sites
               </p>
             </div>
           )}
@@ -923,7 +954,18 @@ export default function Admin() {
             <Button variant="outline" onClick={() => setActionDialogOpen(false)} disabled={isProcessing}>
               Cancel
             </Button>
-            <Button onClick={processAction} disabled={isProcessing}>
+            <Button 
+              onClick={processAction} 
+              disabled={
+                isProcessing || 
+                (actionType === "update_sites" && (
+                  sitesAllowed < 1 || 
+                  sitesAllowed > 5 || 
+                  (selectedUser?.subscription && !selectedUser.subscription.is_manual && sitesAllowed < (selectedUser.subscription.sites_allowed || 1))
+                )) ||
+                (actionType === "grant" && (sitesAllowed < 1 || sitesAllowed > 5))
+              }
+            >
               {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {actionType === "grant" && "Grant Access"}
               {actionType === "revoke" && "Revoke Access"}
