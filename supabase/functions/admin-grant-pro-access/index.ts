@@ -37,10 +37,11 @@ function getCorsHeadersWithOrigin(origin: string | null) {
 }
 
 interface GrantProAccessRequest {
-  action: 'grant' | 'revoke' | 'update_period_end';
+  action: 'grant' | 'revoke' | 'update_period_end' | 'update_sites';
   target_user_id: string;
   current_period_end?: string; // ISO timestamp, optional for grant, required for update
-  reason?: string;
+  sites_allowed?: number; // Number of websites user can manage
+  reason?: string; // Optional reason for the action (for audit logging)
 }
 
 interface AuditLogDetails {
@@ -59,6 +60,8 @@ interface AuditLogDetails {
   period_end?: string;
   previous_period_end?: string;
   custom_period_end_set?: boolean;
+  previous_sites_allowed?: number;
+  new_sites_allowed?: number;
   email_notification?: {
     sent: boolean;
     sent_at?: string;
@@ -180,7 +183,7 @@ serve(async (req) => {
 
     // Parse request body
     const body: GrantProAccessRequest = await req.json();
-    const { action, target_user_id, current_period_end, reason } = body;
+    const { action, target_user_id, current_period_end, sites_allowed, reason } = body;
 
     if (!action || !target_user_id) {
       return new Response(
@@ -189,9 +192,9 @@ serve(async (req) => {
       );
     }
 
-    if (!['grant', 'revoke', 'update_period_end'].includes(action)) {
+    if (!['grant', 'revoke', 'update_period_end', 'update_sites'].includes(action)) {
       return new Response(
-        JSON.stringify({ error: "Invalid action. Must be 'grant', 'revoke', or 'update_period_end'" }),
+        JSON.stringify({ error: "Invalid action. Must be 'grant', 'revoke', 'update_period_end', or 'update_sites'" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -354,7 +357,7 @@ serve(async (req) => {
           current_period_start: periodStart.toISOString(),
           current_period_end: periodEnd.toISOString(),
           is_manual: true,
-          sites_allowed: existingSubscription?.sites_allowed || 1,
+          sites_allowed: sites_allowed !== undefined ? sites_allowed : (existingSubscription?.sites_allowed || 1),
         }, {
           onConflict: 'user_id'
         })
@@ -388,7 +391,7 @@ serve(async (req) => {
                 current_period_start: periodStart.toISOString(),
                 current_period_end: periodEnd.toISOString(),
                 is_manual: true,
-                sites_allowed: existingSubscription?.sites_allowed || 1,
+                sites_allowed: sites_allowed !== undefined ? sites_allowed : (existingSubscription?.sites_allowed || 1),
               })
               .eq('id', conflictingSub.id)
               .select()
@@ -657,12 +660,79 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
-    }
 
-    return new Response(
-      JSON.stringify({ error: "Invalid action" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    } else if (action === 'update_sites') {
+      // UPDATE SITES ALLOWED
+      if (sites_allowed === undefined || sites_allowed < 1) {
+        return new Response(
+          JSON.stringify({ error: "sites_allowed is required and must be at least 1" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!existingSubscription) {
+        return new Response(
+          JSON.stringify({ error: "No subscription found for this user" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // For paid subscriptions, only allow increasing sites_allowed
+      if (!existingSubscription.is_manual) {
+        const currentSites = existingSubscription.sites_allowed || 1;
+        if (sites_allowed < currentSites) {
+          return new Response(
+            JSON.stringify({ error: "For paid subscriptions, you can only increase the number of sites. Current: " + currentSites }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      // Update database subscription
+      const { data: updatedSubscription, error: updateError } = await supabaseService
+        .from('subscriptions')
+        .update({
+          sites_allowed: sites_allowed,
+        })
+        .eq('user_id', target_user_id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Failed to update subscription:', updateError);
+        return new Response(
+          JSON.stringify({ error: "Failed to update subscription", details: updateError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      auditDetails = {
+        ...auditDetails,
+        subscription_id: existingSubscription.id,
+        stripe_subscription_id: existingSubscription.stripe_subscription_id || undefined,
+        stripe_customer_id: existingSubscription.stripe_customer_id || undefined,
+        previous_sites_allowed: existingSubscription.sites_allowed || 1,
+        new_sites_allowed: sites_allowed,
+      };
+
+      // Log admin action
+      await logAdminAction(supabaseService, adminUserId, 'update_sites_allowed', target_user_id, auditDetails);
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: "Sites allowed updated successfully",
+        subscription: updatedSubscription,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+
+    } else {
+      return new Response(
+        JSON.stringify({ error: "Invalid action" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
   } catch (error) {
     console.error("Error in admin-grant-pro-access:", error);

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import React from "react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +97,7 @@ interface UserWithSubscription {
     current_period_end: string | null;
     is_manual: boolean;
     stripe_subscription_id: string | null;
+    sites_allowed?: number;
   } | null;
 }
 
@@ -109,8 +111,10 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserWithSubscription | null>(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
-  const [actionType, setActionType] = useState<"grant" | "revoke" | "update_period_end">("grant");
+  const [actionType, setActionType] = useState<"grant" | "revoke" | "update_period_end" | "update_sites">("grant");
   const [selectedDate, setSelectedDate] = useState<Date>();
+  const [sitesAllowed, setSitesAllowed] = useState<number>(1);
+  const [reason, setReason] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage] = useState(20);
@@ -206,15 +210,20 @@ export default function Admin() {
     return "text-red-600";
   };
 
-  const handleAction = (user: UserWithSubscription, type: "grant" | "revoke" | "update_period_end") => {
+  const handleAction = (user: UserWithSubscription, type: "grant" | "revoke" | "update_period_end" | "update_sites") => {
     setSelectedUser(user);
     setActionType(type);
+    setReason(""); // Reset reason when opening dialog
     
     if (type === "grant") {
       // Default to 30 days from now
       setSelectedDate(addDays(new Date(), 30));
+      setSitesAllowed(1); // Default to 1 site
     } else if (type === "update_period_end" && user.subscription?.current_period_end) {
       setSelectedDate(parseISO(user.subscription.current_period_end));
+    } else if (type === "update_sites") {
+      // Set current sites_allowed value
+      setSitesAllowed(user.subscription?.sites_allowed || 1);
     }
     
     setActionDialogOpen(true);
@@ -228,13 +237,29 @@ export default function Admin() {
       return;
     }
 
+    if (actionType === "update_sites" && sitesAllowed < 1) {
+      toast.error("Sites allowed must be at least 1");
+      return;
+    }
+
+    // For paid subscriptions, only allow increasing sites_allowed
+    if (actionType === "update_sites" && selectedUser.subscription && !selectedUser.subscription.is_manual) {
+      const currentSites = selectedUser.subscription.sites_allowed || 1;
+      if (sitesAllowed < currentSites) {
+        toast.error("For paid subscriptions, you can only increase the number of sites");
+        return;
+      }
+    }
+
     setIsProcessing(true);
     try {
       const { data, error } = await supabase.functions.invoke("admin-grant-pro-access", {
         body: {
           action: actionType,
           target_user_id: selectedUser.id,
-          current_period_end: actionType !== "revoke" ? selectedDate?.toISOString() : undefined,
+          current_period_end: (actionType === "grant" || actionType === "update_period_end") ? selectedDate?.toISOString() : undefined,
+          sites_allowed: (actionType === "grant" || actionType === "update_sites") ? sitesAllowed : undefined,
+          reason: reason.trim() || undefined,
         },
       });
 
@@ -244,6 +269,7 @@ export default function Admin() {
         toast.success(data.message || "Action completed successfully");
         setActionDialogOpen(false);
         setSelectedUser(null);
+        setReason(""); // Reset reason after successful action
         // Refresh all users
         loadAllUsers();
       } else {
@@ -439,6 +465,7 @@ export default function Admin() {
                   <TableHead>Subscription</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Remaining Days</TableHead>
+                  <TableHead>Sites Allowed</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -502,6 +529,16 @@ export default function Admin() {
                         )}
                       </TableCell>
                       <TableCell>
+                        {hasSubscription ? (
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">{user.subscription?.sites_allowed || 1}</span>
+                            <span className="text-muted-foreground text-xs">sites</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {!hasSubscription ? (
                           <span className="text-muted-foreground">—</span>
                         ) : isManual ? (
@@ -524,26 +561,39 @@ export default function Admin() {
                               Grant Pro
                             </Button>
                           )}
-                          {hasPro && isManual && (
+                          {hasPro && (
                             <>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleAction(user, "update_period_end")}
+                                onClick={() => handleAction(user, "update_sites")}
                                 className="gap-1"
                               >
                                 <Edit className="h-4 w-4" />
-                                Update Period
+                                Update Sites
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleAction(user, "revoke")}
-                                className="gap-1"
-                              >
-                                <X className="h-4 w-4" />
-                                Revoke
-                              </Button>
+                              {isManual && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleAction(user, "update_period_end")}
+                                    className="gap-1"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                    Update Period
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleAction(user, "revoke")}
+                                    className="gap-1"
+                                  >
+                                    <X className="h-4 w-4" />
+                                    Revoke
+                                  </Button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
@@ -658,11 +708,13 @@ export default function Admin() {
               {actionType === "grant" && "Grant Pro Access"}
               {actionType === "revoke" && "Revoke Pro Access"}
               {actionType === "update_period_end" && "Update Period End"}
+              {actionType === "update_sites" && "Update Sites Allowed"}
             </DialogTitle>
             <DialogDescription>
               {actionType === "grant" && `Grant Pro access to ${selectedUser?.email}`}
               {actionType === "revoke" && `Revoke Pro access from ${selectedUser?.email}. This will remove their access to the platform.`}
               {actionType === "update_period_end" && `Update the subscription period end date for ${selectedUser?.email}`}
+              {actionType === "update_sites" && `Update the number of websites ${selectedUser?.email} can manage`}
             </DialogDescription>
           </DialogHeader>
 
@@ -753,7 +805,54 @@ export default function Admin() {
             </Collapsible>
           )}
 
-          {(actionType === "grant" || actionType === "update_period_end") && (
+          {actionType === "grant" && (
+            <div className="py-4 space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Period End Date</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !selectedDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      disabled={(date) => date < new Date()}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Default: 30 days from today. Select a custom date if needed.
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Number of Websites</label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={sitesAllowed}
+                  onChange={(e) => setSitesAllowed(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Number of websites this user can manage. Default: 1.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {actionType === "update_period_end" && (
             <div className="py-4">
               <label className="text-sm font-medium mb-2 block">Period End Date</label>
               <Popover>
@@ -779,13 +878,46 @@ export default function Admin() {
                   />
                 </PopoverContent>
               </Popover>
-              {actionType === "grant" && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Default: 30 days from today. Select a custom date if needed.
-                </p>
-              )}
             </div>
           )}
+
+          {actionType === "update_sites" && (
+            <div className="py-4">
+              <label className="text-sm font-medium mb-2 block">Number of Websites</label>
+              <Input
+                type="number"
+                min="1"
+                value={sitesAllowed}
+                onChange={(e) => setSitesAllowed(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-full"
+              />
+              {selectedUser?.subscription && !selectedUser.subscription.is_manual && (
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                  Note: For paid subscriptions, you can only increase the number of sites.
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-2">
+                Current: {selectedUser?.subscription?.sites_allowed || 1} site(s)
+              </p>
+            </div>
+          )}
+
+          {/* Reason field for all actions */}
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">
+              Reason (Optional)
+            </label>
+            <Textarea
+              placeholder="Enter a reason for this action (e.g., 'Customer support request', 'Trial extension', etc.)"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full min-h-[80px]"
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              This reason will be logged in the audit trail for record keeping.
+            </p>
+          </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setActionDialogOpen(false)} disabled={isProcessing}>
@@ -796,6 +928,7 @@ export default function Admin() {
               {actionType === "grant" && "Grant Access"}
               {actionType === "revoke" && "Revoke Access"}
               {actionType === "update_period_end" && "Update Date"}
+              {actionType === "update_sites" && "Update Sites"}
             </Button>
           </DialogFooter>
         </DialogContent>

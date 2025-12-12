@@ -143,7 +143,7 @@ serve(async (req) => {
     const userIds = matchingUsers.map((u: any) => u.id);
     const { data: subscriptions } = await supabaseService
       .from('subscriptions')
-      .select('user_id, id, status, plan_name, current_period_end, is_manual, stripe_subscription_id')
+      .select('user_id, id, status, plan_name, current_period_end, is_manual, stripe_subscription_id, sites_allowed')
       .in('user_id', userIds);
 
     // Create a map of user_id -> subscription
