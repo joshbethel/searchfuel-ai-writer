@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Calendar as CalendarIcon,
   Shield,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -116,20 +117,35 @@ export function Sidebar() {
             );
           })}
           
-          {/* Admin link - only show if user is admin */}
+          {/* Admin links - only show if user is admin */}
           {!checkingAdmin && isAdmin && (
-            <Link
-              to="/admin"
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all",
-                location.pathname === "/admin"
-                  ? "bg-accent text-white shadow-lg shadow-accent/20"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
-            >
-              <Shield className="w-5 h-5" />
-              Admin
-            </Link>
+            <>
+              <Link
+                to="/admin"
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all",
+                  location.pathname === "/admin" || 
+                  (location.pathname.startsWith("/admin/") && !location.pathname.startsWith("/admin/audit-log") && !location.pathname.startsWith("/admin/users"))
+                    ? "bg-accent text-white shadow-lg shadow-accent/20"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <Shield className="w-5 h-5" />
+                Admin
+              </Link>
+              <Link
+                to="/admin/audit-log"
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all",
+                  location.pathname === "/admin/audit-log"
+                    ? "bg-accent text-white shadow-lg shadow-accent/20"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <History className="w-5 h-5" />
+                Audit Log
+              </Link>
+            </>
           )}
         </nav>
 
