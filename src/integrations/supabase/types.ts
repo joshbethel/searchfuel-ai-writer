@@ -562,6 +562,7 @@ export type Database = {
         Returns: undefined
       }
       increment_post_count: { Args: { user_uuid: string }; Returns: undefined }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
