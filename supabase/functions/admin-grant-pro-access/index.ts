@@ -312,6 +312,7 @@ serve(async (req) => {
             {
               items: [{
                 price: proPriceId,
+                quantity: finalSitesAllowed, // Set quantity to match sites_allowed
               }],
               metadata: {
                 is_manual: 'true',
@@ -329,6 +330,7 @@ serve(async (req) => {
             customer: customerId,
             items: [{
               price: proPriceId,
+              quantity: finalSitesAllowed, // Set quantity to match sites_allowed
             }],
             metadata: {
               is_manual: 'true',
@@ -347,6 +349,7 @@ serve(async (req) => {
           customer: customerId,
           items: [{
             price: proPriceId,
+            quantity: finalSitesAllowed, // Set quantity to match sites_allowed
           }],
           metadata: {
             is_manual: 'true',
