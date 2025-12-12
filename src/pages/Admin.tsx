@@ -484,6 +484,10 @@ export default function Admin() {
                   const hasPro = user.subscription?.plan_name === "pro" && user.subscription?.status === "active";
                   const hasSubscription = !!user.subscription;
                   const isManual = user.subscription?.is_manual || false;
+                  const currentSites = user.subscription?.sites_allowed || 1;
+                  // Hide "Update Sites" button for paid subscriptions that are already at max (5)
+                  // Manual subscriptions can always update (can decrease), paid can only increase
+                  const canUpdateSites = isManual || currentSites < 5;
 
                   return (
                     <TableRow key={user.id}>
@@ -569,15 +573,17 @@ export default function Admin() {
                           )}
                           {hasPro && (
                             <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleAction(user, "update_sites")}
-                                className="gap-1"
-                              >
-                                <Edit className="h-4 w-4" />
-                                Update Sites
-                              </Button>
+                              {canUpdateSites && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleAction(user, "update_sites")}
+                                  className="gap-1"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                  Update Sites
+                                </Button>
+                              )}
                               {isManual && (
                                 <>
                                   <Button
