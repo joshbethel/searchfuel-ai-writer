@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +50,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format, addDays, differenceInDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 interface UserWithSubscription {
   id: string;
@@ -70,41 +79,60 @@ interface UserWithSubscription {
 export default function Admin() {
   const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState<UserWithSubscription[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [filteredUsers, setFilteredUsers] = useState<UserWithSubscription[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserWithSubscription | null>(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"grant" | "revoke" | "update_period_end">("grant");
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [usersPerPage] = useState(20);
 
+  // Load all users on mount
   useEffect(() => {
-    if (searchQuery.trim()) {
-      searchUsers();
+    loadAllUsers();
+  }, []);
+
+  // Filter users based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredUsers(users);
+      setCurrentPage(1);
     } else {
-      setUsers([]);
+      const query = searchQuery.toLowerCase();
+      const filtered = users.filter((user) => {
+        const email = (user.email || '').toLowerCase();
+        const name = (user.user_metadata?.name || user.user_metadata?.full_name || '').toLowerCase();
+        const userId = user.id.toLowerCase();
+        return email.includes(query) || name.includes(query) || userId.includes(query);
+      });
+      setFilteredUsers(filtered);
+      setCurrentPage(1);
     }
-  }, [searchQuery]);
+  }, [searchQuery, users]);
 
-  const searchUsers = async () => {
-    if (!searchQuery.trim()) return;
-
+  const loadAllUsers = async () => {
     setLoading(true);
     try {
+      // Use empty query to get all users (or modify the edge function to support this)
       const { data, error } = await supabase.functions.invoke("admin-search-users", {
-        body: { query: searchQuery },
+        body: { query: "" }, // Empty query to get all users
       });
 
       if (error) throw error;
 
       if (data?.success) {
         setUsers(data.users || []);
+        setFilteredUsers(data.users || []);
       } else {
-        throw new Error(data?.error || "Search failed");
+        throw new Error(data?.error || "Failed to load users");
       }
     } catch (error: any) {
-      console.error("Error searching users:", error);
-      toast.error(error.message || "Failed to search users");
+      console.error("Error loading users:", error);
+      toast.error(error.message || "Failed to load users");
       setUsers([]);
+      setFilteredUsers([]);
     } finally {
       setLoading(false);
     }
@@ -167,10 +195,8 @@ export default function Admin() {
         toast.success(data.message || "Action completed successfully");
         setActionDialogOpen(false);
         setSelectedUser(null);
-        // Refresh search results
-        if (searchQuery.trim()) {
-          searchUsers();
-        }
+        // Refresh all users
+        loadAllUsers();
       } else {
         throw new Error(data?.error || "Action failed");
       }
@@ -191,20 +217,32 @@ export default function Admin() {
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Search Users</CardTitle>
-          <CardDescription>Search by email, name, or user ID</CardDescription>
+          <CardTitle>User Management</CardTitle>
+          <CardDescription>
+            {users.length > 0 && (
+              <span>Showing {filteredUsers.length} of {users.length} users</span>
+            )}
+            {users.length === 0 && !loading && <span>No users found</span>}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="Search by email, name, or user ID..."
+                placeholder="Filter by email, name, or user ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
             </div>
+            <Button
+              variant="outline"
+              onClick={loadAllUsers}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -215,10 +253,13 @@ export default function Admin() {
         </div>
       )}
 
-      {!loading && users.length > 0 && (
+      {!loading && filteredUsers.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Users ({users.length})</CardTitle>
+            <CardTitle>
+              Users 
+              {searchQuery.trim() ? ` (${filteredUsers.length} filtered)` : ` (${filteredUsers.length} total)`}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -233,7 +274,9 @@ export default function Admin() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => {
+                {filteredUsers
+                  .slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage)
+                  .map((user) => {
                   const remainingDays = calculateRemainingDays(user.subscription?.current_period_end || null);
                   const hasPro = user.subscription?.plan_name === "pro" && user.subscription?.status === "active";
                   const isManual = user.subscription?.is_manual || false;
@@ -329,11 +372,96 @@ export default function Admin() {
                 })}
               </TableBody>
             </Table>
+            
+            {/* Pagination */}
+            {filteredUsers.length > usersPerPage && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * usersPerPage + 1} to {Math.min(currentPage * usersPerPage, filteredUsers.length)} of {filteredUsers.length} users
+                  </div>
+                </div>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(prev => Math.max(1, prev - 1));
+                        }}
+                        className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: Math.ceil(filteredUsers.length / usersPerPage) }, (_, i) => i + 1)
+                      .filter(page => {
+                        // Show first page, last page, current page, and pages around current
+                        const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
+                        return page === 1 || 
+                               page === totalPages || 
+                               (page >= currentPage - 1 && page <= currentPage + 1);
+                      })
+                      .map((page, idx, arr) => {
+                        // Add ellipsis if there's a gap
+                        const prevPage = arr[idx - 1];
+                        const showEllipsis = prevPage && page - prevPage > 1;
+                        return (
+                          <React.Fragment key={page}>
+                            {showEllipsis && (
+                              <PaginationItem>
+                                <span className="px-2">...</span>
+                              </PaginationItem>
+                            )}
+                            <PaginationItem>
+                              <PaginationLink
+                                href="#"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setCurrentPage(page);
+                                }}
+                                isActive={currentPage === page}
+                                className="cursor-pointer"
+                              >
+                                {page}
+                              </PaginationLink>
+                            </PaginationItem>
+                          </React.Fragment>
+                        );
+                      })}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(prev => Math.min(Math.ceil(filteredUsers.length / usersPerPage), prev + 1));
+                        }}
+                        className={currentPage >= Math.ceil(filteredUsers.length / usersPerPage) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
-      {!loading && searchQuery.trim() && users.length === 0 && (
+      {!loading && filteredUsers.length === 0 && users.length > 0 && searchQuery.trim() && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground">No users found matching your search.</p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => setSearchQuery("")}
+            >
+              Clear Search
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && users.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">No users found matching your search.</p>

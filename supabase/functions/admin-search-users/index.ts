@@ -110,14 +110,8 @@ serve(async (req) => {
     const body = await req.json();
     const { query } = body;
 
-    if (!query || typeof query !== 'string' || query.trim().length === 0) {
-      return new Response(
-        JSON.stringify({ error: "Search query is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const searchQuery = query.trim().toLowerCase();
+    // Allow empty query to get all users
+    const searchQuery = query && typeof query === 'string' ? query.trim().toLowerCase() : '';
 
     // Search users using admin API
     const { data: allUsers, error: usersError } = await supabaseService.auth.admin.listUsers();
@@ -131,13 +125,19 @@ serve(async (req) => {
     }
 
     // Filter users by search query (email, name, or user ID)
-    const matchingUsers = (allUsers?.users || []).filter((user: any) => {
-      const email = (user.email || '').toLowerCase();
-      const name = (user.user_metadata?.name || user.user_metadata?.full_name || '').toLowerCase();
-      const userId = user.id.toLowerCase();
-      
-      return email.includes(searchQuery) || name.includes(searchQuery) || userId.includes(searchQuery);
-    }).slice(0, 50); // Limit to 50 results
+    // If query is empty, return all users (up to 1000 for performance)
+    let matchingUsers;
+    if (!searchQuery) {
+      matchingUsers = (allUsers?.users || []).slice(0, 1000); // Limit to 1000 for performance
+    } else {
+      matchingUsers = (allUsers?.users || []).filter((user: any) => {
+        const email = (user.email || '').toLowerCase();
+        const name = (user.user_metadata?.name || user.user_metadata?.full_name || '').toLowerCase();
+        const userId = user.id.toLowerCase();
+        
+        return email.includes(searchQuery) || name.includes(searchQuery) || userId.includes(searchQuery);
+      }).slice(0, 1000); // Limit to 1000 results
+    }
 
     // Get subscriptions for matching users
     const userIds = matchingUsers.map((u: any) => u.id);
