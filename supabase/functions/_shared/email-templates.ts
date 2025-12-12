@@ -325,7 +325,7 @@ export function getProAccessGrantedEmailTemplate(data: {
 }): string {
   const { userEmail, userName, periodEnd, remainingDays } = data;
   const appUrl = getAppUrl();
-  const dashboardUrl = \`\${appUrl}/dashboard\`;
+  const dashboardUrl = `${appUrl}/dashboard`;
   const displayName = userName || userEmail.split("@")[0];
   const periodEndDate = new Date(periodEnd);
   const formattedDate = periodEndDate.toLocaleDateString('en-US', { 
@@ -334,10 +334,10 @@ export function getProAccessGrantedEmailTemplate(data: {
     day: 'numeric' 
   });
   const daysText = remainingDays !== undefined 
-    ? \`\${remainingDays} \${remainingDays === 1 ? 'day' : 'days'}\`
+    ? `${remainingDays} ${remainingDays === 1 ? 'day' : 'days'}`
     : 'until the end of your subscription period';
 
-  return \`
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -361,7 +361,7 @@ export function getProAccessGrantedEmailTemplate(data: {
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
-                Hi \${displayName},
+                Hi ${displayName},
               </p>
               
               <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
@@ -378,14 +378,14 @@ export function getProAccessGrantedEmailTemplate(data: {
                   </tr>
                   <tr>
                     <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: 600;">Period End:</td>
-                    <td style="padding: 8px 0; color: #333333; font-size: 14px;">\${formattedDate}</td>
+                    <td style="padding: 8px 0; color: #333333; font-size: 14px;">${formattedDate}</td>
                   </tr>
-                  \${remainingDays !== undefined ? \`
+                  ${remainingDays !== undefined ? `
                   <tr>
                     <td style="padding: 8px 0; color: #666666; font-size: 14px; font-weight: 600;">Remaining:</td>
-                    <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">\${daysText}</td>
+                    <td style="padding: 8px 0; color: #333333; font-size: 14px; font-weight: 600;">${daysText}</td>
                   </tr>
-                  \` : ''}
+                  ` : ''}
                 </table>
               </div>
               
@@ -405,7 +405,7 @@ export function getProAccessGrantedEmailTemplate(data: {
               <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 0 0 30px;">
                 <tr>
                   <td align="center">
-                    <a href="\${dashboardUrl}" style="display: inline-block; padding: 16px 32px; background-color: #e67e4f; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
+                    <a href="${dashboardUrl}" style="display: inline-block; padding: 16px 32px; background-color: #e67e4f; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
                   </td>
                 </tr>
               </table>
@@ -425,10 +425,10 @@ export function getProAccessGrantedEmailTemplate(data: {
           <tr>
             <td style="padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;">
               <p style="margin: 0 0 10px; color: #999999; font-size: 12px;">
-                This email was sent to \${userEmail}
+                This email was sent to ${userEmail}
               </p>
               <p style="margin: 0; color: #999999; font-size: 12px;">
-                © \${new Date().getFullYear()} SearchFuel. All rights reserved.
+                © ${new Date().getFullYear()} SearchFuel. All rights reserved.
               </p>
             </td>
           </tr>
@@ -438,7 +438,7 @@ export function getProAccessGrantedEmailTemplate(data: {
   </table>
 </body>
 </html>
-  \`.trim();
+  `.trim();
 }
 
 /**
@@ -450,10 +450,10 @@ export function getProAccessRevokedEmailTemplate(data: {
 }): string {
   const { userEmail, userName } = data;
   const appUrl = getAppUrl();
-  const dashboardUrl = \`\${appUrl}/dashboard\`;
+  const dashboardUrl = `${appUrl}/dashboard`;
   const displayName = userName || userEmail.split("@")[0];
 
-  return \`
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -477,7 +477,7 @@ export function getProAccessRevokedEmailTemplate(data: {
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
-                Hi \${displayName},
+                Hi ${displayName},
               </p>
               
               <p style="margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;">
@@ -502,7 +502,7 @@ export function getProAccessRevokedEmailTemplate(data: {
               <table role="presentation" style="width: 100%; border-collapse: collapse; margin: 0 0 30px;">
                 <tr>
                   <td align="center">
-                    <a href="\${dashboardUrl}" style="display: inline-block; padding: 16px 32px; background-color: #e67e4f; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
+                    <a href="${dashboardUrl}" style="display: inline-block; padding: 16px 32px; background-color: #e67e4f; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">Go to Dashboard</a>
                   </td>
                 </tr>
               </table>
@@ -522,10 +522,10 @@ export function getProAccessRevokedEmailTemplate(data: {
           <tr>
             <td style="padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;">
               <p style="margin: 0 0 10px; color: #999999; font-size: 12px;">
-                This email was sent to \${userEmail}
+                This email was sent to ${userEmail}
               </p>
               <p style="margin: 0; color: #999999; font-size: 12px;">
-                © \${new Date().getFullYear()} SearchFuel. All rights reserved.
+                © ${new Date().getFullYear()} SearchFuel. All rights reserved.
               </p>
             </td>
           </tr>
@@ -535,5 +535,5 @@ export function getProAccessRevokedEmailTemplate(data: {
   </table>
 </body>
 </html>
-  \`.trim();
+  `.trim();
 }
