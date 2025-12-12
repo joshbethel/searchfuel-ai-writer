@@ -533,11 +533,13 @@ serve(async (req) => {
       }
 
       // Update database subscription
+      // Keep plan_name as 'pro' when canceling - this was a Pro subscription that got canceled
+      // No free tier exists, so we preserve the original plan name
       const { data: updatedSubscription, error: updateError } = await supabaseService
         .from('subscriptions')
         .update({
           status: 'canceled',
-          plan_name: 'free',
+          plan_name: existingSubscription.plan_name || 'pro', // Keep original plan name
           canceled_at: new Date().toISOString(),
         })
         .eq('user_id', target_user_id)
@@ -560,7 +562,7 @@ serve(async (req) => {
         previous_status: existingSubscription.status,
         new_status: 'canceled',
         previous_plan: existingSubscription.plan_name,
-        new_plan: 'free',
+        new_plan: existingSubscription.plan_name || 'pro', // Keep original plan name
       };
 
       // Send email notification (non-blocking)

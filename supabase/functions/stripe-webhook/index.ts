@@ -457,12 +457,19 @@ serve(async (req) => {
     case 'customer.subscription.deleted': {
       const subscription = event.data.object as Stripe.Subscription;
       
-      // Reset to free plan on deletion
+      // Mark subscription as canceled but keep original plan_name
+      // No free tier exists, so we preserve the plan name to show it was a Pro subscription
+      const { data: existing } = await supabase
+        .from('subscriptions')
+        .select('plan_name')
+        .eq('stripe_subscription_id', subscription.id)
+        .maybeSingle();
+      
       await supabase
         .from('subscriptions')
         .update({
           status: 'canceled',
-          plan_name: 'free',
+          plan_name: existing?.plan_name || 'pro', // Keep original plan name, default to 'pro'
           posts_generated_count: 0,
           keywords_count: 0,
           canceled_at: new Date().toISOString(),

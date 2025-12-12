@@ -127,6 +127,19 @@ export default function Admin() {
     loadAllUsers();
   }, []);
 
+  // Helper function to check if a subscription is valid
+  // Valid subscriptions: active Pro subscriptions OR canceled subscriptions (even if plan_name is 'free')
+  // Invalid subscriptions: inactive subscriptions with plan_name 'free' (never had Pro access)
+  const hasValidSubscription = (subscription: UserWithSubscription['subscription']): boolean => {
+    if (!subscription) return false;
+    // Active Pro subscription - valid
+    if (subscription.status === 'active' && subscription.plan_name === 'pro') return true;
+    // Canceled subscription - still valid (was a Pro subscription that got canceled)
+    if (subscription.status === 'canceled') return true;
+    // Everything else (inactive/free) - invalid
+    return false;
+  };
+
   // Filter users based on search query and subscription type
   useEffect(() => {
     let filtered = users;
@@ -134,7 +147,7 @@ export default function Admin() {
     // Apply subscription type filter
     if (subscriptionFilter !== "all") {
       filtered = filtered.filter((user) => {
-        const hasSubscription = !!user.subscription;
+        const hasSubscription = hasValidSubscription(user.subscription);
         const isManual = user.subscription?.is_manual || false;
 
         switch (subscriptionFilter) {
@@ -293,12 +306,12 @@ export default function Admin() {
   const stats = {
     totalUsers: users.length,
     usersWithPaidSub: users.filter(
-      (user) => user.subscription && !user.subscription.is_manual
+      (user) => hasValidSubscription(user.subscription) && !user.subscription.is_manual
     ).length,
     usersWithManualSub: users.filter(
-      (user) => user.subscription && user.subscription.is_manual
+      (user) => hasValidSubscription(user.subscription) && user.subscription.is_manual
     ).length,
-    usersWithoutSub: users.filter((user) => !user.subscription).length,
+    usersWithoutSub: users.filter((user) => !hasValidSubscription(user.subscription)).length,
   };
 
   return (
@@ -481,8 +494,9 @@ export default function Admin() {
                   .slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage)
                   .map((user) => {
                   const remainingDays = calculateRemainingDays(user.subscription?.current_period_end || null);
-                  const hasPro = user.subscription?.plan_name === "pro" && user.subscription?.status === "active";
-                  const hasSubscription = !!user.subscription;
+                  const hasSubscription = hasValidSubscription(user.subscription);
+                  const isCanceled = user.subscription?.status === 'canceled';
+                  const hasPro = hasSubscription && !isCanceled; // Active Pro subscription (exclude canceled)
                   const isManual = user.subscription?.is_manual || false;
                   const currentSites = user.subscription?.sites_allowed || 1;
                   // Hide "Update Sites" button for paid subscriptions that are already at max (5)
