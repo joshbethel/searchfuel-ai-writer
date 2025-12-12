@@ -282,6 +282,7 @@ serve(async (req) => {
         }
       }
 
+
       // Calculate days until due (difference between now and period end)
       const now = new Date();
       const daysUntilDue = Math.ceil((periodEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -327,6 +328,20 @@ serve(async (req) => {
       const periodStart = new Date();
       const periodEnd = periodEndDate;
 
+      // First, try to delete any existing subscription with the same stripe_customer_id but different user_id
+      // This handles the case where a user was deleted and recreated
+      const { error: deleteConflictError } = await supabaseService
+        .from('subscriptions')
+        .delete()
+        .eq('stripe_customer_id', customerId)
+        .neq('user_id', target_user_id);
+
+      if (deleteConflictError) {
+        console.warn('Warning: Could not clean up conflicting subscriptions:', deleteConflictError);
+        // Continue anyway, the upsert might still work
+      }
+
+      // Now upsert the subscription
       const { data: updatedSubscription, error: updateError } = await supabaseService
         .from('subscriptions')
         .upsert({
@@ -346,17 +361,64 @@ serve(async (req) => {
         .select()
         .single();
 
+      let finalSubscription = updatedSubscription;
+
       if (updateError) {
         console.error('Failed to update subscription:', updateError);
-        return new Response(
-          JSON.stringify({ error: "Failed to update subscription", details: updateError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        
+        // If it's a unique constraint violation on stripe_customer_id, try to handle it
+        if (updateError.message?.includes('stripe_customer_id_key')) {
+          // Try to find and update the existing record with this customer_id
+          const { data: conflictingSub, error: findError } = await supabaseService
+            .from('subscriptions')
+            .select('*')
+            .eq('stripe_customer_id', customerId)
+            .single();
+
+          if (!findError && conflictingSub) {
+            // Update the existing record to point to the new user_id
+            const { data: updatedSub, error: updateConflictError } = await supabaseService
+              .from('subscriptions')
+              .update({
+                user_id: target_user_id,
+                stripe_subscription_id: stripeSubscription.id,
+                stripe_price_id: proPriceId,
+                status: 'active',
+                plan_name: 'pro',
+                current_period_start: periodStart.toISOString(),
+                current_period_end: periodEnd.toISOString(),
+                is_manual: true,
+                sites_allowed: existingSubscription?.sites_allowed || 1,
+              })
+              .eq('id', conflictingSub.id)
+              .select()
+              .single();
+
+            if (updateConflictError) {
+              return new Response(
+                JSON.stringify({ error: "Failed to update subscription", details: updateConflictError.message }),
+                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+            
+            finalSubscription = updatedSub;
+          } else {
+            return new Response(
+              JSON.stringify({ error: "Failed to update subscription", details: updateError.message }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else {
+          return new Response(
+            JSON.stringify({ error: "Failed to update subscription", details: updateError.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       auditDetails = {
         ...auditDetails,
-        subscription_id: updatedSubscription?.id,
+        subscription_id: finalSubscription?.id,
         stripe_subscription_id: stripeSubscription.id,
         stripe_customer_id: customerId,
         previous_status: existingSubscription?.status || 'inactive',
@@ -408,7 +470,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         message: "Pro access granted successfully",
-        subscription: updatedSubscription,
+        subscription: finalSubscription,
         email_sent: emailStatus.sent,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

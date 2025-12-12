@@ -22,6 +22,8 @@ import {
   CreditCard,
   UserCog,
   UserX,
+  Info,
+  ChevronDown,
 } from "lucide-react";
 import {
   Table,
@@ -69,6 +71,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface UserWithSubscription {
   id: string;
@@ -102,6 +114,8 @@ export default function Admin() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage] = useState(20);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [isDialogInfoOpen, setIsDialogInfoOpen] = useState(false);
 
   // Load all users on mount
   useEffect(() => {
@@ -307,6 +321,57 @@ export default function Admin() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Information Section - Collapsible */}
+      <Collapsible open={isInfoOpen} onOpenChange={setIsInfoOpen} className="mb-6">
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+          >
+            <div className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-blue-800 dark:text-blue-200 font-medium">
+                How Manual Pro Access Works
+              </span>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform duration-200",
+                isInfoOpen && "transform rotate-180"
+              )}
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <Alert className="mt-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <AlertTitle className="text-blue-800 dark:text-blue-200">How Manual Pro Access Works</AlertTitle>
+            <AlertDescription className="text-blue-700 dark:text-blue-300 mt-2 space-y-2">
+              <p className="font-semibold">When you grant Pro access to a user, here's what happens:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li><strong>Stripe Subscription Created:</strong> A subscription is automatically created in Stripe with invoice collection (no payment method required).</li>
+                <li><strong>Access Period:</strong> You set the subscription end date, which determines how long the user has Pro access.</li>
+                <li><strong>Email Notification:</strong> The user receives an email notification informing them that Pro access has been granted.</li>
+                <li><strong>Audit Log:</strong> All actions are logged in the audit system with your admin user ID and timestamp.</li>
+                <li><strong>Manual Flag:</strong> The subscription is marked as "Manual" in both our database and Stripe, distinguishing it from paid subscriptions.</li>
+                <li><strong>Automatic Cancellation:</strong> The subscription will automatically cancel on the end date you specify.</li>
+              </ul>
+              <p className="mt-2 font-semibold">Revoking Access:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Only manual subscriptions can be revoked through this dashboard.</li>
+                <li>Revoking immediately cancels the Stripe subscription and removes Pro access.</li>
+                <li>The user receives an email notification when access is revoked.</li>
+              </ul>
+              <p className="mt-2 font-semibold">Updating Period End:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>You can extend or shorten the access period by updating the end date.</li>
+                <li>The subscription will automatically cancel on the new end date.</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+        </CollapsibleContent>
+      </Collapsible>
 
       <Card className="mb-6">
         <CardHeader>
@@ -599,6 +664,47 @@ export default function Admin() {
               {actionType === "update_period_end" && `Update the subscription period end date for ${selectedUser?.email}`}
             </DialogDescription>
           </DialogHeader>
+
+          {actionType === "grant" && (
+            <Collapsible open={isDialogInfoOpen} onOpenChange={setIsDialogInfoOpen} className="mb-4">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-between border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                >
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-blue-800 dark:text-blue-200 font-medium text-sm">
+                      What happens when granting Pro access?
+                    </span>
+                  </div>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform duration-200",
+                      isDialogInfoOpen && "transform rotate-180"
+                    )}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Alert className="mt-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <AlertTitle className="text-blue-800 dark:text-blue-200 text-sm">How Manual Pro Access Works</AlertTitle>
+                  <AlertDescription className="text-blue-700 dark:text-blue-300 mt-2 space-y-2 text-xs">
+                    <p className="font-semibold">When you grant Pro access to a user, here's what happens:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li><strong>Stripe Subscription Created:</strong> A subscription is automatically created in Stripe with invoice collection (no payment method required).</li>
+                      <li><strong>Access Period:</strong> You set the subscription end date, which determines how long the user has Pro access.</li>
+                      <li><strong>Email Notification:</strong> The user receives an email notification informing them that Pro access has been granted.</li>
+                      <li><strong>Audit Log:</strong> All actions are logged in the audit system with your admin user ID and timestamp.</li>
+                      <li><strong>Manual Flag:</strong> The subscription is marked as "Manual" in both our database and Stripe, distinguishing it from paid subscriptions.</li>
+                      <li><strong>Automatic Cancellation:</strong> The subscription will automatically cancel on the end date you specify.</li>
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
 
           {(actionType === "grant" || actionType === "update_period_end") && (
             <div className="py-4">
