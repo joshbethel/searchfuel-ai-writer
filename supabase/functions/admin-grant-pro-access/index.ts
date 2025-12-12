@@ -282,6 +282,10 @@ serve(async (req) => {
         }
       }
 
+      // Calculate days until due (difference between now and period end)
+      const now = new Date();
+      const daysUntilDue = Math.ceil((periodEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
       // Create or update Stripe subscription
       let stripeSubscription;
       if (existingSubscription?.stripe_subscription_id) {
@@ -297,10 +301,13 @@ serve(async (req) => {
               granted_by_admin: adminUserId,
             },
             cancel_at: Math.floor(periodEndDate.getTime() / 1000),
+            collection_method: 'send_invoice',
+            days_until_due: Math.max(1, daysUntilDue), // Ensure at least 1 day
           }
         );
       } else {
-        // Create new subscription
+        // Create new subscription with send_invoice collection method
+        // This allows subscriptions without payment methods for manual grants
         stripeSubscription = await stripe.subscriptions.create({
           customer: customerId,
           items: [{
@@ -311,6 +318,8 @@ serve(async (req) => {
             granted_by_admin: adminUserId,
           },
           cancel_at: Math.floor(periodEndDate.getTime() / 1000),
+          collection_method: 'send_invoice',
+          days_until_due: Math.max(1, daysUntilDue), // Ensure at least 1 day
         });
       }
 
