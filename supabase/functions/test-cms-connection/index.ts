@@ -25,7 +25,7 @@ serve(async (req: Request) => {
       return createValidationErrorResponse(validationResult, corsHeaders);
     }
 
-    const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password } = validationResult.data;
+    const { platform, siteUrl, apiKey, apiSecret, accessToken, username, password, accountId } = validationResult.data;
 
     // Basic URL validation for security
     if (siteUrl) {
@@ -226,23 +226,52 @@ serve(async (req: Request) => {
         break;
 
       case "wix":
-        // Test Wix CMS connection
+        // Test Wix Blog API connection
         try {
           if (!apiKey) {
-            error = "Client ID is required";
+            error = "API Key is required";
+            break;
+          }
+          // apiSecret stores the Site ID for Wix
+          if (!apiSecret) {
+            error = "Site ID is required";
+            break;
+          }
+          if (!accountId) {
+            error = "Account ID is required";
             break;
           }
           
-          // For now, just verify site accessibility and credentials are provided
-          // Full SDK integration would require OAuth flow which is complex for test endpoint
-          const response = await fetch(siteUrl);
-          success = response.ok && !!apiKey;
+          // Test connection by listing blog posts (limit to 1)
+          const wixResponse = await fetch(
+            `https://www.wixapis.com/blog/v3/posts?paging.limit=1`,
+            {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`,
+                'wix-site-id': apiSecret,
+                'wix-account-id': accountId,
+              }
+            }
+          );
           
-          if (!success) {
-            error = "Cannot access Wix site or invalid credentials. Verify URL and Client ID are correct.";
+          if (wixResponse.ok) {
+            success = true;
+          } else {
+            const errorData = await wixResponse.text();
+            console.error("Wix Blog API error:", wixResponse.status, errorData);
+            if (wixResponse.status === 401 || wixResponse.status === 403) {
+              error = "Invalid API Key or insufficient permissions. Ensure Blog permissions are granted.";
+            } else if (wixResponse.status === 404) {
+              error = "Wix Blog not found. Ensure your site has the Wix Blog app installed.";
+            } else {
+              error = `Wix Blog API error (${wixResponse.status}): ${errorData}`;
+            }
           }
         } catch (e) {
-          error = "Failed to connect to Wix site";
+          console.error("Wix connection error:", e);
+          error = "Failed to connect to Wix Blog. Check your credentials.";
         }
         break;
 

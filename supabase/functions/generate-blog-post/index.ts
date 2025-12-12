@@ -597,37 +597,91 @@ Format: 16:9 aspect ratio, centered single subject.`;
           console.log(`  - Publishing Status: pending`);
           // Article stays as "pending" - no auto-publish to Framer
         } else if (blog.cms_platform && blog.cms_credentials) {
-          // Auto-publish to other CMS platforms (WordPress, Shopify, etc.)
+          // Auto-publish to other CMS platforms (WordPress, Shopify, Wix, etc.)
           console.log(`Auto-publishing to ${blog.cms_platform}...`);
           
-          // Update status to publishing
-          await supabase
-            .from('blog_posts')
-            .update({ publishing_status: 'publishing' })
-            .eq('id', post.id);
+          // Wix needs longer delay due to API latency
+          const initialDelay = blog.cms_platform === 'wix' ? 2500 : 1500;
+          console.log(`Waiting ${initialDelay}ms before publishing (${blog.cms_platform})...`);
+          await new Promise(resolve => setTimeout(resolve, initialDelay));
           
-          try {
-            // Invoke publish function
-            const { data: publishResult, error: publishError } = await supabase.functions.invoke(
-              'publish-to-cms',
-              { body: { blog_post_id: post.id } }
-            );
+          // Verify post exists before publishing
+          const { data: postCheck, error: postCheckErr } = await supabase
+            .from('blog_posts')
+            .select('id, title, content, featured_image')
+            .eq('id', post.id)
+            .single();
+          
+          if (postCheckErr || !postCheck) {
+            console.error('Post not found for publishing:', postCheckErr);
+          } else {
+            console.log(`Post verified: ${postCheck.title}, has image: ${!!postCheck.featured_image}`);
             
-            if (publishError) {
-              console.error('Failed to publish to CMS:', publishError);
+            // Update status to publishing
+            await supabase
+              .from('blog_posts')
+              .update({ publishing_status: 'publishing' })
+              .eq('id', post.id);
+            
+            // Retry logic for Wix (race condition on first attempt)
+            const maxRetries = blog.cms_platform === 'wix' ? 3 : 1;
+            let lastError: any = null;
+            let publishSuccess = false;
+            
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+              try {
+                console.log(`Publish attempt ${attempt}/${maxRetries} for ${blog.cms_platform}...`);
+                
+                // Invoke publish function with service role auth for function-to-function call
+                const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+                const { data: publishResult, error: publishError } = await supabase.functions.invoke(
+                  'publish-to-cms',
+                  { 
+                    body: { blog_post_id: post.id },
+                    headers: {
+                      Authorization: `Bearer ${serviceRoleKey}`
+                    }
+                  }
+                );
+                
+                if (publishError) {
+                  lastError = publishError;
+                  console.error(`Publish attempt ${attempt} failed:`, publishError);
+                } else if (publishResult?.success) {
+                  console.log(`Successfully published to ${blog.cms_platform} on attempt ${attempt}`);
+                  publishSuccess = true;
+                  break;
+                } else {
+                  lastError = publishResult?.error || 'Unknown publish error';
+                  console.error(`Publish attempt ${attempt} returned failure:`, publishResult);
+                }
+                
+                // Wait before retry (exponential backoff)
+                if (attempt < maxRetries) {
+                  const retryDelay = 2000 * attempt;
+                  console.log(`Waiting ${retryDelay}ms before retry...`);
+                  await new Promise(resolve => setTimeout(resolve, retryDelay));
+                }
+              } catch (publishErr) {
+                lastError = publishErr;
+                console.error(`Publish attempt ${attempt} threw error:`, publishErr);
+                
+                if (attempt < maxRetries) {
+                  const retryDelay = 2000 * attempt;
+                  console.log(`Waiting ${retryDelay}ms before retry...`);
+                  await new Promise(resolve => setTimeout(resolve, retryDelay));
+                }
+              }
+            }
+            
+            // Update final status
+            if (!publishSuccess) {
+              console.error('All publish attempts failed. Last error:', lastError);
               await supabase
                 .from('blog_posts')
                 .update({ publishing_status: 'failed' })
                 .eq('id', post.id);
-            } else {
-              console.log(`Successfully published to ${blog.cms_platform}`);
             }
-          } catch (publishErr) {
-            console.error('Error during CMS publishing:', publishErr);
-            await supabase
-              .from('blog_posts')
-              .update({ publishing_status: 'failed' })
-              .eq('id', post.id);
           }
         } else {
           // No CMS connected - article stays pending

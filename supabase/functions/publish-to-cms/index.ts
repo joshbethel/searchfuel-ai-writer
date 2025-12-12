@@ -72,17 +72,27 @@ serve(async (req: any) => {
     } else {
       // Bearer token auth (existing flow)
       const token = authHeader.replace("Bearer ", "");
-      const { data, error: authError } = await supabaseClient.auth.getUser(token);
       
-      if (authError || !data.user) {
-        return new Response(
-          JSON.stringify({ error: "Unauthorized" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      // Check if this is a service role key (for internal function-to-function calls)
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (token === serviceRoleKey) {
+        // Service role auth - this is an internal call, we'll get the user from the blog post
+        console.log("Authenticated via service role key (internal call)");
+        userId = "service_role"; // Will be overridden by blog post owner
+      } else {
+        // Regular user token
+        const { data, error: authError } = await supabaseClient.auth.getUser(token);
+        
+        if (authError || !data.user) {
+          return new Response(
+            JSON.stringify({ error: "Unauthorized" }),
+            { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
-      userId = data.user.id;
-      console.log(`Authenticated user via Bearer token: ${userId}`);
+        userId = data.user.id;
+        console.log(`Authenticated user via Bearer token: ${userId}`);
+      }
     }
 
     // Validate request body with Zod schema
@@ -102,13 +112,18 @@ serve(async (req: any) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Fetch the blog post WITH authorization check - verify user owns the blog
-    // Use inner join to verify ownership, then fetch full blog data
-    const { data: post, error: postError } = await supabase
+    // For service role calls (internal), skip user verification
+    let postQuery = supabase
       .from("blog_posts")
       .select("*, blogs!inner(id, user_id)")
-      .eq("id", blog_post_id)
-      .eq("blogs.user_id", userId)  // CRITICAL: Verify ownership
-      .single();
+      .eq("id", blog_post_id);
+    
+    // Only add user_id check for non-service-role calls
+    if (userId !== "service_role") {
+      postQuery = postQuery.eq("blogs.user_id", userId);
+    }
+    
+    const { data: post, error: postError } = await postQuery.single();
 
     if (postError) {
       console.error("Error fetching post:", postError);
@@ -128,12 +143,17 @@ serve(async (req: any) => {
     console.log(`Found post: ${post.title} for blog ID: ${post.blog_id}`);
 
     // Now fetch the full blog data (ownership already verified above)
-    const { data: blog, error: blogError } = await supabase
+    let blogQuery = supabase
       .from("blogs")
       .select("*")
-      .eq("id", post.blog_id)
-      .eq("user_id", userId)  // Double-check ownership
-      .single();
+      .eq("id", post.blog_id);
+    
+    // Only add user_id check for non-service-role calls
+    if (userId !== "service_role") {
+      blogQuery = blogQuery.eq("user_id", userId);
+    }
+    
+    const { data: blog, error: blogError } = await blogQuery.single();
 
     if (blogError) {
       console.error("Error fetching blog:", blogError);
@@ -206,6 +226,11 @@ serve(async (req: any) => {
 
       case "framer":
         externalPostId = await publishToFramer(blog, post);
+        publishSuccess = true;
+        break;
+
+      case "wix":
+        externalPostId = await publishToWix(blog, post);
         publishSuccess = true;
         break;
 
@@ -322,16 +347,44 @@ function extractContent(rawContent: string): string {
   
   // Check if content is wrapped in ```json code blocks
   if (rawContent.trim().startsWith('```json')) {
+    // First try to extract the content field using regex (more reliable)
+    const contentMatch = rawContent.match(/"content"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"|"\s*\})/);
+    if (contentMatch && contentMatch[1]) {
+      // Unescape the content
+      const extracted = contentMatch[1]
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
+        .replace(/\\t/g, '\t');
+      console.log(`Extracted content via regex, length: ${extracted.length}`);
+      return extracted;
+    }
+    
+    // Fallback: try JSON parsing
     try {
-      // Extract JSON from code blocks
       const jsonMatch = rawContent.match(/```json\s*\n([\s\S]*?)\n```/);
       if (jsonMatch && jsonMatch[1]) {
         const parsed = JSON.parse(jsonMatch[1]);
-        // Return the content field from the JSON
         return parsed.content || rawContent;
       }
     } catch (e) {
       console.error('Failed to parse JSON content:', e);
+    }
+    
+    // Last resort: strip the JSON wrapper and extract markdown content
+    const strippedMatch = rawContent.match(/```json[\s\S]*?"content"\s*:\s*"([\s\S]+)$/);
+    if (strippedMatch) {
+      // Find where the actual content starts after "content": "
+      let content = strippedMatch[1];
+      // Remove trailing JSON artifacts
+      content = content.replace(/"\s*,?\s*"(?:excerpt|title|featured_image)"[\s\S]*$/, '');
+      content = content.replace(/"\s*\}\s*\n?```\s*$/, '');
+      content = content
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+      console.log(`Extracted content via stripping, length: ${content.length}`);
+      return content;
     }
   }
   
@@ -1049,4 +1102,434 @@ async function publishToFramer(blog: any, post: any): Promise<string> {
   // Return the blog post ID as the external ID
   // Users will use this ID to sync manually in Framer
   return post.id;
+}
+
+async function publishToWix(blog: any, post: any): Promise<string> {
+  console.log(`Starting Wix Blog publishing for post: ${post.title}`);
+  
+  // 🔓 Decrypt credentials
+  const encryptedCredentials = blog.cms_credentials;
+  if (!encryptedCredentials) {
+    throw new Error("Wix credentials not found in database");
+  }
+  
+  const credentials = await decryptBlogCredentials(encryptedCredentials);
+  
+  const apiKey = credentials.apiKey;
+  const siteId = credentials.siteId;
+  
+  if (!apiKey || !siteId) {
+    throw new Error("Wix API Key and Site ID are required. Please reconnect your Wix site.");
+  }
+  
+  console.log(`Publishing to Wix Blog on site: ${siteId}`);
+  
+  // Extract actual content from JSON-wrapped format and convert to HTML
+  const markdownContent = extractContent(post.content);
+  const htmlContent = markdownToHtml(markdownContent);
+  console.log(`Content converted to HTML, length: ${htmlContent.length} characters`);
+  
+  // Generate a URL-friendly slug
+  const slug = post.slug || post.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  
+  // Build rich content nodes - use HTML node for proper rendering
+  const richContentNodes: any[] = [];
+  
+  // Process HTML content to add min-width to iframes and HTML embed components
+  const processHtmlForEmbeds = (html: string): string => {
+    // Add min-width to iframes
+    let processed = html.replace(
+      /<iframe([^>]*)>/gi,
+      (match, attrs) => {
+        // Check if style attribute exists
+        if (/style\s*=/i.test(attrs)) {
+          // Add min-width to existing style
+          return `<iframe${attrs.replace(/style\s*=\s*["']([^"']*)["']/i, 'style="$1; min-width: 800px;"')}>`;
+        } else {
+          // Add new style attribute
+          return `<iframe${attrs} style="min-width: 800px;">`;
+        }
+      }
+    );
+    
+    // Add min-width to divs with data-hook="html-component" (Wix HTML embeds)
+    processed = processed.replace(
+      /<div([^>]*data-hook\s*=\s*["']html-component["'][^>]*)>/gi,
+      (match, attrs) => {
+        if (/style\s*=/i.test(attrs)) {
+          return `<div${attrs.replace(/style\s*=\s*["']([^"']*)["']/i, 'style="$1; min-width: 800px;"')}>`;
+        } else {
+          return `<div${attrs} style="min-width: 800px;">`;
+        }
+      }
+    );
+    
+    return processed;
+  };
+  
+  const processedHtmlContent = processHtmlForEmbeds(htmlContent);
+  
+  // Add the HTML content as a single full-width block
+  if (processedHtmlContent) {
+    richContentNodes.push({
+      type: "HTML",
+      id: crypto.randomUUID(),
+      nodes: [],
+      htmlData: {
+        containerData: {
+          width: {
+            size: "FULL_WIDTH"
+          },
+          alignment: "CENTER",
+          textWrap: false
+        },
+        source: "HTML",
+        html: `<div style="width:100%;max-width:100%;">${processedHtmlContent}</div>`
+      }
+    });
+  }
+  
+  // Fallback if no content
+  if (richContentNodes.length === 0) {
+    const plainText = htmlContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    richContentNodes.push({
+      type: "PARAGRAPH",
+      id: crypto.randomUUID(),
+      nodes: [{
+        type: "TEXT",
+        id: crypto.randomUUID(),
+        textData: { text: plainText || "No content" }
+      }],
+      paragraphData: { textStyle: { textAlignment: "AUTO" } }
+    });
+  }
+  
+  // Prepare the blog post for Wix Blog API v3
+  const blogPost: any = {
+    post: {
+      title: post.title,
+      richContent: {
+        nodes: richContentNodes
+      },
+      excerpt: post.excerpt || "",
+      featured: false,
+      commentingEnabled: true,
+      seoData: {
+        tags: [
+          {
+            type: "title",
+            children: post.meta_title || post.title,
+            custom: false,
+            disabled: false
+          },
+          {
+            type: "meta",
+            props: {
+              name: "description",
+              content: post.meta_description || post.excerpt || ""
+            },
+            custom: false,
+            disabled: false
+          }
+        ]
+      },
+      slug: slug
+    }
+  };
+  
+  // Upload featured image to Wix Media Manager FIRST before creating post
+  let coverImageUrl: string | null = null;
+  
+  if (post.featured_image) {
+    console.log(`Step 0: Uploading featured image to Wix Media Manager...`);
+    
+    const authHeader = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
+    
+    try {
+      if (post.featured_image.startsWith('data:')) {
+        // Handle base64 image - use 2-step upload: generate-upload-url then PUT
+        console.log(`Processing base64 image for Wix upload...`);
+        
+        // Extract base64 data and mime type
+        const matches = post.featured_image.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          const mimeType = matches[1];
+          const base64Data = matches[2];
+          const extension = mimeType.split('/')[1] || 'jpg';
+          const fileName = `blog-cover-${Date.now()}.${extension}`;
+          
+          // Convert base64 to binary
+          const binaryString = atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          console.log(`Step 0a: Generating upload URL for ${fileName} (${bytes.length} bytes, ${mimeType})`);
+          
+          // Step 1: Generate upload URL
+          const generateUrlResponse = await fetch(
+            'https://www.wixapis.com/site-media/v1/files/generate-upload-url',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': authHeader,
+                'wix-site-id': siteId,
+                'wix-account-id': credentials.accountId || '',
+              },
+              body: JSON.stringify({
+                mimeType: mimeType,
+                fileName: fileName
+              })
+            }
+          );
+          
+          const generateUrlText = await generateUrlResponse.text();
+          console.log(`Generate upload URL response status: ${generateUrlResponse.status}`);
+          console.log(`Generate upload URL response: ${generateUrlText}`);
+          
+          if (generateUrlResponse.ok) {
+            try {
+              const generateUrlData = JSON.parse(generateUrlText);
+              const uploadUrl = generateUrlData.uploadUrl;
+              
+              if (uploadUrl) {
+                console.log(`Step 0b: Uploading binary file to: ${uploadUrl.substring(0, 100)}...`);
+                
+                // Step 2: PUT the binary file to the upload URL
+                const uploadResponse = await fetch(uploadUrl, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': mimeType
+                  },
+                  body: bytes
+                });
+                
+                const uploadResponseText = await uploadResponse.text();
+                console.log(`File upload response status: ${uploadResponse.status}`);
+                console.log(`File upload response: ${uploadResponseText}`);
+                
+                if (uploadResponse.ok) {
+                  try {
+                    const uploadData = JSON.parse(uploadResponseText);
+                    // The response contains file.url with the wixstatic.com URL
+                    coverImageUrl = uploadData.file?.url || 
+                                   uploadData.file?.fileUrl || 
+                                   null;
+                    
+                    // If we got a file ID, construct the wixstatic URL
+                    if (!coverImageUrl && uploadData.file?.id) {
+                      coverImageUrl = `https://static.wixstatic.com/media/${uploadData.file.id}`;
+                    }
+                    
+                    if (coverImageUrl) {
+                      console.log(`✓ Successfully uploaded image to Wix Media. Cover URL: ${coverImageUrl}`);
+                    } else {
+                      console.log(`Warning: Upload succeeded but couldn't extract URL. Full response: ${JSON.stringify(uploadData)}`);
+                    }
+                  } catch (parseError) {
+                    console.error(`Error parsing upload response: ${parseError}`);
+                  }
+                } else {
+                  console.error(`Failed to upload file to Wix: ${uploadResponse.status}`);
+                }
+              } else {
+                console.error(`No uploadUrl in generate-upload-url response`);
+              }
+            } catch (parseError) {
+              console.error(`Error parsing generate-upload-url response: ${parseError}`);
+            }
+          } else {
+            console.error(`Failed to generate upload URL: ${generateUrlResponse.status}`);
+          }
+        }
+      } else {
+        // Handle external URL - use import endpoint
+        console.log(`Importing image URL to Wix Media: ${post.featured_image.substring(0, 100)}...`);
+        
+        const mediaResponse = await fetch(
+          'https://www.wixapis.com/site-media/v1/files/import',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader,
+              'wix-site-id': siteId,
+              'wix-account-id': credentials.accountId || '',
+            },
+            body: JSON.stringify({
+              url: post.featured_image,
+              mediaType: 'IMAGE',
+              displayName: `blog-cover-${Date.now()}.jpg`
+            })
+          }
+        );
+        
+        const mediaResponseText = await mediaResponse.text();
+        console.log(`Wix Media import response status: ${mediaResponse.status}`);
+        console.log(`Wix Media import response: ${mediaResponseText}`);
+        
+        if (mediaResponse.ok) {
+          const mediaData = JSON.parse(mediaResponseText);
+          coverImageUrl = mediaData.file?.url || 
+                         mediaData.file?.fileUrl || 
+                         mediaData.file?.media?.image?.url ||
+                         null;
+          
+          if (coverImageUrl) {
+            console.log(`✓ Successfully imported image to Wix Media. Cover URL: ${coverImageUrl}`);
+          }
+        }
+      }
+    } catch (mediaError) {
+      console.error(`Error uploading image to Wix Media Manager:`, mediaError);
+    }
+  }
+  
+  console.log("Sending data to Wix Blog API v3...");
+  
+  // Ensure API key has Bearer prefix
+  const authHeader = apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`;
+  
+  // Get account ID from credentials
+  const accountId = credentials.accountId;
+  
+  if (!accountId) {
+    throw new Error("Wix Account ID is required. Please reconnect your Wix site with the correct Account ID.");
+  }
+  
+  console.log("Using account ID:", accountId);
+  
+  // Step 1: Get a site member to use as post author (required for 3rd-party apps)
+  console.log("Step 1: Fetching site members...");
+  
+  const membersResponse = await fetch(
+    `https://www.wixapis.com/members/v1/members?paging.limit=1`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+        'wix-site-id': siteId,
+        'wix-account-id': accountId,
+      }
+    }
+  );
+  
+  let memberId: string | null = null;
+  
+  if (membersResponse.ok) {
+    const membersData = await membersResponse.json();
+    memberId = membersData.members?.[0]?.id;
+    console.log("Found member ID:", memberId);
+  } else {
+    console.log("Could not fetch members, will try without memberId");
+  }
+  
+  // Add memberId to post if available
+  if (memberId) {
+    (blogPost.post as any).memberId = memberId;
+  }
+  
+  // Add media (cover image) if we successfully uploaded to Wix Media
+  // Wix Blog API v3 uses 'media' field for post cover media
+  if (coverImageUrl) {
+    // Extract the image ID from the URL (format: de7539_xxx~mv2.png)
+    const imageIdMatch = coverImageUrl.match(/media\/([^/]+)$/);
+    const imageId = imageIdMatch ? imageIdMatch[1] : null;
+    
+    // Wix Blog API v3 expects 'media' object with wixMedia structure
+    // wixMedia.image must be an object with id, url, width, height
+    (blogPost.post as any).media = {
+      wixMedia: {
+        image: {
+          id: imageId || '',
+          url: coverImageUrl,
+          width: 1024,
+          height: 1024
+        }
+      },
+      displayed: true,
+      custom: false
+    };
+    
+    console.log(`Added media to post: ${coverImageUrl}, imageId: ${imageId}`);
+  }
+  
+  // Step 2: Create a draft post using Wix Blog API v3
+  console.log("Step 2: Creating draft post...");
+  
+  const draftResponse = await fetch(
+    `https://www.wixapis.com/blog/v3/draft-posts`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+        'wix-site-id': siteId,
+        'wix-account-id': accountId,
+      },
+      body: JSON.stringify({ draftPost: blogPost.post })
+    }
+  );
+  
+  if (!draftResponse.ok) {
+    const errorText = await draftResponse.text();
+    console.error("Wix Draft API Error Response:", {
+      status: draftResponse.status,
+      statusText: draftResponse.statusText,
+      body: errorText
+    });
+    
+    if (draftResponse.status === 401 || draftResponse.status === 403) {
+      throw new Error("Wix authentication failed - please check your API Key and permissions");
+    } else if (draftResponse.status === 404) {
+      throw new Error("Wix Blog API not found - ensure your site has the Wix Blog app installed");
+    } else {
+      throw new Error(`Wix Draft API error (${draftResponse.status}): ${errorText}`);
+    }
+  }
+  
+  const draftData = await draftResponse.json();
+  const draftPostId = draftData.draftPost?.id;
+  
+  if (!draftPostId) {
+    console.error("No draft post ID returned:", draftData);
+    throw new Error("Failed to create Wix draft post - no ID returned");
+  }
+  
+  console.log(`Draft created with ID: ${draftPostId}`);
+  
+  // Step 3: Publish the draft
+  console.log("Step 3: Publishing draft...");
+  const publishResponse = await fetch(
+    `https://www.wixapis.com/blog/v3/draft-posts/${draftPostId}/publish`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader,
+        'wix-site-id': siteId,
+        'wix-account-id': accountId,
+      }
+    }
+  );
+  
+  if (!publishResponse.ok) {
+    const errorText = await publishResponse.text();
+    console.error("Wix Publish API Error Response:", {
+      status: publishResponse.status,
+      statusText: publishResponse.statusText,
+      body: errorText
+    });
+    throw new Error(`Wix Publish API error (${publishResponse.status}): ${errorText}`);
+  }
+  
+  const publishData = await publishResponse.json();
+  const postId = publishData.post?.id || draftPostId;
+  
+  console.log(`✓ Successfully published to Wix Blog! Post ID: ${postId}`);
+  
+  return postId;
 }
