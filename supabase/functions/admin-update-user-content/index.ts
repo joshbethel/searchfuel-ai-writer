@@ -254,20 +254,42 @@ serve(async (req) => {
       );
     }
 
-    // Prepare update object (exclude id, created_at, updated_at from updates)
+    // Prepare update object (exclude id, created_at, updated_at, and joined/related fields from updates)
+    // Also exclude any fields that don't exist in the target table
     const updateData: Record<string, any> = {};
+    
+    // Fields to always exclude (system fields and joined relations)
+    const excludedFields = ['id', 'created_at', 'updated_at', 'blogs'];
+    
+    // Get valid columns from currentContent (excluding system fields and relations)
+    const validColumns = Object.keys(currentContent).filter(
+      key => !excludedFields.includes(key) && typeof currentContent[key] !== 'object'
+    );
+    
     Object.keys(updates).forEach(key => {
-      if (key !== 'id' && key !== 'created_at' && key !== 'updated_at') {
+      // Only include fields that:
+      // 1. Are in the valid columns list
+      // 2. Are not in the excluded fields list
+      // 3. Are not objects (to avoid trying to update joined relations)
+      if (validColumns.includes(key) && !excludedFields.includes(key) && typeof updates[key] !== 'object') {
         updateData[key] = updates[key];
       }
     });
 
-    // Update content
+    // If no valid fields to update, return error
+    if (Object.keys(updateData).length === 0) {
+      return new Response(
+        JSON.stringify({ error: "No valid fields to update" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Update content - explicitly select only columns from the target table
     const { data: updatedContent, error: updateError } = await supabaseService
       .from(tableName)
       .update(updateData)
       .eq('id', content_id)
-      .select()
+      .select('*')
       .single();
 
     if (updateError || !updatedContent) {

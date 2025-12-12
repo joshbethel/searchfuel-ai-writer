@@ -130,6 +130,7 @@ export default function Admin() {
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage] = useState(20);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [isInspectorInfoOpen, setIsInspectorInfoOpen] = useState(false);
   const [isDialogInfoOpen, setIsDialogInfoOpen] = useState(false);
   const [isRevokeDialogInfoOpen, setIsRevokeDialogInfoOpen] = useState(false);
   const [adminRoleDialogOpen, setAdminRoleDialogOpen] = useState(false);
@@ -478,6 +479,44 @@ export default function Admin() {
               <ul className="list-disc list-inside space-y-1 ml-2">
                 <li>You can extend or shorten the access period by updating the end date.</li>
                 <li>The subscription will automatically cancel on the new end date.</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* User Content Inspector Information */}
+      <Collapsible open={isInspectorInfoOpen} onOpenChange={setIsInspectorInfoOpen} className="mb-6">
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30"
+          >
+            <div className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              <span className="text-orange-800 dark:text-orange-200 font-medium">
+                User Content Inspector
+              </span>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 text-orange-600 dark:text-orange-400 transition-transform duration-200",
+                isInspectorInfoOpen && "transform rotate-180"
+              )}
+            />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <Alert className="mt-2 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20">
+            <Info className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+            <AlertTitle className="text-orange-800 dark:text-orange-200">User Content Inspector</AlertTitle>
+            <AlertDescription className="text-orange-700 dark:text-orange-300 mt-2 space-y-2">
+              <p className="font-semibold">Inspect and manage any user's content:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Use the "Inspect Content" button to view and manage any user's content (blogs, posts, articles, keywords).</li>
+                <li>All content viewing and editing actions are logged in the audit trail for security and compliance.</li>
+                <li>You can switch between users without leaving the inspector mode.</li>
+                <li>Edit content on behalf of users with full audit logging of all changes.</li>
               </ul>
             </AlertDescription>
           </Alert>
