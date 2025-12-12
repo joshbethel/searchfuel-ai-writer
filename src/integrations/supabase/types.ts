@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_actions: {
+        Row: {
+          action_type: string
+          admin_user_id: string
+          created_at: string
+          details: Json | null
+          id: string
+          target_user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          admin_user_id: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          target_user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          admin_user_id?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
+      admin_users: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       articles: {
         Row: {
           content: Json
@@ -428,6 +479,7 @@ export type Database = {
           current_period_end: string | null
           current_period_start: string | null
           id: string
+          is_manual: boolean | null
           keywords_count: number | null
           plan_name: string
           posts_generated_count: number | null
@@ -448,6 +500,7 @@ export type Database = {
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          is_manual?: boolean | null
           keywords_count?: number | null
           plan_name?: string
           posts_generated_count?: number | null
@@ -468,6 +521,7 @@ export type Database = {
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          is_manual?: boolean | null
           keywords_count?: number | null
           plan_name?: string
           posts_generated_count?: number | null
