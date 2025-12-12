@@ -689,12 +689,13 @@ export default function Admin() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2 flex-wrap">
+                        <div className="flex flex-col gap-2 min-w-[280px]">
+                          {/* Content Actions - Full Width */}
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => navigate(`/admin/users/${user.id}/content`)}
-                            className="gap-1.5 border-orange-500 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:border-orange-600 dark:hover:border-orange-500 font-medium shadow-sm hover:shadow-md transition-all"
+                            className="gap-1.5 border-orange-500 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:border-orange-600 dark:hover:border-orange-500 font-medium shadow-sm hover:shadow-md transition-all w-full justify-center"
                           >
                             <svg
                               className="h-4 w-4"
@@ -714,75 +715,85 @@ export default function Admin() {
                             <span>Inspect Content</span>
                             <Sparkles className="h-3 w-3 opacity-70" />
                           </Button>
-                          {!hasPro && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleAction(user, "grant")}
-                              className="gap-1"
-                            >
-                              <Crown className="h-4 w-4" />
-                              Grant Pro
-                            </Button>
-                          )}
-                          {hasPro && (
-                            <>
-                              {canUpdateSites && (
+                          
+                          {/* Actions in Two Columns */}
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {/* Left Column */}
+                            <div className="flex flex-col gap-1.5">
+                              {!hasPro && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAction(user, "grant")}
+                                  className="gap-1.5 w-full justify-start"
+                                >
+                                  <Crown className="h-4 w-4" />
+                                  Grant Pro
+                                </Button>
+                              )}
+                              {hasPro && (
+                                <>
+                                  {canUpdateSites && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleAction(user, "update_sites")}
+                                      className="gap-1.5 w-full justify-start"
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                      Update Sites
+                                    </Button>
+                                  )}
+                                  {isManual && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleAction(user, "update_period_end")}
+                                      className="gap-1.5 w-full justify-start"
+                                    >
+                                      <Calendar className="h-4 w-4" />
+                                      Update Period
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                              {user.is_admin ? (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleAdminRoleAction(user, "revoke")}
+                                  className="gap-1.5 w-full justify-start"
+                                >
+                                  <ShieldX className="h-4 w-4" />
+                                  Revoke Admin
+                                </Button>
+                              ) : (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleAction(user, "update_sites")}
-                                  className="gap-1"
+                                  onClick={() => handleAdminRoleAction(user, "grant")}
+                                  className="gap-1.5 w-full justify-start border-purple-600 text-purple-600 hover:bg-purple-50"
                                 >
-                                  <Edit className="h-4 w-4" />
-                                  Update Sites
+                                  <ShieldCheck className="h-4 w-4" />
+                                  Grant Admin
                                 </Button>
                               )}
-                              {isManual && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleAction(user, "update_period_end")}
-                                    className="gap-1"
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                    Update Period
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => handleAction(user, "revoke")}
-                                    className="gap-1"
-                                  >
-                                    <X className="h-4 w-4" />
-                                    Revoke Subscription
-                                  </Button>
-                                </>
+                            </div>
+                            
+                            {/* Right Column */}
+                            <div className="flex flex-col gap-1.5">
+                              {hasPro && isManual && (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleAction(user, "revoke")}
+                                  className="gap-1.5 w-full justify-start"
+                                >
+                                  <X className="h-4 w-4" />
+                                  Revoke Subscription
+                                </Button>
                               )}
-                            </>
-                          )}
-                          {/* Admin role management buttons */}
-                          {user.is_admin ? (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleAdminRoleAction(user, "revoke")}
-                              className="gap-1"
-                            >
-                              <ShieldX className="h-4 w-4" />
-                              Revoke Admin
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleAdminRoleAction(user, "grant")}
-                              className="gap-1 border-purple-600 text-purple-600 hover:bg-purple-50"
-                            >
-                              <ShieldCheck className="h-4 w-4" />
-                              Grant Admin
-                            </Button>
-                          )}
+                            </div>
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>
