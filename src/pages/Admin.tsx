@@ -672,7 +672,7 @@ export default function Admin() {
                                     className="gap-1"
                                   >
                                     <X className="h-4 w-4" />
-                                    Revoke
+                                    Revoke Subscription
                                   </Button>
                                 </>
                               )}
