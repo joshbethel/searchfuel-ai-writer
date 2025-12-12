@@ -461,8 +461,9 @@ export default function Admin() {
               <p className="font-semibold">When you grant Pro access to a user, here's what happens:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
                 <li><strong>Stripe Subscription Created:</strong> A subscription is automatically created in Stripe with invoice collection (no payment method required).</li>
+                <li><strong>Invoice Automatically Paid:</strong> The invoice is immediately marked as paid, so users won't receive any invoice emails.</li>
                 <li><strong>Access Period:</strong> You set the subscription end date, which determines how long the user has Pro access.</li>
-                <li><strong>Email Notification:</strong> The user receives an email notification informing them that Pro access has been granted.</li>
+                <li><strong>Email Notification:</strong> The user receives an email notification informing them that Pro access has been granted (no invoice email is sent).</li>
                 <li><strong>Audit Log:</strong> All actions are logged in the audit system with your admin user ID and timestamp.</li>
                 <li><strong>Manual Flag:</strong> The subscription is marked as "Manual" in both our database and Stripe, distinguishing it from paid subscriptions.</li>
                 <li><strong>Automatic Cancellation:</strong> The subscription will automatically cancel on the end date you specify.</li>
@@ -894,8 +895,9 @@ export default function Admin() {
                     <p className="font-semibold">When you grant Pro access to a user, here's what happens:</p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
                       <li><strong>Stripe Subscription Created:</strong> A subscription is automatically created in Stripe with invoice collection (no payment method required).</li>
+                      <li><strong>Invoice Automatically Paid:</strong> The invoice is immediately marked as paid, so users won't receive any invoice emails.</li>
                       <li><strong>Access Period:</strong> You set the subscription end date, which determines how long the user has Pro access.</li>
-                      <li><strong>Email Notification:</strong> The user receives an email notification informing them that Pro access has been granted.</li>
+                      <li><strong>Email Notification:</strong> The user receives an email notification informing them that Pro access has been granted (no invoice email is sent).</li>
                       <li><strong>Audit Log:</strong> All actions are logged in the audit system with your admin user ID and timestamp.</li>
                       <li><strong>Manual Flag:</strong> The subscription is marked as "Manual" in both our database and Stripe, distinguishing it from paid subscriptions.</li>
                       <li><strong>Automatic Cancellation:</strong> The subscription will automatically cancel on the end date you specify.</li>
