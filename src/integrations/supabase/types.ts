@@ -540,6 +540,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_admin_user: {
+        Args: { admin_user_id: string; target_user_id: string }
+        Returns: undefined
+      }
       can_add_keyword: { Args: { user_uuid: string }; Returns: boolean }
       can_generate_post: {
         Args: { blog_uuid: string; user_uuid: string }
