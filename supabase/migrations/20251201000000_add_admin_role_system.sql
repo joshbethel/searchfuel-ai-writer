@@ -11,13 +11,18 @@ CREATE TABLE IF NOT EXISTS public.admin_users (
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for admin_users
--- Only admins can view the admin_users table (will be enforced via service role in practice)
-CREATE POLICY "Admins can view admin_users"
+-- Users can check if they themselves are admins (needed for AdminProtectedRoute)
+-- Admins can view all admin_users (for admin dashboard)
+CREATE POLICY "Users can check their own admin status"
+  ON public.admin_users FOR SELECT
+  USING (admin_users.user_id = auth.uid());
+
+CREATE POLICY "Admins can view all admin_users"
   ON public.admin_users FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM public.admin_users
-      WHERE admin_users.user_id = auth.uid()
+      SELECT 1 FROM public.admin_users au
+      WHERE au.user_id = auth.uid()
     )
   );
 
