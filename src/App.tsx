@@ -24,6 +24,14 @@ import { AdminProtectedRoute } from "./layouts/AdminProtectedRoute";
 import { SiteProvider } from "./contexts/SiteContext";
 import Admin from "./pages/Admin";
 import AdminUserContent from "./pages/admin/AdminUserContent";
+import AdminUserBlogs from "./pages/admin/AdminUserBlogs";
+import AdminUserBlogPosts from "./pages/admin/AdminUserBlogPosts";
+import AdminUserArticles from "./pages/admin/AdminUserArticles";
+import AdminUserKeywords from "./pages/admin/AdminUserKeywords";
+import AdminUserBlogDetail from "./pages/admin/AdminUserBlogDetail";
+import AdminUserBlogPostDetail from "./pages/admin/AdminUserBlogPostDetail";
+import AdminUserArticleDetail from "./pages/admin/AdminUserArticleDetail";
+import AdminUserKeywordDetail from "./pages/admin/AdminUserKeywordDetail";
 
 const queryClient = new QueryClient();
 
@@ -51,7 +59,14 @@ const App = () => (
             <Route element={<AdminProtectedRoute><DashboardLayout /></AdminProtectedRoute>}>
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/users/:userId/content" element={<AdminUserContent />} />
-              {/* Additional admin content routes will be added as components are created */}
+              <Route path="/admin/users/:userId/blogs" element={<AdminUserBlogs />} />
+              <Route path="/admin/users/:userId/blogs/:blogId" element={<AdminUserBlogDetail />} />
+              <Route path="/admin/users/:userId/blog-posts" element={<AdminUserBlogPosts />} />
+              <Route path="/admin/users/:userId/blog-posts/:postId" element={<AdminUserBlogPostDetail />} />
+              <Route path="/admin/users/:userId/articles" element={<AdminUserArticles />} />
+              <Route path="/admin/users/:userId/articles/:articleId" element={<AdminUserArticleDetail />} />
+              <Route path="/admin/users/:userId/keywords" element={<AdminUserKeywords />} />
+              <Route path="/admin/users/:userId/keywords/:keywordId" element={<AdminUserKeywordDetail />} />
             </Route>
             {/* SearchFuel blog routes */}
             <Route path="/blog" element={<Blog />} />
