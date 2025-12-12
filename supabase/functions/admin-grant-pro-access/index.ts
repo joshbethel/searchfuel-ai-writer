@@ -375,79 +375,70 @@ serve(async (req) => {
         // Continue anyway, the upsert might still work
       }
 
-      // Now upsert the subscription
-      const { data: updatedSubscription, error: updateError } = await supabaseService
-        .from('subscriptions')
-        .upsert({
-          user_id: target_user_id,
-          stripe_customer_id: customerId,
-          stripe_subscription_id: stripeSubscription.id,
-          stripe_price_id: proPriceId,
-          status: 'active',
-          plan_name: 'pro',
-          current_period_start: periodStart.toISOString(),
-          current_period_end: periodEnd.toISOString(),
-          is_manual: true,
-          sites_allowed: finalSitesAllowed,
-        }, {
-          onConflict: 'user_id'
-        })
-        .select()
-        .single();
-
-      let finalSubscription = updatedSubscription;
-
-      if (updateError) {
-        console.error('Failed to update subscription:', updateError);
+      // Now update or insert the subscription
+      // Use explicit update/insert to ensure sites_allowed is always set correctly
+      let finalSubscription;
+      
+      if (existingSubscription) {
+        // Update existing subscription
+        console.log('Updating existing subscription. Current sites_allowed:', existingSubscription.sites_allowed, 'New:', finalSitesAllowed);
+        const { data: updatedSubscription, error: updateError } = await supabaseService
+          .from('subscriptions')
+          .update({
+            stripe_customer_id: customerId,
+            stripe_subscription_id: stripeSubscription.id,
+            stripe_price_id: proPriceId,
+            status: 'active',
+            plan_name: 'pro',
+            current_period_start: periodStart.toISOString(),
+            current_period_end: periodEnd.toISOString(),
+            is_manual: true,
+            sites_allowed: finalSitesAllowed,
+          })
+          .eq('user_id', target_user_id)
+          .select()
+          .single();
         
-        // If it's a unique constraint violation on stripe_customer_id, try to handle it
-        if (updateError.message?.includes('stripe_customer_id_key')) {
-          // Try to find and update the existing record with this customer_id
-          const { data: conflictingSub, error: findError } = await supabaseService
-            .from('subscriptions')
-            .select('*')
-            .eq('stripe_customer_id', customerId)
-            .single();
-
-          if (!findError && conflictingSub) {
-            // Update the existing record to point to the new user_id
-            const { data: updatedSub, error: updateConflictError } = await supabaseService
-              .from('subscriptions')
-              .update({
-                user_id: target_user_id,
-                stripe_subscription_id: stripeSubscription.id,
-                stripe_price_id: proPriceId,
-                status: 'active',
-                plan_name: 'pro',
-                current_period_start: periodStart.toISOString(),
-                current_period_end: periodEnd.toISOString(),
-                is_manual: true,
-                sites_allowed: finalSitesAllowed,
-              })
-              .eq('id', conflictingSub.id)
-              .select()
-              .single();
-
-            if (updateConflictError) {
-              return new Response(
-                JSON.stringify({ error: "Failed to update subscription", details: updateConflictError.message }),
-                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-              );
-            }
-            
-            finalSubscription = updatedSub;
-          } else {
-            return new Response(
-              JSON.stringify({ error: "Failed to update subscription", details: updateError.message }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-        } else {
+        if (updateError) {
+          console.error('Failed to update subscription:', updateError);
           return new Response(
             JSON.stringify({ error: "Failed to update subscription", details: updateError.message }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+        
+        console.log('Subscription updated successfully. sites_allowed:', updatedSubscription?.sites_allowed);
+        finalSubscription = updatedSubscription;
+      } else {
+        // Insert new subscription
+        console.log('Inserting new subscription with sites_allowed:', finalSitesAllowed);
+        const { data: insertedSubscription, error: insertError } = await supabaseService
+          .from('subscriptions')
+          .insert({
+            user_id: target_user_id,
+            stripe_customer_id: customerId,
+            stripe_subscription_id: stripeSubscription.id,
+            stripe_price_id: proPriceId,
+            status: 'active',
+            plan_name: 'pro',
+            current_period_start: periodStart.toISOString(),
+            current_period_end: periodEnd.toISOString(),
+            is_manual: true,
+            sites_allowed: finalSitesAllowed,
+          })
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error('Failed to insert subscription:', insertError);
+          return new Response(
+            JSON.stringify({ error: "Failed to create subscription", details: insertError.message }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        console.log('Subscription inserted successfully. sites_allowed:', insertedSubscription?.sites_allowed);
+        finalSubscription = insertedSubscription;
       }
 
       auditDetails = {
