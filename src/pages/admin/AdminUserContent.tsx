@@ -29,11 +29,12 @@ export default function AdminUserContent() {
 
     setLoading(true);
     try {
-      // Get content summary
+      // Get content summary - use summary_only to only fetch counts, not all data
       const { data, error } = await supabase.functions.invoke("admin-get-user-content", {
         body: {
           target_user_id: userId,
           content_type: 'all',
+          summary_only: true, // Only fetch counts, not all content data
         },
       });
 
@@ -55,8 +56,15 @@ export default function AdminUserContent() {
   if (loading) {
     return (
       <div className="container mx-auto py-8 px-4">
-        <div className="flex items-center justify-center min-h-[400px]">
+        <div className="mb-6">
+          <div className="mb-4">
+            <h1 className="text-3xl font-bold mb-2">User Content</h1>
+            <p className="text-muted-foreground">Overview of all content types for this user</p>
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-muted-foreground">Loading will take a while...</p>
         </div>
       </div>
     );

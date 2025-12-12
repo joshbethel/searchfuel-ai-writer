@@ -34,6 +34,7 @@ function getCorsHeadersWithOrigin(origin: string | null) {
 interface GetUserContentRequest {
   target_user_id: string;
   content_type?: 'blogs' | 'blog_posts' | 'articles' | 'keywords' | 'all';
+  summary_only?: boolean; // If true, only return counts without fetching all data
   filters?: {
     blog_id?: string; // For blog_posts
     status?: string; // For blog_posts, articles
@@ -148,7 +149,7 @@ serve(async (req) => {
 
     // Parse request body
     const body: GetUserContentRequest = await req.json();
-    const { target_user_id, content_type = 'all', filters = {} } = body;
+    const { target_user_id, content_type = 'all', summary_only = false, filters = {} } = body;
 
     if (!target_user_id) {
       return new Response(
@@ -184,21 +185,35 @@ serve(async (req) => {
 
     // Fetch blogs
     if (content_type === 'all' || content_type === 'blogs') {
-      let blogsQuery = supabaseService
-        .from('blogs')
-        .select('*')
-        .eq('user_id', target_user_id)
-        .order('created_at', { ascending: false });
-
-      const { data: blogs, error: blogsError } = await blogsQuery;
-      
-      if (blogsError) {
-        console.error('Error fetching blogs:', blogsError);
+      if (summary_only) {
+        // Use count query for efficiency
+        const { count, error: blogsError } = await supabaseService
+          .from('blogs')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', target_user_id);
+        
+        if (blogsError) {
+          console.error('Error counting blogs:', blogsError);
+        } else {
+          summary.blogs_count = count || 0;
+        }
       } else {
-        result.blogs = blogs || [];
-        summary.blogs_count = blogs?.length || 0;
-        if (blogs) {
-          contentIds.push(...blogs.map((b: any) => b.id));
+        let blogsQuery = supabaseService
+          .from('blogs')
+          .select('*')
+          .eq('user_id', target_user_id)
+          .order('created_at', { ascending: false });
+
+        const { data: blogs, error: blogsError } = await blogsQuery;
+        
+        if (blogsError) {
+          console.error('Error fetching blogs:', blogsError);
+        } else {
+          result.blogs = blogs || [];
+          summary.blogs_count = blogs?.length || 0;
+          if (blogs) {
+            contentIds.push(...blogs.map((b: any) => b.id));
+          }
         }
       }
     }
@@ -217,44 +232,70 @@ serve(async (req) => {
         const blogIds = (userBlogs || []).map((b: any) => b.id);
 
         if (blogIds.length > 0) {
-          let postsQuery = supabaseService
-            .from('blog_posts')
-            .select(`
-              *,
-              blogs (
-                id,
-                title,
-                subdomain,
-                user_id
-              )
-            `)
-            .in('blog_id', blogIds);
+          if (summary_only) {
+            // Use count query for efficiency
+            let countQuery = supabaseService
+              .from('blog_posts')
+              .select('*', { count: 'exact', head: true })
+              .in('blog_id', blogIds);
 
-          // Apply filters
-          if (filters.blog_id) {
-            postsQuery = postsQuery.eq('blog_id', filters.blog_id);
-          }
-          if (filters.status) {
-            postsQuery = postsQuery.eq('status', filters.status);
-          }
+            // Apply filters
+            if (filters.blog_id) {
+              countQuery = countQuery.eq('blog_id', filters.blog_id);
+            }
+            if (filters.status) {
+              countQuery = countQuery.eq('status', filters.status);
+            }
 
-          postsQuery = postsQuery
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1);
-
-          const { data: blogPosts, error: postsError } = await postsQuery;
-          
-          if (postsError) {
-            console.error('Error fetching blog posts:', postsError);
+            const { count, error: postsError } = await countQuery;
+            
+            if (postsError) {
+              console.error('Error counting blog posts:', postsError);
+            } else {
+              summary.blog_posts_count = count || 0;
+            }
           } else {
-            result.blog_posts = blogPosts || [];
-            summary.blog_posts_count = blogPosts?.length || 0;
-            if (blogPosts) {
-              contentIds.push(...blogPosts.map((p: any) => p.id));
+            let postsQuery = supabaseService
+              .from('blog_posts')
+              .select(`
+                *,
+                blogs (
+                  id,
+                  title,
+                  subdomain,
+                  user_id
+                )
+              `)
+              .in('blog_id', blogIds);
+
+            // Apply filters
+            if (filters.blog_id) {
+              postsQuery = postsQuery.eq('blog_id', filters.blog_id);
+            }
+            if (filters.status) {
+              postsQuery = postsQuery.eq('status', filters.status);
+            }
+
+            postsQuery = postsQuery
+              .order('created_at', { ascending: false })
+              .range(offset, offset + limit - 1);
+
+            const { data: blogPosts, error: postsError } = await postsQuery;
+            
+            if (postsError) {
+              console.error('Error fetching blog posts:', postsError);
+            } else {
+              result.blog_posts = blogPosts || [];
+              summary.blog_posts_count = blogPosts?.length || 0;
+              if (blogPosts) {
+                contentIds.push(...blogPosts.map((p: any) => p.id));
+              }
             }
           }
         } else {
-          result.blog_posts = [];
+          if (!summary_only) {
+            result.blog_posts = [];
+          }
           summary.blog_posts_count = 0;
         }
       }
@@ -262,65 +303,110 @@ serve(async (req) => {
 
     // Fetch articles
     if (content_type === 'all' || content_type === 'articles') {
-      let articlesQuery = supabaseService
-        .from('articles')
-        .select('*')
-        .eq('user_id', target_user_id);
+      if (summary_only) {
+        // Use count query for efficiency
+        let countQuery = supabaseService
+          .from('articles')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', target_user_id);
 
-      if (filters.status) {
-        articlesQuery = articlesQuery.eq('status', filters.status);
-      }
+        if (filters.status) {
+          countQuery = countQuery.eq('status', filters.status);
+        }
 
-      articlesQuery = articlesQuery
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      const { data: articles, error: articlesError } = await articlesQuery;
-      
-      if (articlesError) {
-        console.error('Error fetching articles:', articlesError);
+        const { count, error: articlesError } = await countQuery;
+        
+        if (articlesError) {
+          console.error('Error counting articles:', articlesError);
+        } else {
+          summary.articles_count = count || 0;
+        }
       } else {
-        result.articles = articles || [];
-        summary.articles_count = articles?.length || 0;
-        if (articles) {
-          contentIds.push(...articles.map((a: any) => a.id));
+        let articlesQuery = supabaseService
+          .from('articles')
+          .select('*')
+          .eq('user_id', target_user_id);
+
+        if (filters.status) {
+          articlesQuery = articlesQuery.eq('status', filters.status);
+        }
+
+        articlesQuery = articlesQuery
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1);
+
+        const { data: articles, error: articlesError } = await articlesQuery;
+        
+        if (articlesError) {
+          console.error('Error fetching articles:', articlesError);
+        } else {
+          result.articles = articles || [];
+          summary.articles_count = articles?.length || 0;
+          if (articles) {
+            contentIds.push(...articles.map((a: any) => a.id));
+          }
         }
       }
     }
 
     // Fetch keywords
     if (content_type === 'all' || content_type === 'keywords') {
-      let keywordsQuery = supabaseService
-        .from('keywords')
-        .select('*')
-        .eq('user_id', target_user_id)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      const { data: keywords, error: keywordsError } = await keywordsQuery;
-      
-      if (keywordsError) {
-        console.error('Error fetching keywords:', keywordsError);
+      if (summary_only) {
+        // Use count query for efficiency
+        const { count, error: keywordsError } = await supabaseService
+          .from('keywords')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', target_user_id);
+        
+        if (keywordsError) {
+          console.error('Error counting keywords:', keywordsError);
+        } else {
+          summary.keywords_count = count || 0;
+        }
       } else {
-        result.keywords = keywords || [];
-        summary.keywords_count = keywords?.length || 0;
-        if (keywords) {
-          contentIds.push(...keywords.map((k: any) => k.id));
+        let keywordsQuery = supabaseService
+          .from('keywords')
+          .select('*')
+          .eq('user_id', target_user_id)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1);
+
+        const { data: keywords, error: keywordsError } = await keywordsQuery;
+        
+        if (keywordsError) {
+          console.error('Error fetching keywords:', keywordsError);
+        } else {
+          result.keywords = keywords || [];
+          summary.keywords_count = keywords?.length || 0;
+          if (keywords) {
+            contentIds.push(...keywords.map((k: any) => k.id));
+          }
         }
       }
     }
 
-    // Log view action
-    const totalItemsViewed = Object.values(summary).reduce((sum: number, count: any) => sum + count, 0);
-    await logAdminAction(supabaseService, adminUserId, 'view_content', target_user_id, {
-      content_type: content_type,
-      content_ids: contentIds.length > 0 ? contentIds : undefined,
-      filters: filters,
-      items_viewed: totalItemsViewed,
-    });
+    // Log view action (only if not summary_only to avoid logging when just getting counts)
+    if (!summary_only) {
+      const totalItemsViewed = Object.values(summary).reduce((sum: number, count: any) => sum + count, 0);
+      await logAdminAction(supabaseService, adminUserId, 'view_content', target_user_id, {
+        content_type: content_type,
+        content_ids: contentIds.length > 0 ? contentIds : undefined,
+        filters: filters,
+        items_viewed: totalItemsViewed,
+      });
+    }
 
     // Return response
-    if (content_type === 'all') {
+    if (summary_only) {
+      // When summary_only, only return summary counts
+      return new Response(JSON.stringify({
+        success: true,
+        summary: summary,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    } else if (content_type === 'all') {
       return new Response(JSON.stringify({
         success: true,
         content: result,
