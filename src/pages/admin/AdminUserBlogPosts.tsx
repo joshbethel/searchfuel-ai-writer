@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Eye, Edit, FileText, Search } from "lucide-react";
+import { Loader2, Eye, Edit, FileText, Search } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -108,15 +108,6 @@ export default function AdminUserBlogPosts() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-6">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(`/admin/users/${userId}/content`)}
-          className="mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Content Overview
-        </Button>
-
         <div className="mb-4">
           <h1 className="text-3xl font-bold mb-2">User Blog Posts</h1>
           <p className="text-muted-foreground">

@@ -31,6 +31,9 @@ import {
   ShieldX,
   Eye,
   FileText,
+  Sparkles,
+  EyeOff,
+  History,
 } from "lucide-react";
 import {
   Table,
@@ -366,8 +369,20 @@ export default function Admin() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
-        <p className="text-muted-foreground">Manage user Pro access and subscriptions</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
+            <p className="text-muted-foreground">Manage user Pro access and subscriptions</p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => navigate("/admin/audit-log")}
+            className="gap-2"
+          >
+            <History className="h-4 w-4" />
+            View Audit Log
+          </Button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -639,10 +654,25 @@ export default function Admin() {
                             size="sm"
                             variant="outline"
                             onClick={() => navigate(`/admin/users/${user.id}/content`)}
-                            className="gap-1"
+                            className="gap-1.5 border-orange-500 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:border-orange-600 dark:hover:border-orange-500 font-medium shadow-sm hover:shadow-md transition-all"
                           >
-                            <Eye className="h-4 w-4" />
-                            View Content
+                            <svg
+                              className="h-4 w-4"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              {/* Incognito icon - person with hat (spy/private browsing style) */}
+                              <circle cx="12" cy="9" r="3"/>
+                              <path d="M7 20v-2a5 5 0 0 1 5-5h0a5 5 0 0 1 5 5v2"/>
+                              <path d="M9 5h6M10 4h4M11 3h2"/>
+                              <path d="M8 6h8" strokeWidth="2.5"/>
+                            </svg>
+                            <span>Inspect Content</span>
+                            <Sparkles className="h-3 w-3 opacity-70" />
                           </Button>
                           {!hasPro && (
                             <Button

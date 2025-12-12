@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useParams, useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, FileText, BookOpen, Newspaper, Tag } from "lucide-react";
+import { Loader2, FileText, BookOpen, Newspaper, Tag } from "lucide-react";
 
 interface ContentSummary {
   blogs_count: number;
@@ -14,21 +12,11 @@ interface ContentSummary {
   keywords_count: number;
 }
 
-interface UserInfo {
-  id: string;
-  email: string;
-  user_metadata?: {
-    name?: string;
-    full_name?: string;
-  };
-}
-
 export default function AdminUserContent() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<ContentSummary | null>(null);
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   useEffect(() => {
     if (userId) {
@@ -41,20 +29,6 @@ export default function AdminUserContent() {
 
     setLoading(true);
     try {
-      // Get user info from admin-search-users function
-      const { data: searchData, error: searchError } = await supabase.functions.invoke("admin-search-users", {
-        body: { query: userId },
-      });
-
-      if (!searchError && searchData?.success && searchData?.users?.length > 0) {
-        const user = searchData.users[0];
-        setUserInfo({
-          id: user.id,
-          email: user.email || '',
-          user_metadata: user.user_metadata,
-        });
-      }
-
       // Get content summary
       const { data, error } = await supabase.functions.invoke("admin-get-user-content", {
         body: {
@@ -91,28 +65,9 @@ export default function AdminUserContent() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-6">
-        <Button
-          variant="ghost"
-          onClick={() => navigate("/admin")}
-          className="mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Admin Dashboard
-        </Button>
-
         <div className="mb-4">
           <h1 className="text-3xl font-bold mb-2">User Content</h1>
-          {userInfo && (
-            <div className="flex items-center gap-4 text-muted-foreground">
-              <span>{userInfo.email}</span>
-              {(userInfo.user_metadata?.name || userInfo.user_metadata?.full_name) && (
-                <span>• {userInfo.user_metadata?.name || userInfo.user_metadata?.full_name}</span>
-              )}
-              <Badge variant="outline" className="font-mono text-xs">
-                {userInfo.id.substring(0, 8)}...
-              </Badge>
-            </div>
-          )}
+          <p className="text-muted-foreground">Overview of all content types for this user</p>
         </div>
       </div>
 

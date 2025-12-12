@@ -24,6 +24,7 @@ import { AdminProtectedRoute } from "./layouts/AdminProtectedRoute";
 import { SiteProvider } from "./contexts/SiteContext";
 import Admin from "./pages/Admin";
 import AdminUserContent from "./pages/admin/AdminUserContent";
+import AdminContentLayout from "./layouts/AdminContentLayout";
 import AdminUserBlogs from "./pages/admin/AdminUserBlogs";
 import AdminUserBlogPosts from "./pages/admin/AdminUserBlogPosts";
 import AdminUserArticles from "./pages/admin/AdminUserArticles";
@@ -32,6 +33,7 @@ import AdminUserBlogDetail from "./pages/admin/AdminUserBlogDetail";
 import AdminUserBlogPostDetail from "./pages/admin/AdminUserBlogPostDetail";
 import AdminUserArticleDetail from "./pages/admin/AdminUserArticleDetail";
 import AdminUserKeywordDetail from "./pages/admin/AdminUserKeywordDetail";
+import AdminAuditLog from "./pages/admin/AdminAuditLog";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +60,9 @@ const App = () => (
             </Route>
             <Route element={<AdminProtectedRoute><DashboardLayout /></AdminProtectedRoute>}>
               <Route path="/admin" element={<Admin />} />
+              <Route path="/admin/audit-log" element={<AdminAuditLog />} />
+            </Route>
+            <Route element={<AdminProtectedRoute><AdminContentLayout /></AdminProtectedRoute>}>
               <Route path="/admin/users/:userId/content" element={<AdminUserContent />} />
               <Route path="/admin/users/:userId/blogs" element={<AdminUserBlogs />} />
               <Route path="/admin/users/:userId/blogs/:blogId" element={<AdminUserBlogDetail />} />
