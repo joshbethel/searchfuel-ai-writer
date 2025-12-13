@@ -62,21 +62,21 @@ export default function AdminUserArticleDetail() {
         body: {
           target_user_id: userId,
           content_type: 'articles',
+          minimal_fields: false, // Need all fields for detail view
+          filters: {
+            content_id: articleId, // Only fetch the specific article
+          },
         },
       });
 
       if (error) throw error;
 
-      if (data?.success && data?.content?.articles) {
-        const foundArticle = data.content.articles.find((a: Article) => a.id === articleId);
-        if (foundArticle) {
-          setArticle(foundArticle);
-          setFormData(foundArticle);
-        } else {
-          throw new Error("Article not found");
-        }
+      if (data?.success && data?.content?.articles && data.content.articles.length > 0) {
+        const foundArticle = data.content.articles[0];
+        setArticle(foundArticle);
+        setFormData(foundArticle);
       } else {
-        throw new Error(data?.error || "Failed to load article");
+        throw new Error(data?.error || "Article not found");
       }
     } catch (error: any) {
       console.error("Error loading article:", error);

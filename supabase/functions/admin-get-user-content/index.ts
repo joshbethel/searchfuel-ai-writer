@@ -400,28 +400,70 @@ serve(async (req) => {
           summary.articles_count = count || 0;
         }
       } else {
-        let articlesQuery = supabaseService
-          .from('articles')
-          .select('*')
-          .eq('user_id', target_user_id);
+        // If content_id is provided, fetch only that specific article
+        if (filters.content_id) {
+          let singleArticleQuery;
+          if (minimal_fields) {
+            singleArticleQuery = supabaseService
+              .from('articles')
+              .select('id, title, keyword, intent, status, created_at')
+              .eq('id', filters.content_id)
+              .eq('user_id', target_user_id)
+              .single();
+          } else {
+            singleArticleQuery = supabaseService
+              .from('articles')
+              .select('*')
+              .eq('id', filters.content_id)
+              .eq('user_id', target_user_id)
+              .single();
+          }
 
-        if (filters.status) {
-          articlesQuery = articlesQuery.eq('status', filters.status);
-        }
-
-        articlesQuery = articlesQuery
-          .order('created_at', { ascending: false })
-          .range(offset, offset + limit - 1);
-
-        const { data: articles, error: articlesError } = await articlesQuery;
-        
-        if (articlesError) {
-          console.error('Error fetching articles:', articlesError);
+          const { data: article, error: articlesError } = await singleArticleQuery;
+          
+          if (articlesError) {
+            console.error('Error fetching article:', articlesError);
+            result.articles = [];
+          } else {
+            result.articles = article ? [article] : [];
+            summary.articles_count = article ? 1 : 0;
+            if (article) {
+              contentIds.push(article.id);
+            }
+          }
         } else {
-          result.articles = articles || [];
-          summary.articles_count = articles?.length || 0;
-          if (articles) {
-            contentIds.push(...articles.map((a: any) => a.id));
+          // Select minimal fields for table view, or all fields if minimal_fields is false
+          let articlesQuery;
+          if (minimal_fields) {
+            articlesQuery = supabaseService
+              .from('articles')
+              .select('id, title, keyword, intent, status, created_at')
+              .eq('user_id', target_user_id);
+          } else {
+            articlesQuery = supabaseService
+              .from('articles')
+              .select('*')
+              .eq('user_id', target_user_id);
+          }
+
+          if (filters.status) {
+            articlesQuery = articlesQuery.eq('status', filters.status);
+          }
+
+          articlesQuery = articlesQuery
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+
+          const { data: articles, error: articlesError } = await articlesQuery;
+          
+          if (articlesError) {
+            console.error('Error fetching articles:', articlesError);
+          } else {
+            result.articles = articles || [];
+            summary.articles_count = articles?.length || 0;
+            if (articles) {
+              contentIds.push(...articles.map((a: any) => a.id));
+            }
           }
         }
       }

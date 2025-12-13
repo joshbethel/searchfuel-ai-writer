@@ -62,6 +62,7 @@ export default function AdminUserArticles() {
         body: {
           target_user_id: userId,
           content_type: 'articles',
+          minimal_fields: true, // Only need minimal fields for table view
           filters,
         },
       });
