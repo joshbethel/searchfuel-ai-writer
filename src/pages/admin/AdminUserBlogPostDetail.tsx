@@ -67,6 +67,7 @@ export default function AdminUserBlogPostDetail() {
         body: {
           target_user_id: userId,
           content_type: 'blog_posts',
+          minimal_fields: false, // Need all fields for detail view
         },
       });
 

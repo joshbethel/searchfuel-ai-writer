@@ -69,9 +69,67 @@ export default function AdminUserBlogs() {
   if (loading) {
     return (
       <div className="container mx-auto py-8 px-4">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div className="mb-6">
+          <div className="mb-4">
+            <h1 className="text-3xl font-bold mb-2">User Blogs</h1>
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <p className="text-muted-foreground">Loading blogs...</p>
+            </div>
+          </div>
         </div>
+        <Card className="opacity-75">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-muted-foreground" />
+              <CardTitle>Blogs</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Subdomain</TableHead>
+                  <TableHead>Custom Domain</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[1, 2, 3].map((i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Loading...</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-5 w-16 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <div className="h-8 w-16 bg-muted rounded animate-pulse" />
+                        <div className="h-8 w-16 bg-muted rounded animate-pulse" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
     );
   }

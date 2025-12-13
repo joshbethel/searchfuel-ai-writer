@@ -35,6 +35,7 @@ interface GetUserContentRequest {
   target_user_id: string;
   content_type?: 'blogs' | 'blog_posts' | 'articles' | 'keywords' | 'all';
   summary_only?: boolean; // If true, only return counts without fetching all data
+  minimal_fields?: boolean; // If true, only return minimal fields needed for table views (default: true)
   filters?: {
     blog_id?: string; // For blog_posts
     status?: string; // For blog_posts, articles
@@ -149,7 +150,7 @@ serve(async (req) => {
 
     // Parse request body
     const body: GetUserContentRequest = await req.json();
-    const { target_user_id, content_type = 'all', summary_only = false, filters = {} } = body;
+    const { target_user_id, content_type = 'all', summary_only = false, minimal_fields = true, filters = {} } = body;
 
     if (!target_user_id) {
       return new Response(
@@ -255,18 +256,40 @@ serve(async (req) => {
               summary.blog_posts_count = count || 0;
             }
           } else {
-            let postsQuery = supabaseService
-              .from('blog_posts')
-              .select(`
-                *,
-                blogs (
+            // Select minimal fields for table view, or all fields if minimal_fields is false
+            let postsQuery;
+            if (minimal_fields) {
+              postsQuery = supabaseService
+                .from('blog_posts')
+                .select(`
                   id,
                   title,
-                  subdomain,
-                  user_id
-                )
-              `)
-              .in('blog_id', blogIds);
+                  slug,
+                  status,
+                  published_at,
+                  created_at,
+                  blog_id,
+                  blogs (
+                    id,
+                    title,
+                    subdomain
+                  )
+                `)
+                .in('blog_id', blogIds);
+            } else {
+              postsQuery = supabaseService
+                .from('blog_posts')
+                .select(`
+                  *,
+                  blogs (
+                    id,
+                    title,
+                    subdomain,
+                    user_id
+                  )
+                `)
+                .in('blog_id', blogIds);
+            }
 
             // Apply filters
             if (filters.blog_id) {
