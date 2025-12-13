@@ -5,7 +5,23 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Search, FileText, Calendar, Filter, Download } from "lucide-react";
+import { 
+  Loader2, 
+  Search, 
+  FileText, 
+  Calendar, 
+  Filter, 
+  Download,
+  CheckCircle2,
+  XCircle,
+  Calendar as CalendarIcon,
+  Globe,
+  Eye,
+  Edit,
+  Shield,
+  ShieldOff,
+  Crown
+} from "lucide-react";
 import {
   Table,
   TableBody,
@@ -51,16 +67,105 @@ interface AuditLog {
   target_name: string | null;
 }
 
-const ACTION_TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  grant_pro_access: { label: "Grant Pro Access", color: "default" },
-  revoke_pro_access: { label: "Revoke Pro Access", color: "destructive" },
-  update_period_end: { label: "Update Period End", color: "secondary" },
-  update_sites_allowed: { label: "Update Sites Allowed", color: "secondary" },
-  view_content: { label: "View Content", color: "outline" },
-  edit_content: { label: "Edit Content", color: "default" },
-  grant_admin_role: { label: "Grant Admin Role", color: "default" },
-  revoke_admin_role: { label: "Revoke Admin Role", color: "destructive" },
+interface ActionTypeConfig {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  className: string;
+  bgColor: string;
+  textColor: string;
+  borderColor: string;
+}
+
+const ACTION_TYPE_LABELS: Record<string, ActionTypeConfig> = {
+  grant_pro_access: {
+    label: "Grant Pro Access",
+    icon: CheckCircle2,
+    className: "border-green-500/20 bg-green-500/10",
+    bgColor: "bg-green-500/10",
+    textColor: "text-green-700 dark:text-green-400",
+    borderColor: "border-green-500/30",
+  },
+  revoke_pro_access: {
+    label: "Revoke Pro Access",
+    icon: XCircle,
+    className: "border-red-500/20 bg-red-500/10",
+    bgColor: "bg-red-500/10",
+    textColor: "text-red-700 dark:text-red-400",
+    borderColor: "border-red-500/30",
+  },
+  update_period_end: {
+    label: "Update Period End",
+    icon: CalendarIcon,
+    className: "border-blue-500/20 bg-blue-500/10",
+    bgColor: "bg-blue-500/10",
+    textColor: "text-blue-700 dark:text-blue-400",
+    borderColor: "border-blue-500/30",
+  },
+  update_sites_allowed: {
+    label: "Update Sites Allowed",
+    icon: Globe,
+    className: "border-purple-500/20 bg-purple-500/10",
+    bgColor: "bg-purple-500/10",
+    textColor: "text-purple-700 dark:text-purple-400",
+    borderColor: "border-purple-500/30",
+  },
+  view_content: {
+    label: "View Content",
+    icon: Eye,
+    className: "border-cyan-500/20 bg-cyan-500/10",
+    bgColor: "bg-cyan-500/10",
+    textColor: "text-cyan-700 dark:text-cyan-400",
+    borderColor: "border-cyan-500/30",
+  },
+  edit_content: {
+    label: "Edit Content",
+    icon: Edit,
+    className: "border-orange-500/20 bg-orange-500/10",
+    bgColor: "bg-orange-500/10",
+    textColor: "text-orange-700 dark:text-orange-400",
+    borderColor: "border-orange-500/30",
+  },
+  grant_admin_role: {
+    label: "Grant Admin Role",
+    icon: Crown,
+    className: "border-yellow-500/20 bg-yellow-500/10",
+    bgColor: "bg-yellow-500/10",
+    textColor: "text-yellow-700 dark:text-yellow-400",
+    borderColor: "border-yellow-500/30",
+  },
+  revoke_admin_role: {
+    label: "Revoke Admin Role",
+    icon: ShieldOff,
+    className: "border-rose-500/20 bg-rose-500/10",
+    bgColor: "bg-rose-500/10",
+    textColor: "text-rose-700 dark:text-rose-400",
+    borderColor: "border-rose-500/30",
+  },
 };
+
+// Component to render action badge with unique styling
+function ActionBadge({ actionType }: { actionType: string }) {
+  const config = ACTION_TYPE_LABELS[actionType];
+  
+  if (!config) {
+    return (
+      <Badge variant="outline">
+        {actionType}
+      </Badge>
+    );
+  }
+
+  const Icon = config.icon;
+
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border ${config.className} ${config.textColor} font-medium`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      <span>{config.label}</span>
+    </div>
+  );
+}
 
 export default function AdminAuditLog() {
   const [loading, setLoading] = useState(true);
@@ -259,13 +364,7 @@ export default function AdminAuditLog() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
-                            ACTION_TYPE_LABELS[log.action_type]?.color as any || "outline"
-                          }
-                        >
-                          {ACTION_TYPE_LABELS[log.action_type]?.label || log.action_type}
-                        </Badge>
+                        <ActionBadge actionType={log.action_type} />
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -356,13 +455,7 @@ export default function AdminAuditLog() {
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Action Type</label>
                 <p className="mt-1">
-                  <Badge
-                    variant={
-                      ACTION_TYPE_LABELS[selectedLog.action_type]?.color as any || "outline"
-                    }
-                  >
-                    {ACTION_TYPE_LABELS[selectedLog.action_type]?.label || selectedLog.action_type}
-                  </Badge>
+                  <ActionBadge actionType={selectedLog.action_type} />
                 </p>
               </div>
 

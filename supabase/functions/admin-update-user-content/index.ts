@@ -261,18 +261,27 @@ serve(async (req) => {
     // Fields to always exclude (system fields and joined relations)
     const excludedFields = ['id', 'created_at', 'updated_at', 'blogs'];
     
-    // Get valid columns from currentContent (excluding system fields and relations)
-    const validColumns = Object.keys(currentContent).filter(
-      key => !excludedFields.includes(key) && typeof currentContent[key] !== 'object'
-    );
+    // Known JSONB fields that should be allowed (these are stored as objects but are valid columns)
+    const allowedJsonbFields = ['article_types'];
+    
+    // Get all columns that exist in currentContent (these are valid table columns)
+    const allColumns = Object.keys(currentContent);
     
     Object.keys(updates).forEach(key => {
       // Only include fields that:
-      // 1. Are in the valid columns list
+      // 1. Exist in the table (exist in currentContent)
       // 2. Are not in the excluded fields list
-      // 3. Are not objects (to avoid trying to update joined relations)
-      if (validColumns.includes(key) && !excludedFields.includes(key) && typeof updates[key] !== 'object') {
-        updateData[key] = updates[key];
+      // 3. Are allowed JSONB fields OR are primitive types (strings, numbers, booleans, null, arrays)
+      if (allColumns.includes(key) && !excludedFields.includes(key)) {
+        const isAllowedJsonb = allowedJsonbFields.includes(key);
+        const isPrimitive = updates[key] === null || 
+                           typeof updates[key] !== 'object' || 
+                           Array.isArray(updates[key]);
+        
+        // Allow if it's an allowed JSONB field or a primitive type
+        if (isAllowedJsonb || isPrimitive) {
+          updateData[key] = updates[key];
+        }
       }
     });
 
