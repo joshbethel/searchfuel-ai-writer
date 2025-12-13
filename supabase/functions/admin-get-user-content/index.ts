@@ -39,6 +39,7 @@ interface GetUserContentRequest {
   filters?: {
     blog_id?: string; // For blog_posts
     status?: string; // For blog_posts, articles
+    content_id?: string; // For fetching a specific blog_post, article, etc. by ID
     limit?: number;
     offset?: number;
   };
@@ -256,62 +257,116 @@ serve(async (req) => {
               summary.blog_posts_count = count || 0;
             }
           } else {
-            // Select minimal fields for table view, or all fields if minimal_fields is false
-            let postsQuery;
-            if (minimal_fields) {
-              postsQuery = supabaseService
-                .from('blog_posts')
-                .select(`
-                  id,
-                  title,
-                  slug,
-                  status,
-                  published_at,
-                  created_at,
-                  blog_id,
-                  blogs (
+            // If content_id is provided, fetch only that specific post
+            if (filters.content_id) {
+              let singlePostQuery;
+              if (minimal_fields) {
+                singlePostQuery = supabaseService
+                  .from('blog_posts')
+                  .select(`
                     id,
                     title,
-                    subdomain
-                  )
-                `)
-                .in('blog_id', blogIds);
+                    slug,
+                    status,
+                    published_at,
+                    created_at,
+                    blog_id,
+                    blogs (
+                      id,
+                      title,
+                      subdomain
+                    )
+                  `)
+                  .eq('id', filters.content_id)
+                  .in('blog_id', blogIds)
+                  .single();
+              } else {
+                singlePostQuery = supabaseService
+                  .from('blog_posts')
+                  .select(`
+                    *,
+                    blogs (
+                      id,
+                      title,
+                      subdomain,
+                      user_id
+                    )
+                  `)
+                  .eq('id', filters.content_id)
+                  .in('blog_id', blogIds)
+                  .single();
+              }
+
+              const { data: blogPost, error: postsError } = await singlePostQuery;
+              
+              if (postsError) {
+                console.error('Error fetching blog post:', postsError);
+                result.blog_posts = [];
+              } else {
+                result.blog_posts = blogPost ? [blogPost] : [];
+                summary.blog_posts_count = blogPost ? 1 : 0;
+                if (blogPost) {
+                  contentIds.push(blogPost.id);
+                }
+              }
             } else {
-              postsQuery = supabaseService
-                .from('blog_posts')
-                .select(`
-                  *,
-                  blogs (
+              // Select minimal fields for table view, or all fields if minimal_fields is false
+              let postsQuery;
+              if (minimal_fields) {
+                postsQuery = supabaseService
+                  .from('blog_posts')
+                  .select(`
                     id,
                     title,
-                    subdomain,
-                    user_id
-                  )
-                `)
-                .in('blog_id', blogIds);
-            }
+                    slug,
+                    status,
+                    published_at,
+                    created_at,
+                    blog_id,
+                    blogs (
+                      id,
+                      title,
+                      subdomain
+                    )
+                  `)
+                  .in('blog_id', blogIds);
+              } else {
+                postsQuery = supabaseService
+                  .from('blog_posts')
+                  .select(`
+                    *,
+                    blogs (
+                      id,
+                      title,
+                      subdomain,
+                      user_id
+                    )
+                  `)
+                  .in('blog_id', blogIds);
+              }
 
-            // Apply filters
-            if (filters.blog_id) {
-              postsQuery = postsQuery.eq('blog_id', filters.blog_id);
-            }
-            if (filters.status) {
-              postsQuery = postsQuery.eq('status', filters.status);
-            }
+              // Apply filters
+              if (filters.blog_id) {
+                postsQuery = postsQuery.eq('blog_id', filters.blog_id);
+              }
+              if (filters.status) {
+                postsQuery = postsQuery.eq('status', filters.status);
+              }
 
-            postsQuery = postsQuery
-              .order('created_at', { ascending: false })
-              .range(offset, offset + limit - 1);
+              postsQuery = postsQuery
+                .order('created_at', { ascending: false })
+                .range(offset, offset + limit - 1);
 
-            const { data: blogPosts, error: postsError } = await postsQuery;
-            
-            if (postsError) {
-              console.error('Error fetching blog posts:', postsError);
-            } else {
-              result.blog_posts = blogPosts || [];
-              summary.blog_posts_count = blogPosts?.length || 0;
-              if (blogPosts) {
-                contentIds.push(...blogPosts.map((p: any) => p.id));
+              const { data: blogPosts, error: postsError } = await postsQuery;
+              
+              if (postsError) {
+                console.error('Error fetching blog posts:', postsError);
+              } else {
+                result.blog_posts = blogPosts || [];
+                summary.blog_posts_count = blogPosts?.length || 0;
+                if (blogPosts) {
+                  contentIds.push(...blogPosts.map((p: any) => p.id));
+                }
               }
             }
           }

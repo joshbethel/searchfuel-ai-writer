@@ -68,21 +68,20 @@ export default function AdminUserBlogPostDetail() {
           target_user_id: userId,
           content_type: 'blog_posts',
           minimal_fields: false, // Need all fields for detail view
+          filters: {
+            content_id: postId, // Only fetch the specific post
+          },
         },
       });
 
       if (error) throw error;
 
-      if (data?.success && data?.content?.blog_posts) {
-        const foundPost = data.content.blog_posts.find((p: BlogPost) => p.id === postId);
-        if (foundPost) {
-          setPost(foundPost);
-          setFormData(foundPost);
-        } else {
-          throw new Error("Blog post not found");
-        }
+      if (data?.success && data?.content?.blog_posts && data.content.blog_posts.length > 0) {
+        const foundPost = data.content.blog_posts[0];
+        setPost(foundPost);
+        setFormData(foundPost);
       } else {
-        throw new Error(data?.error || "Failed to load blog post");
+        throw new Error(data?.error || "Blog post not found");
       }
     } catch (error: any) {
       console.error("Error loading blog post:", error);
