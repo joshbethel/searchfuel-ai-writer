@@ -10,6 +10,8 @@ import { ArticleTypeSettings } from "@/components/settings/ArticleTypeSettings";
 import { canCreateSite, getSiteLimitInfo } from "@/lib/utils/site-limits";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Trash2, ExternalLink } from "lucide-react";
 
 type CMSPlatform =
   | "wordpress"
@@ -62,9 +64,11 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   const [testing, setTesting] = useState(false);
   const [isLoadingExistingData, setIsLoadingExistingData] = useState(false);
   // Set initial step based on whether we're reconnecting
-  const [currentStep, setCurrentStep] = useState<"platform" | "connection" | "article-types">(
+  const [currentStep, setCurrentStep] = useState<"platform" | "connection" | "article-types" | "competitors">(
     propBlogId ? "connection" : "platform",
   );
+  const [competitors, setCompetitors] = useState<Array<{ domain: string; name?: string }>>([]);
+  const [newCompetitorDomain, setNewCompetitorDomain] = useState("");
   const [blogId, setBlogId] = useState<string | null>(propBlogId || null);
   const [siteLimitInfo, setSiteLimitInfo] = useState<{
     limit: number;
@@ -386,12 +390,90 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
   const handleArticleTypesSaved = () => {
     toast.success("Article preferences saved!");
-    // Pass the blogId to onComplete so the parent can set it as active
-    if (blogId) {
-      onComplete(blogId);
+    // Move to competitors step (only for new sites, skip for reconnecting)
+    if (!propBlogId && blogId) {
+      setCurrentStep("competitors");
     } else {
-      onComplete();
+      // Pass the blogId to onComplete so the parent can set it as active
+      if (blogId) {
+        onComplete(blogId);
+      } else {
+        onComplete();
+      }
     }
+  };
+
+  const validateDomain = (domain: string): boolean => {
+    const cleaned = domain.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+    const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+    return domainRegex.test(cleaned);
+  };
+
+  const handleAddCompetitor = () => {
+    if (!newCompetitorDomain.trim()) {
+      toast.error("Please enter a competitor domain");
+      return;
+    }
+
+    if (competitors.length >= 7) {
+      toast.error("Maximum 7 competitors allowed");
+      return;
+    }
+
+    let cleanedDomain = newCompetitorDomain.trim().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+    
+    if (!validateDomain(cleanedDomain)) {
+      toast.error("Please enter a valid domain (e.g., competitor.com)");
+      return;
+    }
+
+    if (competitors.some(c => c.domain.toLowerCase() === cleanedDomain.toLowerCase())) {
+      toast.error("This competitor is already added");
+      return;
+    }
+
+    setCompetitors([...competitors, { domain: cleanedDomain, name: cleanedDomain }]);
+    setNewCompetitorDomain("");
+  };
+
+  const handleRemoveCompetitor = (index: number) => {
+    setCompetitors(competitors.filter((_, i) => i !== index));
+  };
+
+  const handleCompetitorsContinue = async () => {
+    if (!blogId) {
+      onComplete();
+      return;
+    }
+
+    try {
+      // Save competitors to the blog
+      const { error } = await supabase
+        .from("blogs")
+        .update({
+          competitors: competitors as any,
+        })
+        .eq("id", blogId);
+
+      if (error) throw error;
+
+      if (competitors.length > 0) {
+        toast.success("Competitors saved!");
+      }
+      
+      // Complete onboarding
+      onComplete(blogId);
+    } catch (error: any) {
+      console.error("Error saving competitors:", error);
+      toast.error("Failed to save competitors, but continuing...");
+      // Continue anyway
+      onComplete(blogId);
+    }
+  };
+
+  const handleSkipCompetitors = () => {
+    // Skip competitors and complete onboarding
+    onComplete(blogId || undefined);
   };
 
   const renderConnectionForm = () => {
@@ -666,6 +748,127 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       </div>
     );
   };
+
+  // Competitors Step
+  if (currentStep === "competitors" && blogId) {
+    return (
+      <Card className="p-8 bg-card max-w-4xl">
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentStep("article-types")}
+            className="mb-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Audience & Competitors</h2>
+          <p className="text-muted-foreground mb-4">
+            Understanding your audience and competition ensures we generate the most effective keywords. 
+            You can add more later in Settings.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {/* Competitors Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label>Competitors ({competitors.length}/7)</Label>
+              {competitors.length < 7 && (
+                <span className="text-sm text-muted-foreground">
+                  Optional: Add competitors to improve keyword analysis
+                </span>
+              )}
+            </div>
+            
+            {competitors.length > 0 && (
+              <div className="space-y-3">
+                {competitors.map((competitor, index) => (
+                  <div
+                    key={index}
+                    className="flex items-start justify-between p-4 border rounded-lg bg-muted/50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                      <code className="text-sm">{competitor.domain}</code>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveCompetitor(index)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add New Competitor Form */}
+            {competitors.length < 7 && (
+              <div className="space-y-3 p-4 border rounded-lg border-dashed">
+                <h4 className="text-sm font-medium">Add Competitor</h4>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="new-competitor">Competitor Domain</Label>
+                  <Input
+                    id="new-competitor"
+                    placeholder="competitor.com"
+                    value={newCompetitorDomain}
+                    onChange={(e) => setNewCompetitorDomain(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCompetitor();
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter the domain of a competitor website (e.g., competitor.com)
+                  </p>
+                </div>
+
+                <Button onClick={handleAddCompetitor} variant="outline" className="w-full">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Competitor
+                </Button>
+              </div>
+            )}
+
+            {competitors.length >= 7 && (
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  Maximum 7 competitors reached. Remove one to add another.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Info Box */}
+          <div className="p-4 bg-muted rounded-lg space-y-2">
+            <h4 className="text-sm font-medium">How It Works</h4>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              <li>• System analyzes competitor content to find relevant keywords</li>
+              <li>• Competitor analysis improves keyword recommendations</li>
+              <li>• System also uses SERP data to find additional competitors</li>
+              <li>• You can add or change competitors anytime in Settings</li>
+            </ul>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pt-4">
+            <Button variant="outline" onClick={handleSkipCompetitors} className="flex-1">
+              Skip for Now
+            </Button>
+            <Button onClick={handleCompetitorsContinue} className="flex-1">
+              Continue
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   // Article Types Step
   if (currentStep === "article-types" && blogId) {
