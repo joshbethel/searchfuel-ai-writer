@@ -337,12 +337,12 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                 <div className="flex flex-wrap gap-2 items-center">
                   {keywords.slice(0, 3).map((k) => (
                     <div key={k.keyword} className="flex items-center gap-2">
-                      <Badge 
-                        variant="secondary"
-                        className="px-3 py-1 text-sm font-medium hover:bg-secondary/80 cursor-default transition-colors"
-                      >
-                        {k.keyword}
-                      </Badge>
+                    <Badge 
+                      variant="secondary"
+                      className="px-3 py-1 text-sm font-medium hover:bg-secondary/80 cursor-default transition-colors"
+                    >
+                      {k.keyword}
+                    </Badge>
                       {k.seoStats && (
                         <>
                           {k.seoStats.searchVolume && k.seoStats.searchVolume > 0 && (

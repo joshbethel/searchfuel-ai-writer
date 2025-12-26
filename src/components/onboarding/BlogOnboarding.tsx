@@ -394,12 +394,12 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     if (!propBlogId && blogId) {
       setCurrentStep("competitors");
     } else {
-      // Pass the blogId to onComplete so the parent can set it as active
-      if (blogId) {
-        onComplete(blogId);
-      } else {
-        onComplete();
-      }
+    // Pass the blogId to onComplete so the parent can set it as active
+    if (blogId) {
+      onComplete(blogId);
+    } else {
+      onComplete();
+    }
     }
   };
 
