@@ -165,7 +165,11 @@ export type Database = {
         Row: {
           article_type: string | null
           blog_id: string
+          competitor_analysis: Json | null
+          competitor_analysis_at: string | null
           content: string
+          content_score: number | null
+          content_score_factors: Json | null
           created_at: string
           excerpt: string | null
           external_post_id: string | null
@@ -187,7 +191,11 @@ export type Database = {
         Insert: {
           article_type?: string | null
           blog_id: string
+          competitor_analysis?: Json | null
+          competitor_analysis_at?: string | null
           content: string
+          content_score?: number | null
+          content_score_factors?: Json | null
           created_at?: string
           excerpt?: string | null
           external_post_id?: string | null
@@ -209,7 +217,11 @@ export type Database = {
         Update: {
           article_type?: string | null
           blog_id?: string
+          competitor_analysis?: Json | null
+          competitor_analysis_at?: string | null
           content?: string
+          content_score?: number | null
+          content_score_factors?: Json | null
           created_at?: string
           excerpt?: string | null
           external_post_id?: string | null
