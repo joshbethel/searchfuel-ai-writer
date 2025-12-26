@@ -9,6 +9,7 @@ import {
   Calendar as CalendarIcon,
   Shield,
   History,
+  Cog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -22,6 +23,7 @@ const navigation = [
   { name: "Articles", href: "/articles", icon: FileText },
   { name: "Keywords", href: "/keywords", icon: TrendingUp },
   { name: "Calendar", href: "/calendar", icon: CalendarIcon },
+  { name: "Site Settings", href: "/site-settings", icon: Cog },
 ];
 
 export function Sidebar() {
@@ -98,7 +100,8 @@ export function Sidebar() {
         <nav className="flex-1 p-4 space-y-1">
           {navigation.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.href;
+            const isActive = location.pathname === item.href || 
+              (item.href === "/site-settings" && location.pathname.startsWith("/site-settings"));
 
             return (
               <Link
