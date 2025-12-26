@@ -15,6 +15,9 @@ interface BlogPost {
   created_at: string;
   published_at: string;
   scheduled_publish_date?: string | null;
+  competitor_analysis?: any;
+  content_score?: number;
+  content_score_factors?: any;
 }
 
 export function useArticles() {
@@ -51,7 +54,10 @@ export function useArticles() {
           article_type,
           created_at,
           published_at,
-          scheduled_publish_date
+          scheduled_publish_date,
+          competitor_analysis,
+          content_score,
+          content_score_factors
         `)
         .eq("blog_id", selectedSite.id)
         .order('created_at', { ascending: false });
@@ -71,7 +77,10 @@ export function useArticles() {
           article_type: post.article_type,
           created_at: post.created_at,
           published_at: post.published_at,
-          scheduled_publish_date: post.scheduled_publish_date
+          scheduled_publish_date: post.scheduled_publish_date,
+          competitor_analysis: post.competitor_analysis,
+          content_score: post.content_score,
+          content_score_factors: post.content_score_factors
         } as BlogPost;
         
         return mappedPost;

@@ -150,6 +150,19 @@ export const fetchSeoDataSchema = z.object({
   }),
 }).strict();
 
+// Analyze competitor content request schema
+export const analyzeCompetitorContentSchema = z.object({
+  keyword: nonEmptyStringSchema,
+  blogId: uuidSchema,
+  location_code: locationCodeSchema.optional().default(2840),
+  language_code: languageCodeSchema.optional().default("en"),
+}).strict();
+
+// Calculate content score request schema
+export const calculateContentScoreSchema = z.object({
+  postId: uuidSchema,
+}).strict();
+
 /**
  * Helper function to validate request body and return typed data
  * 

@@ -306,6 +306,57 @@ serve(async (req: Request) => {
 - Include these mentions 2-3 times throughout the post if contextually appropriate`
           : "";
 
+        // Perform competitor analysis if keyword is available or use industry-based analysis
+        let competitorInsights = '';
+        let competitorAnalysis = null;
+        const analysisKeyword = body.keyword || `${blog.industry || 'best practices'} ${blog.company_name || ''}`.trim();
+
+        try {
+          // Call competitor analysis function
+          const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+          const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+          
+          if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+            const analysisResponse = await fetch(`${SUPABASE_URL}/functions/v1/analyze-competitor-content`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                keyword: analysisKeyword,
+                blogId: blog.id
+              })
+            });
+
+            if (analysisResponse.ok) {
+              const analysisData = await analysisResponse.json();
+              competitorAnalysis = analysisData.analysis;
+              
+              if (competitorAnalysis?.insights) {
+                competitorInsights = `
+Competitor Analysis Insights:
+- Average word count of top-ranking pages: ${competitorAnalysis.insights.avg_word_count}
+- Recommended word count: ${competitorAnalysis.insights.recommended_word_count}
+- Common heading patterns: ${competitorAnalysis.insights.common_headings.slice(0, 3).join(', ')}
+- Content gaps to address: ${competitorAnalysis.insights.content_gaps.join(', ') || 'None identified'}
+- Search volume: ${competitorAnalysis.insights.volume || 'N/A'}
+- Keyword difficulty: ${competitorAnalysis.insights.difficulty || 'N/A'}
+
+Generate content that:
+1. Matches or exceeds ${competitorAnalysis.insights.recommended_word_count} words
+2. Uses similar heading structure to top-ranking pages
+3. Addresses identified content gaps
+4. Provides more comprehensive coverage than competitors
+`;
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error in competitor analysis:", error);
+          // Continue without competitor insights
+        }
+
         // Generate blog post using Lovable AI
         const systemPrompt = `You are an expert SEO content writer. Create a comprehensive, engaging blog post for ${blog.company_name}.
 
@@ -320,8 +371,10 @@ Article Type: ${selectedArticleType.name}
 
 ${getArticleTypeGuidelines(selectedArticleType.type)}
 
+${competitorInsights}
+
 General Requirements:
-- Write approximately 2000 words (aim for 1800-2200)
+- Write approximately ${competitorAnalysis?.insights?.recommended_word_count || 2000} words (aim for ${competitorAnalysis?.insights?.recommended_word_count ? Math.round(competitorAnalysis.insights.recommended_word_count * 0.9) : 1800}-${competitorAnalysis?.insights?.recommended_word_count || 2200})
 - Include an engaging title optimized for SEO
 - Write a compelling excerpt (150-200 characters)
 - Use natural keyword integration
@@ -491,6 +544,41 @@ Format: 16:9 aspect ratio, centered single subject.`;
           .single();
 
         if (insertError) throw insertError;
+
+        // Store competitor analysis and calculate content score
+        if (competitorAnalysis) {
+          await supabase
+            .from("blog_posts")
+            .update({
+              competitor_analysis: competitorAnalysis,
+              competitor_analysis_at: new Date().toISOString()
+            })
+            .eq("id", post.id);
+        }
+
+        // Calculate and store content score
+        try {
+          const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+          const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+          
+          if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+            const scoreResponse = await fetch(`${SUPABASE_URL}/functions/v1/calculate-content-score`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ postId: post.id })
+            });
+            
+            if (scoreResponse.ok) {
+              console.log("Content score calculated successfully");
+            }
+          }
+        } catch (error) {
+          console.error("Error calculating content score:", error);
+          // Continue - score calculation is not critical
+        }
 
         // Increment usage count after successful post creation
         console.log(`Incrementing post count for user ${userId}`);

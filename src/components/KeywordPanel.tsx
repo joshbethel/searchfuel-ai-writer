@@ -336,13 +336,44 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                 <h3 className="text-sm font-medium text-muted-foreground mb-2">Extracted Keywords</h3>
                 <div className="flex flex-wrap gap-2 items-center">
                   {keywords.slice(0, 3).map((k) => (
-                    <Badge 
-                      key={k.keyword} 
-                      variant="secondary"
-                      className="px-3 py-1 text-sm font-medium hover:bg-secondary/80 cursor-default transition-colors"
-                    >
-                      {k.keyword}
-                    </Badge>
+                    <div key={k.keyword} className="flex items-center gap-2">
+                      <Badge 
+                        variant="secondary"
+                        className="px-3 py-1 text-sm font-medium hover:bg-secondary/80 cursor-default transition-colors"
+                      >
+                        {k.keyword}
+                      </Badge>
+                      {k.seoStats && (
+                        <>
+                          {k.seoStats.searchVolume && k.seoStats.searchVolume > 0 && (
+                            <Badge 
+                              variant="outline" 
+                              className={cn(
+                                "text-xs",
+                                k.seoStats.searchVolume > 10000 ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                                k.seoStats.searchVolume > 1000 ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+                                "bg-gray-500/10 text-gray-600 border-gray-500/20"
+                              )}
+                            >
+                              Vol: {k.seoStats.searchVolume.toLocaleString()}
+                            </Badge>
+                          )}
+                          {k.seoStats.keywordDifficulty !== undefined && k.seoStats.keywordDifficulty !== 50 && (
+                            <Badge 
+                              variant="outline"
+                              className={cn(
+                                "text-xs",
+                                k.seoStats.keywordDifficulty <= 20 ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                                k.seoStats.keywordDifficulty <= 40 ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+                                "bg-red-500/10 text-red-600 border-red-500/20"
+                              )}
+                            >
+                              Diff: {k.seoStats.keywordDifficulty}
+                            </Badge>
+                          )}
+                        </>
+                      )}
+                    </div>
                   ))}
                   {keywords.length > 3 && (
                     <span className="text-sm text-muted-foreground font-medium">+{keywords.length - 3} more</span>
@@ -424,26 +455,38 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
                               <TrendingUp className="w-4 h-4 text-blue-500" />
-                              <span className="text-sm font-medium">
+                              <Badge 
+                                variant="outline"
+                                className={cn(
+                                  "text-xs",
+                                  k.seoStats?.searchVolume && k.seoStats.searchVolume > 10000 ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                                  k.seoStats?.searchVolume && k.seoStats.searchVolume > 1000 ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+                                  "bg-gray-500/10 text-gray-600 border-gray-500/20"
+                                )}
+                              >
                                 {k.seoStats?.searchVolume && k.seoStats.searchVolume > 0
                                   ? k.seoStats.searchVolume.toLocaleString()
-                                  : <span className="text-muted-foreground">No data</span>
-                                }
-                              </span>
+                                  : 'N/A'}
+                              </Badge>
                             </div>
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2">
                               <Target className="w-4 h-4 text-orange-500" />
-                              <span className="text-sm font-medium">
+                              <Badge 
+                                variant="outline"
+                                className={cn(
+                                  "text-xs",
+                                  k.seoStats?.keywordDifficulty && k.seoStats.keywordDifficulty <= 20 ? "bg-green-500/10 text-green-600 border-green-500/20" :
+                                  k.seoStats?.keywordDifficulty && k.seoStats.keywordDifficulty <= 40 ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+                                  "bg-red-500/10 text-red-600 border-red-500/20"
+                                )}
+                              >
                                 {k.seoStats?.keywordDifficulty && 
-                                 k.seoStats.keywordDifficulty !== 50 && 
-                                 k.seoStats.searchVolume && 
-                                 k.seoStats.searchVolume > 0
+                                 k.seoStats.keywordDifficulty !== 50
                                   ? `${k.seoStats.keywordDifficulty}`
-                                  : <span className="text-muted-foreground">No data</span>
-                                }
-                              </span>
+                                  : 'N/A'}
+                              </Badge>
                             </div>
                           </td>
                           <td className="py-3 px-4">

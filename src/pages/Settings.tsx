@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { BacklinkSettings } from "@/components/settings/BacklinkSettings";
 import { ArticleTypeSettings } from "@/components/settings/ArticleTypeSettings";
+import { CompetitorSettings } from "@/components/settings/CompetitorSettings";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getPlanLimits } from "@/lib/utils/subscription-limits";
 import type { Database } from "@/integrations/supabase/types";
@@ -86,7 +87,7 @@ export default function Settings() {
   const [siteSearchQuery, setSiteSearchQuery] = useState("");
   
   const tabParam = searchParams.get('tab');
-  const defaultTab = (tabParam === 'backlinks' || tabParam === 'article-types' || tabParam === 'subscription' || tabParam === 'sites') ? tabParam : 'account';
+  const defaultTab = (tabParam === 'backlinks' || tabParam === 'article-types' || tabParam === 'subscription' || tabParam === 'sites' || tabParam === 'competitors') ? tabParam : 'account';
   const sessionId = searchParams.get('session_id');
   const canceled = searchParams.get('canceled');
 
@@ -551,11 +552,12 @@ export default function Settings() {
         </div>
 
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="sites">Sites</TabsTrigger>
           <TabsTrigger value="article-types">Article Types</TabsTrigger>
           <TabsTrigger value="backlinks">Backlinks</TabsTrigger>
+          <TabsTrigger value="competitors">Competitors</TabsTrigger>
           <TabsTrigger value="subscription">Subscription</TabsTrigger>
         </TabsList>
 
@@ -1127,6 +1129,18 @@ export default function Settings() {
               <Card>
                 <CardContent className="flex flex-col items-center py-12">
                   <p className="text-muted-foreground">Complete blog setup to configure backlinks</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="competitors" className="mt-6">
+            {blogId ? (
+              <CompetitorSettings blogId={blogId} />
+            ) : (
+              <Card>
+                <CardContent className="flex flex-col items-center py-12">
+                  <p className="text-muted-foreground">Select a site to configure competitors</p>
                 </CardContent>
               </Card>
             )}

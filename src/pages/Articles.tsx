@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useArticles } from "@/hooks/use-articles";
 import { useSiteContext } from "@/contexts/SiteContext";
 import KeywordPanel from '@/components/KeywordPanel';
+import { CompetitorAnalysisPanel } from '@/components/CompetitorAnalysisPanel';
 import { GenerateArticleDialog } from "@/components/GenerateArticleDialog";
 import { ArticleCalendar } from "@/components/ArticleCalendar";
 import { EditArticleDialog } from "@/components/EditArticleDialog";
@@ -702,7 +703,14 @@ export default function Articles() {
                           Preview
                         </Button>
                       </div>
-                      <div>
+                      <div className="space-y-4">
+                        {post.competitor_analysis && (
+                          <CompetitorAnalysisPanel
+                            analysis={post.competitor_analysis}
+                            contentScore={post.content_score}
+                            scoreFactors={post.content_score_factors}
+                          />
+                        )}
                         <KeywordPanel id={post.id} kind="blog_post" />
                       </div>
                     </div>
@@ -800,7 +808,14 @@ export default function Articles() {
                       </div>
                     </div>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-4">
+                    {post.competitor_analysis && (
+                      <CompetitorAnalysisPanel
+                        analysis={post.competitor_analysis}
+                        contentScore={post.content_score}
+                        scoreFactors={post.content_score_factors}
+                      />
+                    )}
                     <KeywordPanel id={post.id} kind="blog_post" />
                   </div>
                 </Card>
@@ -858,7 +873,14 @@ export default function Articles() {
                     </div>
                   </div>
                 </div>
-                <div className="mt-4">
+                <div className="mt-4 space-y-4">
+                  {post.competitor_analysis && (
+                    <CompetitorAnalysisPanel
+                      analysis={post.competitor_analysis}
+                      contentScore={post.content_score}
+                      scoreFactors={post.content_score_factors}
+                    />
+                  )}
                   <KeywordPanel id={post.id} kind="blog_post" />
                 </div>
               </Card>
