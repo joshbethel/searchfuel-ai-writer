@@ -54,10 +54,7 @@ export function useArticles() {
           article_type,
           created_at,
           published_at,
-          scheduled_publish_date,
-          competitor_analysis,
-          content_score,
-          content_score_factors
+          scheduled_publish_date
         `)
         .eq("blog_id", selectedSite.id)
         .order('created_at', { ascending: false });
@@ -72,15 +69,12 @@ export function useArticles() {
           title: post.title,
           slug: post.slug,
           status: post.status,
-          publishing_status: post.publishing_status,
+          publishing_status: post.publishing_status || 'pending',
           external_post_id: post.external_post_id,
-          article_type: post.article_type,
+          article_type: post.article_type || '',
           created_at: post.created_at,
-          published_at: post.published_at,
-          scheduled_publish_date: post.scheduled_publish_date,
-          competitor_analysis: post.competitor_analysis,
-          content_score: post.content_score,
-          content_score_factors: post.content_score_factors
+          published_at: post.published_at || '',
+          scheduled_publish_date: post.scheduled_publish_date
         } as BlogPost;
         
         return mappedPost;

@@ -142,6 +142,11 @@ serve(async (req) => {
     }
 
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
+    }
+    
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Validate request body
