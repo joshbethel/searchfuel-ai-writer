@@ -1460,6 +1460,63 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           </p>
         </div>
 
+        {/* Site Limit Warning */}
+        {siteLimitInfo && !siteLimitInfo.canCreate && (
+          <Alert className="mb-6 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertTitle className="text-amber-800 dark:text-amber-200">Site Limit Reached</AlertTitle>
+            <AlertDescription className="text-amber-700 dark:text-amber-300">
+              You've reached your site limit ({siteLimitInfo.count} of {siteLimitInfo.limit} sites). Please upgrade your
+              plan to add more sites.
+              <Button
+                variant="link"
+                className="p-0 h-auto ml-2 text-amber-700 dark:text-amber-300 underline"
+                onClick={() => {
+                  onCancel();
+                  navigate("/plans");
+                }}
+              >
+                Upgrade Now →
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {siteLimitInfo && siteLimitInfo.remaining > 0 && (
+          <Alert className="mb-6 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+            <AlertDescription className="text-blue-700 dark:text-blue-300">
+              You can add {siteLimitInfo.remaining} more {siteLimitInfo.remaining === 1 ? "site" : "sites"} (
+              {siteLimitInfo.count} of {siteLimitInfo.limit} used).
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-2 gap-10">
+          {CMS_PLATFORMS.map((platform) => (
+            <button
+              key={platform.id}
+              onClick={() => {
+                setSelectedPlatform(platform.id);
+                setConnectionData({ ...connectionData, platform: platform.id });
+                setCurrentStep("connection");
+              }}
+              className="p-4 rounded-lg border-2 border-border hover:border-accent transition-all bg-card hover:bg-accent/5 flex flex-col items-center gap-2 text-center"
+            >
+              <span className="text-3xl">{platform.icon}</span>
+              <span className="text-sm font-medium text-foreground">{platform.name}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-8 flex justify-end">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
   // Fallback: if reconnecting but no platform loaded, show error
   return (
     <Card className="p-8 bg-card max-w-4xl">
