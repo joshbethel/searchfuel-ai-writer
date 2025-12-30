@@ -81,6 +81,10 @@ export const fetchKeywordsSchema = z.object({
 }).strict();
 
 // Scan website request schema
+export const analyzeWebsiteSchema = z.object({
+  url: urlSchema,
+});
+
 export const scanWebsiteSchema = z.object({
   url: urlSchema,
 }).strict();

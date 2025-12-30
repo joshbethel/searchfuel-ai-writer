@@ -135,31 +135,31 @@ export function Sidebar() {
               
               {/* Admin Links */}
               <div className="space-y-1 px-2">
-                <Link
-                  to="/admin"
-                  className={cn(
+              <Link
+                to="/admin"
+                className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all border",
-                    location.pathname === "/admin" || 
-                    (location.pathname.startsWith("/admin/") && !location.pathname.startsWith("/admin/audit-log") && !location.pathname.startsWith("/admin/users"))
+                  location.pathname === "/admin" || 
+                  (location.pathname.startsWith("/admin/") && !location.pathname.startsWith("/admin/audit-log") && !location.pathname.startsWith("/admin/users"))
                       ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-sm"
                       : "border-amber-500/10 bg-amber-500/5 text-muted-foreground hover:bg-amber-500/10 hover:border-amber-500/20 hover:text-amber-600 dark:hover:text-amber-400"
-                  )}
-                >
-                  <Shield className="w-5 h-5" />
-                  Admin
-                </Link>
-                <Link
-                  to="/admin/audit-log"
-                  className={cn(
+                )}
+              >
+                <Shield className="w-5 h-5" />
+                Admin
+              </Link>
+              <Link
+                to="/admin/audit-log"
+                className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all border",
-                    location.pathname === "/admin/audit-log"
+                  location.pathname === "/admin/audit-log"
                       ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-sm"
                       : "border-amber-500/10 bg-amber-500/5 text-muted-foreground hover:bg-amber-500/10 hover:border-amber-500/20 hover:text-amber-600 dark:hover:text-amber-400"
-                  )}
-                >
-                  <History className="w-5 h-5" />
-                  Audit Log
-                </Link>
+                )}
+              >
+                <History className="w-5 h-5" />
+                Audit Log
+              </Link>
               </div>
             </>
           )}

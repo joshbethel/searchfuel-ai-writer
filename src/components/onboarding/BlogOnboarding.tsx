@@ -57,16 +57,46 @@ const CMS_PLATFORMS = [
   // { id: "rest_api" as const, name: "REST API", icon: "🔌", description: "Custom REST API" },
 ];
 
+type OnboardingStep = 
+  | "website-url"      // NEW: Step 1 - Business Website URL
+  | "business-info"    // NEW: Step 2 - Business Information
+  | "competitors"       // ENHANCED: Step 3 - Competitors
+  | "cms-connection"   // ENHANCED: Step 4 - CMS (Optional)
+  | "article-types"    // UNCHANGED: Step 5 - Article Types
+  | "platform"         // Legacy: For reconnecting existing sites
+  | "connection";      // Legacy: For reconnecting existing sites
+
+interface BusinessInfo {
+  company_name: string;
+  company_description: string;
+  industry: string;
+  target_audience: string;
+}
+
 export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId }: BlogOnboardingProps) {
   const navigate = useNavigate();
   const [selectedPlatform, setSelectedPlatform] = useState<CMSPlatform | null>(null);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [isLoadingExistingData, setIsLoadingExistingData] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
   // Set initial step based on whether we're reconnecting
-  const [currentStep, setCurrentStep] = useState<"platform" | "connection" | "article-types" | "competitors">(
-    propBlogId ? "connection" : "platform",
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(
+    propBlogId ? "connection" : "website-url",
   );
+  
+  // NEW: Business website URL (Step 1)
+  const [businessWebsiteUrl, setBusinessWebsiteUrl] = useState("");
+  
+  // NEW: Business information (Step 2)
+  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({
+    company_name: "",
+    company_description: "",
+    industry: "",
+    target_audience: "",
+  });
+  
   const [competitors, setCompetitors] = useState<Array<{ domain: string; name?: string }>>([]);
   const [newCompetitorDomain, setNewCompetitorDomain] = useState("");
   const [blogId, setBlogId] = useState<string | null>(propBlogId || null);
@@ -91,9 +121,17 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         // Pre-load existing data before showing UI to avoid flicker
         loadExistingBlogData(propBlogId);
       } else {
-        // Reset state when opening for new site
+        // Reset state when opening for new site - start with website URL
         setSelectedPlatform(null);
-        setCurrentStep("platform");
+        setCurrentStep("website-url");
+        setBusinessWebsiteUrl("");
+        setBusinessInfo({
+          company_name: "",
+          company_description: "",
+          industry: "",
+          target_audience: "",
+        });
+        setCompetitors([]);
         setConnectionData({
           platform: "wordpress",
           siteUrl: "",
@@ -101,6 +139,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           apiSecret: "",
         });
         setIsLoadingExistingData(false);
+        setIsAnalyzing(false);
       }
     }
   }, [open, propBlogId]);
@@ -147,6 +186,196 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       setSiteLimitInfo(info);
     } catch (error) {
       console.error("Error checking site limit:", error);
+    }
+  };
+
+  // NEW: Handle business website URL step (Step 1)
+  const handleBusinessWebsiteContinue = async () => {
+    if (!businessWebsiteUrl.trim()) {
+      toast.error("Please enter your business website URL");
+      return;
+    }
+
+    // Format URL
+    const formattedUrl = businessWebsiteUrl.trim().match(/^https?:\/\//)
+      ? businessWebsiteUrl.trim()
+      : `https://${businessWebsiteUrl.trim()}`;
+
+    // Validate URL
+    try {
+      new URL(formattedUrl);
+    } catch {
+      toast.error("Please enter a valid URL (e.g., yourbusiness.com)");
+      return;
+    }
+
+    // Check for duplicate website_homepage
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, "");
+      const { data: existingSites, error: checkError } = await supabase
+        .from("blogs")
+        .select("id, website_homepage, title")
+        .eq("user_id", user.id);
+
+      if (checkError) {
+        console.error("Error checking for existing sites:", checkError);
+      } else {
+        const urlExists = existingSites?.some((site) => {
+          const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, "");
+          return existingHomepage === normalizedUrl;
+        });
+
+        if (urlExists) {
+          const existingSite = existingSites?.find((site) => {
+            const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, "");
+            return existingHomepage === normalizedUrl;
+          });
+
+          toast.error(
+            `A site with this website URL already exists: ${existingSite?.title || "Untitled Site"}. ` +
+              `Please use a different URL or edit the existing site from Settings.`,
+          );
+          return;
+        }
+      }
+    } catch (error: any) {
+      console.error("Error checking URL:", error);
+      toast.error("Failed to verify URL");
+      return;
+    }
+
+    // Call analyze-website function
+    setIsAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("analyze-website", {
+        body: { url: formattedUrl },
+      });
+
+      if (error) throw error;
+
+      if (data?.success && data?.businessInfo) {
+        // Auto-populate business info with extracted data
+        setBusinessInfo({
+          company_name: data.businessInfo.company_name || "",
+          company_description: data.businessInfo.company_description || "",
+          industry: data.businessInfo.industry || "",
+          target_audience: "",
+        });
+
+        // Auto-populate competitors if available
+        if (data.competitors && Array.isArray(data.competitors) && data.competitors.length > 0) {
+          setCompetitors(data.competitors);
+        }
+
+        toast.success("Website analyzed successfully!");
+      } else {
+        // Fallback: extract basic info from URL if analysis fails
+        const hostname = new URL(formattedUrl).hostname;
+        const siteName = hostname.split(".")[0];
+        
+        setBusinessInfo({
+          company_name: siteName.charAt(0).toUpperCase() + siteName.slice(1),
+          company_description: "",
+          industry: "",
+          target_audience: "",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error analyzing website:", error);
+      // Fallback: extract basic info from URL
+      const hostname = new URL(formattedUrl).hostname;
+      const siteName = hostname.split(".")[0];
+      
+      setBusinessInfo({
+        company_name: siteName.charAt(0).toUpperCase() + siteName.slice(1),
+        company_description: "",
+        industry: "",
+        target_audience: "",
+      });
+      
+      toast.error("Could not analyze website automatically. Please fill in the information manually.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+
+    // Navigate to business info step
+    setCurrentStep("business-info");
+  };
+
+  // NEW: Handle business information step (Step 2)
+  const handleBusinessInfoContinue = async () => {
+    if (!businessInfo.company_name.trim()) {
+      toast.error("Please enter your company name");
+      return;
+    }
+
+    if (!businessInfo.company_description.trim()) {
+      toast.error("Please enter a company description");
+      return;
+    }
+
+    // Check site limit
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const canCreate = await canCreateSite(user.id);
+      if (!canCreate) {
+        toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+        navigate("/plans");
+        return;
+      }
+
+      // Format business website URL
+      const formattedUrl = businessWebsiteUrl.trim().match(/^https?:\/\//)
+        ? businessWebsiteUrl.trim()
+        : `https://${businessWebsiteUrl.trim()}`;
+
+      // Extract site name from URL for title
+      const siteName = new URL(formattedUrl).hostname.split(".")[0];
+
+      // Create blog with business information (no CMS yet)
+      const blogData = {
+        mode: "existing_site",
+        subdomain: null,
+        title: businessInfo.company_name || siteName.charAt(0).toUpperCase() + siteName.slice(1),
+        description: businessInfo.company_description,
+        company_name: businessInfo.company_name,
+        company_description: businessInfo.company_description,
+        industry: businessInfo.industry || null,
+        target_audience: businessInfo.target_audience || null,
+        website_homepage: formattedUrl,
+        cms_platform: null, // CMS not connected yet
+        cms_site_url: null,
+        cms_credentials: null,
+        onboarding_completed: false, // Not completed until CMS or skip
+        is_published: true,
+      };
+
+      const { data: resultData, error } = await supabase
+        .from("blogs")
+        .insert({
+          user_id: user.id,
+          ...blogData,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success("Site created! Now let's add competitors.");
+      setBlogId(resultData.id);
+      setCurrentStep("competitors");
+    } catch (error: any) {
+      console.error("Error creating site:", error);
+      toast.error("Failed to create site: " + error.message);
     }
   };
 
@@ -318,7 +547,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         console.warn("⚠️ Storing credentials in plaintext (encryption unavailable)");
       }
 
-      // If reconnecting, update existing blog; otherwise create new one
+      // If reconnecting (propBlogId exists), update existing blog
       if (propBlogId) {
         // Update existing blog with new CMS credentials
         const updateData = {
@@ -334,8 +563,25 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
         toast.success("CMS reconnected successfully!");
         setBlogId(propBlogId);
+        setCurrentStep("article-types");
+      } else if (blogId) {
+        // Update existing blog (created in business info step) with CMS connection
+        const updateData = {
+          cms_platform: selectedPlatform,
+          cms_site_url: formattedUrl,
+          cms_credentials: encryptedCredentials,
+          onboarding_completed: true,
+          last_sync_at: new Date().toISOString(),
+        };
+
+        const { error } = await supabase.from("blogs").update(updateData).eq("id", blogId);
+
+        if (error) throw error;
+
+        toast.success("CMS connected successfully!");
+        setCurrentStep("article-types");
       } else {
-        // Create new blog
+        // Legacy: Create new blog (shouldn't happen in new flow, but keep for backward compatibility)
         const siteName = new URL(formattedUrl).hostname.split(".")[0];
         const blogData = {
           mode: "existing_site",
@@ -364,23 +610,11 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
         toast.success("CMS connected successfully!");
         setBlogId(resultData.id);
+        setCurrentStep("article-types");
       }
 
-      // Automatically generate the first article only for new sites
-      if (!propBlogId && blogId) {
-        toast.info("Generating your first article...");
-        try {
-          await supabase.functions.invoke("generate-blog-post", {
-            body: { blogId: blogId },
-          });
-          toast.success("First article generated! Check your dashboard.");
-        } catch (genError) {
-          console.error("Error generating first article:", genError);
-          toast.error("CMS connected but article generation failed. You can generate articles from the Articles page.");
-        }
-      }
-
-      setCurrentStep("article-types");
+      // Note: Article generation will happen after article types are configured
+      // (removed from here to allow user to configure article types first)
     } catch (error: any) {
       toast.error("Failed to connect CMS: " + error.message);
     } finally {
@@ -388,18 +622,32 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     }
   };
 
-  const handleArticleTypesSaved = () => {
+  const handleArticleTypesSaved = async () => {
     toast.success("Article preferences saved!");
-    // Move to competitors step (only for new sites, skip for reconnecting)
-    if (!propBlogId && blogId) {
-      setCurrentStep("competitors");
-    } else {
-    // Pass the blogId to onComplete so the parent can set it as active
+    
+    // Mark onboarding as completed
+    if (blogId) {
+      try {
+        const { error } = await supabase
+          .from("blogs")
+          .update({
+            onboarding_completed: true,
+          })
+          .eq("id", blogId);
+
+        if (error) {
+          console.error("Error completing onboarding:", error);
+        }
+      } catch (error) {
+        console.error("Error completing onboarding:", error);
+      }
+    }
+    
+    // Complete onboarding
     if (blogId) {
       onComplete(blogId);
     } else {
       onComplete();
-    }
     }
   };
 
@@ -461,19 +709,45 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         toast.success("Competitors saved!");
       }
       
-      // Complete onboarding
-      onComplete(blogId);
+      // Navigate to CMS connection step (optional)
+      setCurrentStep("cms-connection");
     } catch (error: any) {
       console.error("Error saving competitors:", error);
       toast.error("Failed to save competitors, but continuing...");
-      // Continue anyway
-      onComplete(blogId);
+      // Continue to CMS step anyway
+      setCurrentStep("cms-connection");
     }
   };
 
   const handleSkipCompetitors = () => {
-    // Skip competitors and complete onboarding
-    onComplete(blogId || undefined);
+    // Skip competitors and go to CMS step
+    setCurrentStep("cms-connection");
+  };
+
+  // NEW: Handle skipping CMS connection
+  const handleSkipCMS = async () => {
+    if (!blogId) {
+      onComplete();
+      return;
+    }
+
+    try {
+      // Mark onboarding as completed without CMS
+      const { error } = await supabase
+        .from("blogs")
+        .update({
+          onboarding_completed: true,
+        })
+        .eq("id", blogId);
+
+      if (error) throw error;
+
+      toast.success("Site setup complete! You can connect your CMS later from Settings.");
+      onComplete(blogId);
+    } catch (error: any) {
+      console.error("Error completing onboarding:", error);
+      toast.error("Failed to complete setup");
+    }
   };
 
   const renderConnectionForm = () => {
@@ -493,9 +767,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                 onCancel();
                 navigate("/settings?tab=sites");
               } else {
-                // When creating new site, go back to platform selection
+                // When creating new site, go back to CMS platform selection
                 setSelectedPlatform(null);
-                setCurrentStep("platform");
+                setCurrentStep("cms-connection");
               }
             }}
           >
@@ -733,6 +1007,11 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                 "Test Connection"
               )}
             </Button>
+            {!propBlogId && (
+              <Button variant="outline" onClick={handleSkipCMS} className="flex-1">
+                Skip
+              </Button>
+            )}
             <Button onClick={handleConnect} disabled={loading || !connectionData.siteUrl} className="flex-1">
               {loading ? (
                 <>
@@ -749,6 +1028,192 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     );
   };
 
+  // Step 1: Business Website URL
+  if (currentStep === "website-url" && !propBlogId) {
+    return (
+      <Card className="p-8 bg-card max-w-2xl">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-foreground mb-2">Welcome to SearchFuel</h2>
+          <p className="text-muted-foreground">
+            Let's start by understanding your business. Enter your website URL and we'll help you get started.
+          </p>
+        </div>
+
+        {/* Site Limit Warning */}
+        {siteLimitInfo && !siteLimitInfo.canCreate && (
+          <Alert className="mb-6 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertTitle className="text-amber-800 dark:text-amber-200">Site Limit Reached</AlertTitle>
+            <AlertDescription className="text-amber-700 dark:text-amber-300">
+              You've reached your site limit ({siteLimitInfo.count} of {siteLimitInfo.limit} sites). Please upgrade your
+              plan to add more sites.
+              <Button
+                variant="link"
+                className="p-0 h-auto ml-2 text-amber-700 dark:text-amber-300 underline"
+                onClick={() => {
+                  onCancel();
+                  navigate("/plans");
+                }}
+              >
+                Upgrade Now →
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {siteLimitInfo && siteLimitInfo.remaining > 0 && (
+          <Alert className="mb-6 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+            <AlertDescription className="text-blue-700 dark:text-blue-300">
+              You can add {siteLimitInfo.remaining} more {siteLimitInfo.remaining === 1 ? "site" : "sites"} (
+              {siteLimitInfo.count} of {siteLimitInfo.limit} used).
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="businessWebsite">Business Website URL *</Label>
+            <Input
+              id="businessWebsite"
+              type="text"
+              placeholder="yourbusiness.com or https://yourbusiness.com"
+              value={businessWebsiteUrl}
+              onChange={(e) => setBusinessWebsiteUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && businessWebsiteUrl.trim()) {
+                  handleBusinessWebsiteContinue();
+                }
+              }}
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Enter your main business website URL. We'll use this to understand your business and generate relevant content.
+            </p>
+          </div>
+
+          <div className="bg-accent/5 border border-accent/20 rounded-lg p-4">
+            <p className="text-sm text-muted-foreground">
+              💡 <strong>Tip:</strong> This is your business website (e.g., yourbusiness.com). 
+              You can connect your CMS/blog platform later if it's different.
+            </p>
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button variant="outline" onClick={onCancel} className="flex-1">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleBusinessWebsiteContinue} 
+              disabled={!businessWebsiteUrl.trim() || isAnalyzing}
+              className="flex-1"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                "Continue"
+              )}
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // Step 2: Business Information
+  if (currentStep === "business-info" && !propBlogId) {
+    return (
+      <Card className="p-8 bg-card max-w-2xl">
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentStep("website-url")}
+            className="mb-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Business Information</h2>
+          <p className="text-muted-foreground">
+            Tell us about your business. We've pre-filled some information based on your website.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="companyName">Company Name *</Label>
+            <Input
+              id="companyName"
+              type="text"
+              placeholder="Your Company Name"
+              value={businessInfo.company_name}
+              onChange={(e) => setBusinessInfo({ ...businessInfo, company_name: e.target.value })}
+              className="mt-1"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="companyDescription">Company Description *</Label>
+            <textarea
+              id="companyDescription"
+              rows={4}
+              placeholder="Describe what your business does, your products/services, and your target market..."
+              value={businessInfo.company_description}
+              onChange={(e) => setBusinessInfo({ ...businessInfo, company_description: e.target.value })}
+              className="mt-1 flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              This helps us understand your business and generate relevant content.
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="industry">Industry (Optional)</Label>
+            <Input
+              id="industry"
+              type="text"
+              placeholder="e.g., SaaS, E-commerce, Healthcare, Technology"
+              value={businessInfo.industry}
+              onChange={(e) => setBusinessInfo({ ...businessInfo, industry: e.target.value })}
+              className="mt-1"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="targetAudience">Target Audience (Optional)</Label>
+            <Input
+              id="targetAudience"
+              type="text"
+              placeholder="e.g., Small business owners, Developers, Marketing professionals"
+              value={businessInfo.target_audience}
+              onChange={(e) => setBusinessInfo({ ...businessInfo, target_audience: e.target.value })}
+              className="mt-1"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button variant="outline" onClick={() => setCurrentStep("website-url")} className="flex-1">
+              Back
+            </Button>
+            <Button onClick={handleBusinessInfoContinue} className="flex-1" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Continue"
+              )}
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   // Competitors Step
   if (currentStep === "competitors" && blogId) {
     return (
@@ -757,7 +1222,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCurrentStep("article-types")}
+            onClick={() => setCurrentStep("business-info")}
             className="mb-4"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -904,14 +1369,23 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     return <Card className="p-8 bg-card max-w-2xl">{renderConnectionForm()}</Card>;
   }
 
-  // Platform Selection Step - only show for new sites
-  if (!propBlogId) {
+  // CMS Connection Step (Step 4) - Platform Selection with Skip option
+  if (currentStep === "cms-connection" && !selectedPlatform && !propBlogId) {
     return (
       <Card className="p-8 bg-card max-w-4xl">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your CMS</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentStep("competitors")}
+            className="mb-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your CMS (Optional)</h2>
           <p className="text-muted-foreground">
-            Choose your platform to automatically sync and publish SEO-optimized content
+            Connect your CMS now to enable automatic publishing, or skip and connect later from Settings.
           </p>
         </div>
 
@@ -953,7 +1427,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
               onClick={() => {
                 setSelectedPlatform(platform.id);
                 setConnectionData({ ...connectionData, platform: platform.id });
-                setCurrentStep("connection");
+                setCurrentStep(currentStep === "cms-connection" ? "connection" : "connection");
               }}
               className="p-4 rounded-lg border-2 border-border hover:border-accent transition-all bg-card hover:bg-accent/5 flex flex-col items-center gap-2 text-center"
             >
@@ -963,7 +1437,10 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           ))}
         </div>
 
-        <div className="mt-8 flex justify-end">
+        <div className="mt-8 flex justify-between">
+          <Button variant="outline" onClick={handleSkipCMS}>
+            Skip & Continue
+          </Button>
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
@@ -971,6 +1448,17 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       </Card>
     );
   }
+
+  // Legacy: Platform Selection Step - only show for reconnecting or legacy flow
+  if (!propBlogId && currentStep === "platform") {
+    return (
+      <Card className="p-8 bg-card max-w-4xl">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your CMS</h2>
+          <p className="text-muted-foreground">
+            Choose your platform to automatically sync and publish SEO-optimized content
+          </p>
+        </div>
 
   // Fallback: if reconnecting but no platform loaded, show error
   return (
