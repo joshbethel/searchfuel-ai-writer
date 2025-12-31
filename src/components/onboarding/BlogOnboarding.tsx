@@ -493,10 +493,29 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         ? businessWebsiteUrl.trim()
         : `https://${businessWebsiteUrl.trim()}`;
 
+      // Normalize URL for comparison
+      const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, "");
+
+      // Check if a blog already exists for this website URL
+      const { data: existingSites, error: checkError } = await supabase
+        .from("blogs")
+        .select("id, website_homepage, title")
+        .eq("user_id", user.id);
+
+      if (checkError) {
+        console.error("Error checking for existing sites:", checkError);
+      }
+
+      // Find existing blog for this URL
+      const existingBlog = existingSites?.find((site) => {
+        const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, "");
+        return existingHomepage === normalizedUrl;
+      });
+
       // Extract site name from URL for title
       const siteName = new URL(formattedUrl).hostname.split(".")[0];
 
-      // Create blog with business information (no CMS yet)
+      // Prepare blog data
       const blogData = {
         mode: "existing_site",
         subdomain: null,
@@ -514,23 +533,48 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         is_published: true,
       };
 
-      const { data: resultData, error } = await supabase
-        .from("blogs")
-        .insert({
-          user_id: user.id,
-          ...blogData,
-        })
-        .select()
-        .single();
+      // Check if blog already exists (either in state or in database for this URL)
+      const existingBlogId = blogId || existingBlog?.id;
 
-      if (error) throw error;
+      if (existingBlogId) {
+        // Update existing blog
+        const { error } = await supabase
+          .from("blogs")
+          .update(blogData)
+          .eq("id", existingBlogId);
 
-      // Refresh the site switcher to show the new site
-      await refreshSites();
+        if (error) throw error;
 
-      toast.success("Site created! Now let's add competitors.");
-      setBlogId(resultData.id);
-      setCurrentStep("competitors");
+        // Ensure blogId is set in state
+        if (!blogId) {
+          setBlogId(existingBlogId);
+        }
+
+        // Refresh the site switcher to show updated site
+        await refreshSites();
+
+        toast.success("Business information updated!");
+        setCurrentStep("competitors");
+      } else {
+        // Create new blog
+        const { data: resultData, error } = await supabase
+          .from("blogs")
+          .insert({
+            user_id: user.id,
+            ...blogData,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Refresh the site switcher to show the new site
+        await refreshSites();
+
+        toast.success("Site created! Now let's add competitors.");
+        setBlogId(resultData.id);
+        setCurrentStep("competitors");
+      }
     } catch (error: any) {
       console.error("Error creating site:", error);
       toast.error("Failed to create site: " + error.message);
