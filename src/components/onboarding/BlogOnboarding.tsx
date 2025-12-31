@@ -80,6 +80,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   const [testing, setTesting] = useState(false);
   const [isLoadingExistingData, setIsLoadingExistingData] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStep, setAnalysisStep] = useState<string>("");
   
   // Set initial step based on whether we're reconnecting
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(
@@ -254,10 +255,35 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
     // Call analyze-website function
     setIsAnalyzing(true);
+    setAnalysisStep("Fetching website content...");
+    
+    // Simulate progress steps for better UX
+    const progressSteps = [
+      "Fetching website content...",
+      "Extracting business information...",
+      "Analyzing website content...",
+      "Finding additional pages...",
+      "Analyzing business context with AI...",
+      "Discovering competitors...",
+    ];
+    
+    let currentStepIndex = 0;
+    let stepInterval: ReturnType<typeof setInterval> | null = null;
+    
     try {
+      stepInterval = setInterval(() => {
+        if (currentStepIndex < progressSteps.length - 1) {
+          currentStepIndex++;
+          setAnalysisStep(progressSteps[currentStepIndex]);
+        }
+      }, 2000); // Update every 2 seconds
+      
       const { data, error } = await supabase.functions.invoke("analyze-website", {
         body: { url: formattedUrl },
       });
+      
+      if (stepInterval) clearInterval(stepInterval);
+      setAnalysisStep("Finalizing analysis...");
 
       if (error) throw error;
 
@@ -289,6 +315,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         });
       }
     } catch (error: any) {
+      if (stepInterval) clearInterval(stepInterval);
       console.error("Error analyzing website:", error);
       // Fallback: extract basic info from URL
       const hostname = new URL(formattedUrl).hostname;
@@ -304,6 +331,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       toast.error("Could not analyze website automatically. Please fill in the information manually.");
     } finally {
       setIsAnalyzing(false);
+      setAnalysisStep("");
     }
 
     // Navigate to business info step
@@ -1102,7 +1130,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           </div>
 
           <div className="flex gap-2 pt-4">
-            <Button variant="outline" onClick={onCancel} className="flex-1">
+            <Button variant="outline" onClick={onCancel} className="flex-1" disabled={isAnalyzing}>
               Cancel
             </Button>
             <Button 
@@ -1110,18 +1138,56 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
               disabled={!businessWebsiteUrl.trim() || isAnalyzing}
               className="flex-1"
             >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                "Continue"
-              )}
+              Continue
             </Button>
           </div>
         </div>
       </Card>
+
+      {/* Enhanced Loading Overlay */}
+      {isAnalyzing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm">
+          {/* Gradient backgrounds */}
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute -left-1/4 top-0 h-full w-1/2 bg-gradient-to-r from-primary/20 via-primary/10 to-transparent blur-3xl" />
+            <div className="absolute -right-1/4 top-0 h-full w-1/2 bg-gradient-to-l from-primary/20 via-primary/10 to-transparent blur-3xl" />
+          </div>
+          
+          {/* Content */}
+          <div className="relative z-10 flex flex-col items-center justify-center space-y-6 px-4">
+            {/* Animated Spinner */}
+            <div className="relative">
+              <div className="h-16 w-16 rounded-full border-4 border-primary/20"></div>
+              <div className="absolute top-0 left-0 h-16 w-16 animate-spin rounded-full border-4 border-transparent border-t-primary"></div>
+              <div className="absolute top-1/2 left-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-primary/10"></div>
+            </div>
+            
+            {/* Main Message */}
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-semibold text-foreground">
+                We are analyzing your website
+              </h3>
+              <p className="text-sm text-muted-foreground animate-pulse">
+                {analysisStep || "Analyzing website content..."}
+              </p>
+            </div>
+            
+            {/* Progress Dots */}
+            <div className="flex space-x-2">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-2 w-2 rounded-full bg-primary/40 animate-pulse"
+                  style={{
+                    animationDelay: `${i * 0.2}s`,
+                    animationDuration: '1.4s',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     );
   }
 
