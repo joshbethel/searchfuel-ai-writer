@@ -164,6 +164,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           siteUrl: blog.cms_site_url || "",
         }));
         // Step is already set to "connection" initially when propBlogId exists
+      } else {
+        // Site doesn't have a CMS connected - show platform selection
+        setCurrentStep("platform");
       }
     } catch (error) {
       console.error("Error loading blog data:", error);
@@ -1449,14 +1452,18 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     );
   }
 
-  // Legacy: Platform Selection Step - only show for reconnecting or legacy flow
-  if (!propBlogId && currentStep === "platform") {
+  // Platform Selection Step - show for reconnecting (no CMS) or legacy flow
+  if (currentStep === "platform") {
     return (
       <Card className="p-8 bg-card max-w-4xl">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your CMS</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            {propBlogId ? "Connect Your CMS" : "Connect Your CMS"}
+          </h2>
           <p className="text-muted-foreground">
-            Choose your platform to automatically sync and publish SEO-optimized content
+            {propBlogId 
+              ? "Choose your CMS platform to enable automatic publishing of AI-generated articles"
+              : "Choose your platform to automatically sync and publish SEO-optimized content"}
           </p>
         </div>
 
