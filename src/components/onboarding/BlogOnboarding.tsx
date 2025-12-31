@@ -474,19 +474,11 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       return;
     }
 
-    // Check site limit
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
-
-      const canCreate = await canCreateSite(user.id);
-      if (!canCreate) {
-        toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
-        navigate("/plans");
-        return;
-      }
 
       // Format business website URL
       const formattedUrl = businessWebsiteUrl.trim().match(/^https?:\/\//)
@@ -496,21 +488,21 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       // Normalize URL for comparison
       const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, "");
 
-      // Check if a blog already exists for this website URL
-      const { data: existingSites, error: checkError } = await supabase
+      // ALWAYS check database first to see if blog already exists for this URL
+      const { data: existingSites } = await supabase
         .from("blogs")
         .select("id, website_homepage, title")
         .eq("user_id", user.id);
 
-      if (checkError) {
-        console.error("Error checking for existing sites:", checkError);
-      }
-
       // Find existing blog for this URL
       const existingBlog = existingSites?.find((site) => {
-        const existingHomepage = site.website_homepage?.toLowerCase().replace(/\/$/, "");
+        if (!site.website_homepage) return false;
+        const existingHomepage = site.website_homepage.toLowerCase().replace(/\/$/, "");
         return existingHomepage === normalizedUrl;
       });
+
+      // Use existing blog ID if found, otherwise use state blogId
+      const blogIdToUse = existingBlog?.id || blogId;
 
       // Extract site name from URL for title
       const siteName = new URL(formattedUrl).hostname.split(".")[0];
@@ -533,22 +525,17 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         is_published: true,
       };
 
-      // Check if blog already exists (either in state or in database for this URL)
-      const existingBlogId = blogId || existingBlog?.id;
-
-      if (existingBlogId) {
-        // Update existing blog
+      if (blogIdToUse) {
+        // Blog already exists - UPDATE it
         const { error } = await supabase
           .from("blogs")
           .update(blogData)
-          .eq("id", existingBlogId);
+          .eq("id", blogIdToUse);
 
         if (error) throw error;
 
         // Ensure blogId is set in state
-        if (!blogId) {
-          setBlogId(existingBlogId);
-        }
+        setBlogId(blogIdToUse);
 
         // Refresh the site switcher to show updated site
         await refreshSites();
@@ -556,7 +543,15 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         toast.success("Business information updated!");
         setCurrentStep("competitors");
       } else {
-        // Create new blog
+        // Blog doesn't exist - check site limit before creating
+        const canCreate = await canCreateSite(user.id);
+        if (!canCreate) {
+          toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
+          navigate("/plans");
+          return;
+        }
+
+        // CREATE new blog
         const { data: resultData, error } = await supabase
           .from("blogs")
           .insert({
@@ -568,11 +563,13 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
         if (error) throw error;
 
+        // Set blogId in state
+        setBlogId(resultData.id);
+
         // Refresh the site switcher to show the new site
         await refreshSites();
 
         toast.success("Site created! Now let's add competitors.");
-        setBlogId(resultData.id);
         setCurrentStep("competitors");
       }
     } catch (error: any) {
