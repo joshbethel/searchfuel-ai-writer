@@ -191,6 +191,7 @@ async function analyzeBusinessContext(
   structuredData: ReturnType<typeof extractStructuredData>
 ): Promise<{
   enhanced_industry?: string;
+  enhanced_description?: string;
   target_audience?: string;
   business_type?: string;
   value_proposition?: string;
@@ -202,27 +203,29 @@ async function analyzeBusinessContext(
   try {
     const systemPrompt = `You are an expert business analyst. Analyze the provided business information and extract:
 1. Most accurate industry classification
-2. Target audience description
-3. Business type (B2B, B2C, B2B2C, etc.)
-4. Value proposition (what makes them unique)
+2. Enhanced company description (improve/clarify the provided description, make it professional and comprehensive)
+3. Target audience description
+4. Business type (B2B, B2C, B2B2C, etc.)
+5. Value proposition (what makes them unique)
 
 Return ONLY a valid JSON object with these fields:
 {
   "enhanced_industry": "string",
+  "enhanced_description": "string (improved version of the company description, 2-3 sentences, professional)",
   "target_audience": "string",
   "business_type": "string",
   "value_proposition": "string"
 }`;
 
     const userPrompt = `Company: ${companyName}
-Description: ${description}
-Detected Industry: ${industry}
-Topics: ${contentAnalysis.topics.join(', ')}
-Headings: ${contentAnalysis.headings.slice(0, 5).map(h => h.text).join(', ')}
+Current Description: ${description || 'No description provided'}
+Detected Industry: ${industry || 'Unknown'}
+Topics: ${contentAnalysis.topics.join(', ') || 'None'}
+Headings: ${contentAnalysis.headings.slice(0, 5).map(h => h.text).join(', ') || 'None'}
 
 ${structuredData.organization ? `Structured Data: ${JSON.stringify(structuredData.organization).substring(0, 500)}` : ''}
 
-Analyze this business and provide insights.`;
+Analyze this business and provide insights. If the description is missing or incomplete, create a comprehensive professional description based on the available information.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -401,8 +404,63 @@ function extractBusinessInfo(html: string, url: string): {
     }
   }
   
-  // Use best available description
-  const companyDescription = ogDesc || description || '';
+  // Extract description from actual content if meta tags are missing or short
+  let companyDescription = ogDesc || description || '';
+  
+  // If description is missing or too short, try to extract from page content
+  if (!companyDescription || companyDescription.length < 50) {
+    // Remove script and style tags
+    let cleanHtml = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    cleanHtml = cleanHtml.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    
+    // Try to find hero section or main content
+    const heroMatch = cleanHtml.match(/<section[^>]*class=["'][^"']*hero[^"']*["'][^>]*>(.*?)<\/section>/is);
+    const mainMatch = cleanHtml.match(/<main[^>]*>(.*?)<\/main>/is);
+    const articleMatch = cleanHtml.match(/<article[^>]*>(.*?)<\/article>/is);
+    
+    const contentSection = heroMatch?.[1] || mainMatch?.[1] || articleMatch?.[1] || cleanHtml;
+    
+    // Extract first few paragraphs
+    const pMatches = contentSection.match(/<p[^>]*>([^<]+)<\/p>/gi);
+    if (pMatches && pMatches.length > 0) {
+      const paragraphs = pMatches.slice(0, 3)
+        .map(p => p.replace(/<[^>]+>/g, ' ').trim())
+        .filter(p => p.length > 20)
+        .join(' ');
+      
+      if (paragraphs.length > 50) {
+        companyDescription = paragraphs.substring(0, 300).trim();
+      }
+    }
+    
+    // If still no description, try to extract from first div with substantial text
+    if (!companyDescription || companyDescription.length < 50) {
+      const divMatches = contentSection.match(/<div[^>]*>([^<]{100,500})<\/div>/gi);
+      if (divMatches && divMatches.length > 0) {
+        const divText = divMatches[0]
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 300);
+        if (divText.length > 50) {
+          companyDescription = divText;
+        }
+      }
+    }
+  }
+  
+  // Decode HTML entities
+  if (companyDescription) {
+    companyDescription = companyDescription
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
   
   // Try to detect industry from content (basic keywords)
   let industry = '';
@@ -628,7 +686,8 @@ serve(async (req) => {
 
     // Combine all insights
     const enhancedIndustry = aiInsights.enhanced_industry || businessInfo.industry;
-    const enhancedDescription = businessInfo.company_description || '';
+    // Use AI-enhanced description if available, otherwise use extracted description
+    const enhancedDescription = aiInsights.enhanced_description || businessInfo.company_description || '';
 
     // Return enhanced structured response
     return new Response(

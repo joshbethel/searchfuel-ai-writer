@@ -267,7 +267,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           company_name: data.businessInfo.company_name || "",
           company_description: data.businessInfo.company_description || "",
           industry: data.businessInfo.industry || "",
-          target_audience: "",
+          target_audience: data.businessInfo.target_audience || "",
         });
 
         // Auto-populate competitors if available
