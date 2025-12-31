@@ -1127,19 +1127,21 @@ export default function Dashboard() {
         </Card>
       )}
 
-        {/* No CMS Disconnected Notice */}
+        {/* No CMS Connected Notice */}
         {blog && !blog.cms_platform && (
-          <Card className="p-6 mb-6 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+          <Card className="p-6 mb-6 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                <Unplug className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+              <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <Unplug className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-foreground mb-1">
-                  CMS Disconnected
+                  Connect Your CMS
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Your CMS is disconnected. Viewing historical data from all your published articles.
+                  {blogPosts.length > 0 
+                    ? "Your CMS is disconnected. Connect to enable automatic publishing of new articles."
+                    : "Connect your CMS to enable automatic publishing of AI-generated articles to your website."}
                 </p>
               </div>
               <Button 
@@ -1153,11 +1155,12 @@ export default function Dashboard() {
                       return;
                     }
                   }
+                  setIsReconnectingCMS(true);
                   setShowOnboarding(true);
                 }} 
                 size="sm"
               >
-                Connect New CMS
+                {blogPosts.length > 0 ? "Reconnect CMS" : "Connect CMS"}
               </Button>
             </div>
           </Card>
