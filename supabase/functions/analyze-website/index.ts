@@ -6,6 +6,349 @@ import {
   createValidationErrorResponse 
 } from "../_shared/validation.ts";
 
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const DATAFORSEO_LOGIN = Deno.env.get('DATAFORSEO_LOGIN');
+const DATAFORSEO_PASSWORD = Deno.env.get('DATAFORSEO_PASSWORD');
+
+// Extract structured data (JSON-LD, Schema.org) from HTML
+function extractStructuredData(html: string): {
+  organization?: Record<string, unknown>;
+  business?: Record<string, unknown>;
+  website?: Record<string, unknown>;
+} {
+  const structuredData: {
+    organization?: Record<string, unknown>;
+    business?: Record<string, unknown>;
+    website?: Record<string, unknown>;
+  } = {};
+
+  // Extract JSON-LD scripts
+  const jsonLdMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>(.*?)<\/script>/gis);
+  if (jsonLdMatches) {
+    for (const match of jsonLdMatches) {
+      try {
+        const jsonContent = match.replace(/<script[^>]*>|<\/script>/gi, '').trim();
+        const data = JSON.parse(jsonContent);
+        
+        // Handle arrays of structured data
+        const items = Array.isArray(data) ? data : [data];
+        
+        for (const item of items) {
+          const itemObj = item as Record<string, unknown>;
+          const type = (itemObj['@type'] || itemObj.type) as string | undefined;
+          if (type === 'Organization' || type === 'Corporation' || type === 'LocalBusiness') {
+            structuredData.organization = itemObj;
+          }
+          if (type === 'WebSite') {
+            structuredData.website = itemObj;
+          }
+          if (type === 'LocalBusiness' || type === 'ProfessionalService') {
+            structuredData.business = itemObj;
+          }
+        }
+      } catch (e) {
+        // Skip invalid JSON
+        console.log('Failed to parse JSON-LD:', e);
+      }
+    }
+  }
+
+  // Extract Schema.org microdata (basic extraction)
+  const schemaOrgMatches = html.match(/itemtype=["']https?:\/\/schema\.org\/(Organization|LocalBusiness|Corporation)["']/gi);
+  if (schemaOrgMatches) {
+    // Note: Full microdata parsing would require more complex parsing
+    // This is a basic detection
+  }
+
+  return structuredData;
+}
+
+// Extract content analysis (headings, topics, writing style)
+function analyzeContent(html: string): {
+  headings: Array<{ level: number; text: string }>;
+  topics: string[];
+  word_count: number;
+  content_structure: string;
+} {
+  // Remove script and style tags
+  let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+
+  // Extract headings
+  const headings: Array<{ level: number; text: string }> = [];
+  for (let level = 1; level <= 6; level++) {
+    const regex = new RegExp(`<h${level}[^>]*>([^<]+)<\/h${level}>`, 'gi');
+    const matches = text.matchAll(regex);
+    for (const match of matches) {
+      headings.push({
+        level,
+        text: match[1].trim()
+      });
+    }
+  }
+
+  // Extract paragraph content for word count
+  const pMatches = text.match(/<p[^>]*>([^<]+)<\/p>/gi) || [];
+  const paragraphs = pMatches.map(p => p.replace(/<[^>]+>/g, ' ').trim()).join(' ');
+  const wordCount = paragraphs.split(/\s+/).filter(w => w.length > 0).length;
+
+  // Extract topics from headings (first 10 unique)
+  const topics = [...new Set(headings.slice(0, 20).map(h => h.text))].slice(0, 10);
+
+  // Determine content structure
+  let contentStructure = 'standard';
+  if (headings.filter(h => h.level === 2).length > 5) {
+    contentStructure = 'detailed';
+  } else if (headings.length < 3) {
+    contentStructure = 'minimal';
+  }
+
+  return {
+    headings: headings.slice(0, 20),
+    topics,
+    word_count: wordCount,
+    content_structure: contentStructure
+  };
+}
+
+// Find additional pages (about, services, blog)
+async function findAdditionalPages(baseUrl: string, html: string): Promise<Array<{ url: string; type: string; content?: string }>> {
+  const urlObj = new URL(baseUrl);
+  const baseDomain = `${urlObj.protocol}//${urlObj.hostname}`;
+  const pages: Array<{ url: string; type: string; content?: string }> = [];
+
+  // Common page patterns
+  const pagePatterns = [
+    { path: '/about', type: 'about' },
+    { path: '/about-us', type: 'about' },
+    { path: '/services', type: 'services' },
+    { path: '/service', type: 'services' },
+    { path: '/blog', type: 'blog' },
+    { path: '/blog/', type: 'blog' },
+    { path: '/news', type: 'blog' },
+  ];
+
+  // Also check for links in HTML
+  const linkMatches = html.matchAll(/<a[^>]*href=["']([^"']+)["'][^>]*>/gi);
+  const foundLinks = new Set<string>();
+  
+  for (const match of linkMatches) {
+    const href = match[1];
+    try {
+      const linkUrl = new URL(href, baseUrl);
+      if (linkUrl.hostname === urlObj.hostname) {
+        const path = linkUrl.pathname.toLowerCase();
+        if (path.includes('/about')) {
+          foundLinks.add(linkUrl.toString());
+        } else if (path.includes('/service') || path.includes('/product')) {
+          foundLinks.add(linkUrl.toString());
+        } else if (path.includes('/blog') || path.includes('/news') || path.includes('/article')) {
+          foundLinks.add(linkUrl.toString());
+        }
+      }
+    } catch {
+      // Skip invalid URLs
+    }
+  }
+
+  // Try to fetch common pages
+  const pagesToCheck = [
+    ...pagePatterns.map(p => ({ url: `${baseDomain}${p.path}`, type: p.type })),
+    ...Array.from(foundLinks).slice(0, 3).map(url => ({ url, type: 'other' }))
+  ];
+
+  for (const page of pagesToCheck.slice(0, 5)) {
+    try {
+      const response = await fetch(page.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SearchFuel/1.0; +https://searchfuel.app)',
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+      
+      if (response.ok) {
+        const content = await response.text();
+        pages.push({
+          url: page.url,
+          type: page.type,
+          content: content.substring(0, 5000) // Limit content size
+        });
+      }
+    } catch {
+      // Skip failed fetches
+    }
+  }
+
+  return pages;
+}
+
+// AI-powered business context understanding
+async function analyzeBusinessContext(
+  companyName: string,
+  description: string,
+  industry: string,
+  contentAnalysis: ReturnType<typeof analyzeContent>,
+  structuredData: ReturnType<typeof extractStructuredData>
+): Promise<{
+  enhanced_industry?: string;
+  target_audience?: string;
+  business_type?: string;
+  value_proposition?: string;
+}> {
+  if (!LOVABLE_API_KEY) {
+    return {};
+  }
+
+  try {
+    const systemPrompt = `You are an expert business analyst. Analyze the provided business information and extract:
+1. Most accurate industry classification
+2. Target audience description
+3. Business type (B2B, B2C, B2B2C, etc.)
+4. Value proposition (what makes them unique)
+
+Return ONLY a valid JSON object with these fields:
+{
+  "enhanced_industry": "string",
+  "target_audience": "string",
+  "business_type": "string",
+  "value_proposition": "string"
+}`;
+
+    const userPrompt = `Company: ${companyName}
+Description: ${description}
+Detected Industry: ${industry}
+Topics: ${contentAnalysis.topics.join(', ')}
+Headings: ${contentAnalysis.headings.slice(0, 5).map(h => h.text).join(', ')}
+
+${structuredData.organization ? `Structured Data: ${JSON.stringify(structuredData.organization).substring(0, 500)}` : ''}
+
+Analyze this business and provide insights.`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (content) {
+        // Remove markdown code blocks if present
+        const cleanContent = content.replace(/```json\n?|```\n?/g, '').trim();
+        try {
+          return JSON.parse(cleanContent);
+        } catch {
+          // If parsing fails, return empty
+          return {};
+        }
+      }
+    }
+  } catch (error) {
+    console.error('AI analysis error:', error);
+  }
+
+  return {};
+}
+
+// SERP-based competitor discovery using DataForSEO
+async function discoverCompetitorsFromSERP(
+  companyName: string,
+  industry: string,
+  description: string
+): Promise<Array<{ domain: string; name?: string }>> {
+  if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
+    return [];
+  }
+
+  try {
+    // Create search query from company info
+    const searchQuery = industry 
+      ? `${industry} companies`
+      : companyName 
+        ? `companies like ${companyName}`
+        : description.substring(0, 50);
+
+    const serpResponse = await fetch('https://api.dataforseo.com/v3/serp/google/organic/live', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify([{
+        keyword: searchQuery,
+        location_code: 2840, // United States
+        language_code: 'en',
+        depth: 3
+      }]),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!serpResponse.ok) {
+      return [];
+    }
+
+    const serpData = await serpResponse.json();
+    
+    if (serpData.status_code !== 20000) {
+      return [];
+    }
+
+    const competitors: Array<{ domain: string; name?: string }> = [];
+    const seenDomains = new Set<string>();
+
+    const tasks = serpData.tasks || [];
+    for (const task of tasks) {
+      if (!task.result || !task.result[0]?.items) continue;
+      
+      for (const item of task.result[0].items.slice(0, 10)) {
+        if (item.type === 'organic' && item.url) {
+          try {
+            const domain = new URL(item.url).hostname.replace(/^www\./, '');
+            
+            // Skip if we've seen this domain or if it's a social media/generic site
+            if (seenDomains.has(domain) || 
+                domain.includes('facebook.com') ||
+                domain.includes('linkedin.com') ||
+                domain.includes('twitter.com') ||
+                domain.includes('youtube.com') ||
+                domain.includes('wikipedia.org')) {
+              continue;
+            }
+
+            seenDomains.add(domain);
+            competitors.push({
+              domain,
+              name: item.title || undefined
+            });
+
+            if (competitors.length >= 7) break;
+          } catch (e) {
+            // Skip invalid URLs
+          }
+        }
+      }
+      
+      if (competitors.length >= 7) break;
+    }
+
+    return competitors;
+  } catch (error) {
+    console.error('SERP competitor discovery error:', error);
+    return [];
+  }
+}
+
 // Extract business information from HTML
 function extractBusinessInfo(html: string, url: string): {
   company_name: string;
@@ -92,20 +435,82 @@ function extractBusinessInfo(html: string, url: string): {
   };
 }
 
-// Generate basic competitors (can be enhanced with SERP data later)
-function generateBasicCompetitors(url: string, industry: string): Array<{ domain: string; name?: string }> {
-  const competitors: Array<{ domain: string; name?: string }> = [];
+// Enhanced business info extraction using structured data
+function extractEnhancedBusinessInfo(
+  html: string,
+  url: string,
+  structuredData: ReturnType<typeof extractStructuredData>
+): {
+  company_name: string;
+  company_description: string;
+  industry: string;
+  language: string;
+} {
+  // Start with basic extraction
+  const basicInfo = extractBusinessInfo(html, url);
+
+  // Enhance with structured data
+  if (structuredData.organization) {
+    const org = structuredData.organization;
+    
+    // Use structured data name if available
+    const orgName = org.name as string | undefined;
+    if (orgName && orgName.trim()) {
+      basicInfo.company_name = orgName.trim();
+    }
+    
+    // Use structured data description if available
+    const orgDesc = org.description as string | undefined;
+    const orgAbout = org.about as string | undefined;
+    if (orgDesc && orgDesc.trim()) {
+      basicInfo.company_description = orgDesc.trim();
+    } else if (orgAbout && orgAbout.trim()) {
+      basicInfo.company_description = orgAbout.trim();
+    }
+  }
+
+  if (structuredData.business) {
+    const business = structuredData.business;
+    
+    // Extract industry from business type
+    const businessType = business['@type'] as string | undefined;
+    if (businessType && !basicInfo.industry) {
+      const typeStr = businessType.replace('https://schema.org/', '');
+      if (typeStr.includes('LocalBusiness')) {
+        // Try to extract from additionalType or serviceType
+        const additionalType = business.additionalType;
+        if (additionalType) {
+          const typeValue = Array.isArray(additionalType) 
+            ? additionalType[0] 
+            : additionalType;
+          if (typeof typeValue === 'string') {
+            basicInfo.industry = typeValue;
+          }
+        }
+      }
+    }
+  }
+
+  return basicInfo;
+}
+
+// Generate competitors using SERP data
+async function generateCompetitors(
+  url: string,
+  companyName: string,
+  industry: string,
+  description: string
+): Promise<Array<{ domain: string; name?: string }>> {
+  // Use SERP-based discovery
+  const serpCompetitors = await discoverCompetitorsFromSERP(companyName, industry, description);
   
+  // Filter out the current website
   try {
     const urlObj = new URL(url);
-    const hostname = urlObj.hostname.replace(/^www\./, '');
-    const domainParts = hostname.split('.');
-    
-    // For now, return empty array - will be enhanced with SERP data in future
-    // This is a placeholder that can be expanded
-    return competitors;
+    const currentDomain = urlObj.hostname.replace(/^www\./, '');
+    return serpCompetitors.filter(c => c.domain !== currentDomain);
   } catch {
-    return competitors;
+    return serpCompetitors;
   }
 }
 
@@ -186,23 +591,70 @@ serve(async (req) => {
       );
     }
 
-    // Extract business information
-    const businessInfo = extractBusinessInfo(html, url);
-    
-    // Generate competitors (basic for now, can be enhanced)
-    const competitors = generateBasicCompetitors(url, businessInfo.industry);
+    // Extract structured data (JSON-LD, Schema.org)
+    console.log('Extracting structured data...');
+    const structuredData = extractStructuredData(html);
 
-    // Return structured response
+    // Extract enhanced business information
+    console.log('Extracting business information...');
+    const businessInfo = extractEnhancedBusinessInfo(html, url, structuredData);
+
+    // Analyze content (headings, topics, structure)
+    console.log('Analyzing content...');
+    const contentAnalysis = analyzeContent(html);
+
+    // Find and analyze additional pages (about, services, blog)
+    console.log('Finding additional pages...');
+    const additionalPages = await findAdditionalPages(url, html);
+
+    // AI-powered business context understanding
+    console.log('Analyzing business context with AI...');
+    const aiInsights = await analyzeBusinessContext(
+      businessInfo.company_name,
+      businessInfo.company_description,
+      businessInfo.industry,
+      contentAnalysis,
+      structuredData
+    );
+
+    // Generate competitors using SERP data
+    console.log('Discovering competitors from SERP...');
+    const competitors = await generateCompetitors(
+      url,
+      businessInfo.company_name,
+      businessInfo.industry || aiInsights.enhanced_industry || '',
+      businessInfo.company_description
+    );
+
+    // Combine all insights
+    const enhancedIndustry = aiInsights.enhanced_industry || businessInfo.industry;
+    const enhancedDescription = businessInfo.company_description || '';
+
+    // Return enhanced structured response
     return new Response(
       JSON.stringify({
         success: true,
         businessInfo: {
           company_name: businessInfo.company_name,
-          company_description: businessInfo.company_description,
-          industry: businessInfo.industry,
+          company_description: enhancedDescription,
+          industry: enhancedIndustry,
           language: businessInfo.language,
+          target_audience: aiInsights.target_audience,
+          business_type: aiInsights.business_type,
+          value_proposition: aiInsights.value_proposition,
         },
         competitors: competitors,
+        content_analysis: {
+          headings: contentAnalysis.headings,
+          topics: contentAnalysis.topics,
+          word_count: contentAnalysis.word_count,
+          content_structure: contentAnalysis.content_structure,
+        },
+        additional_pages: additionalPages.map(p => ({
+          url: p.url,
+          type: p.type
+        })),
+        structured_data_found: !!(structuredData.organization || structuredData.business || structuredData.website),
       }),
       { 
         status: 200, 
