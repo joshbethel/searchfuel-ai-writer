@@ -11,7 +11,9 @@ import { canCreateSite, getSiteLimitInfo } from "@/lib/utils/site-limits";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Trash2, ExternalLink, Check } from "lucide-react";
+import { useSiteContext } from "@/contexts/SiteContext";
+import { cn } from "@/lib/utils";
 
 type CMSPlatform =
   | "wordpress"
@@ -75,6 +77,7 @@ interface BusinessInfo {
 
 export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId }: BlogOnboardingProps) {
   const navigate = useNavigate();
+  const { refreshSites } = useSiteContext();
   const [selectedPlatform, setSelectedPlatform] = useState<CMSPlatform | null>(null);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -101,6 +104,127 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   const [competitors, setCompetitors] = useState<Array<{ domain: string; name?: string }>>([]);
   const [newCompetitorDomain, setNewCompetitorDomain] = useState("");
   const [blogId, setBlogId] = useState<string | null>(propBlogId || null);
+
+  // Define onboarding steps for the stepper
+  const onboardingSteps = [
+    { id: "website-url", label: "Website URL", number: 1 },
+    { id: "business-info", label: "Business Info", number: 2 },
+    { id: "competitors", label: "Competitors", number: 3 },
+    { id: "cms-connection", label: "CMS Connection", number: 4, optional: true },
+    { id: "article-types", label: "Article Types", number: 5 },
+  ];
+
+  // Get current step index
+  const getCurrentStepIndex = () => {
+    return onboardingSteps.findIndex(step => step.id === currentStep);
+  };
+
+  // Check if a step is completed
+  const isStepCompleted = (stepId: string) => {
+    const currentIndex = getCurrentStepIndex();
+    const stepIndex = onboardingSteps.findIndex(step => step.id === stepId);
+    return stepIndex < currentIndex;
+  };
+
+  // Check if a step is accessible (can navigate to it)
+  const isStepAccessible = (stepId: string) => {
+    // Can navigate to completed steps or current step
+    return isStepCompleted(stepId) || stepId === currentStep;
+  };
+
+  // Stepper component
+  const OnboardingStepper = () => {
+    const currentIndex = getCurrentStepIndex();
+    const progress = ((currentIndex + 1) / onboardingSteps.length) * 100;
+
+    return (
+      <div className="mb-8">
+        {/* Progress bar */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-foreground">
+              Step {currentIndex + 1} of {onboardingSteps.length}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {Math.round(progress)}% Complete
+            </span>
+          </div>
+          <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-300 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Step indicators */}
+        <div className="flex items-center justify-between relative">
+          {/* Connector lines */}
+          <div className="absolute top-5 left-0 right-0 h-0.5 bg-border -z-10">
+            <div
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${(currentIndex / (onboardingSteps.length - 1)) * 100}%` }}
+            />
+          </div>
+
+          {onboardingSteps.map((step, index) => {
+            const isCompleted = isStepCompleted(step.id);
+            const isCurrent = step.id === currentStep;
+            const isAccessible = isStepAccessible(step.id);
+
+            return (
+              <div
+                key={step.id}
+                className="flex flex-col items-center flex-1 relative z-10"
+              >
+                {/* Step circle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isAccessible && step.id !== currentStep) {
+                      setCurrentStep(step.id as OnboardingStep);
+                    }
+                  }}
+                  disabled={!isAccessible}
+                  className={cn(
+                    "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-200",
+                    isCurrent && "border-primary bg-primary text-primary-foreground scale-110",
+                    isCompleted && !isCurrent && "border-primary bg-primary text-primary-foreground",
+                    !isCompleted && !isCurrent && "border-muted-foreground/30 bg-background text-muted-foreground",
+                    isAccessible && !isCurrent && "hover:scale-105 cursor-pointer",
+                    !isAccessible && "cursor-not-allowed opacity-50"
+                  )}
+                >
+                  {isCompleted && !isCurrent ? (
+                    <Check className="w-5 h-5" />
+                  ) : (
+                    <span className="text-sm font-semibold">{step.number}</span>
+                  )}
+                </button>
+
+                {/* Step label */}
+                <div className="mt-2 text-center">
+                  <div
+                    className={cn(
+                      "text-xs font-medium transition-colors",
+                      isCurrent && "text-primary",
+                      isCompleted && !isCurrent && "text-foreground",
+                      !isCompleted && !isCurrent && "text-muted-foreground"
+                    )}
+                  >
+                    {step.label}
+                  </div>
+                  {step.optional && (
+                    <div className="text-xs text-muted-foreground mt-0.5">(Optional)</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
   const [siteLimitInfo, setSiteLimitInfo] = useState<{
     limit: number;
     count: number;
@@ -401,6 +525,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
       if (error) throw error;
 
+      // Refresh the site switcher to show the new site
+      await refreshSites();
+
       toast.success("Site created! Now let's add competitors.");
       setBlogId(resultData.id);
       setCurrentStep("competitors");
@@ -609,6 +736,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
         if (error) throw error;
 
+        // Refresh the site switcher to show updated site
+        await refreshSites();
+
         toast.success("CMS connected successfully!");
         setCurrentStep("article-types");
       } else {
@@ -638,6 +768,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           .single();
 
         if (error) throw error;
+
+        // Refresh the site switcher to show the new site
+        await refreshSites();
 
         toast.success("CMS connected successfully!");
         setBlogId(resultData.id);
@@ -674,6 +807,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       }
     }
     
+    // Refresh the site switcher before completing
+    await refreshSites();
+
     // Complete onboarding
     if (blogId) {
       onComplete(blogId);
@@ -772,6 +908,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         .eq("id", blogId);
 
       if (error) throw error;
+
+      // Refresh the site switcher to show updated site
+      await refreshSites();
 
       toast.success("Site setup complete! You can connect your CMS later from Settings.");
       onComplete(blogId);
@@ -1064,6 +1203,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     return (
       <>
       <Card className="p-8 bg-card max-w-2xl">
+        <OnboardingStepper />
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-foreground mb-2">Welcome to SearchFuel</h2>
           <p className="text-muted-foreground">
@@ -1197,6 +1337,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   if (currentStep === "business-info" && !propBlogId) {
     return (
       <Card className="p-8 bg-card max-w-2xl">
+        <OnboardingStepper />
         <div className="mb-6">
           <Button
             variant="ghost"
@@ -1289,6 +1430,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   if (currentStep === "competitors" && blogId) {
     return (
       <Card className="p-8 bg-card max-w-4xl">
+        <OnboardingStepper />
         <div className="mb-6">
           <Button
             variant="ghost"
@@ -1410,6 +1552,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   if (currentStep === "article-types" && blogId) {
     return (
       <Card className="p-8 bg-card max-w-4xl">
+        <OnboardingStepper />
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-foreground mb-2">Select Article Types</h2>
           <p className="text-muted-foreground">
@@ -1444,6 +1587,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   if (currentStep === "cms-connection" && !selectedPlatform && !propBlogId) {
     return (
       <Card className="p-8 bg-card max-w-4xl">
+        <OnboardingStepper />
         <div className="mb-8">
           <Button
             variant="ghost"
