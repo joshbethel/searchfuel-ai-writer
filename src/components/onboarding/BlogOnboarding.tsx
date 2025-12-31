@@ -84,6 +84,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   const [isLoadingExistingData, setIsLoadingExistingData] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<string>("");
+  const [isSavingBusinessInfo, setIsSavingBusinessInfo] = useState(false);
   
   // Set initial step based on whether we're reconnecting
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(
@@ -104,6 +105,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   const [competitors, setCompetitors] = useState<Array<{ domain: string; name?: string }>>([]);
   const [newCompetitorDomain, setNewCompetitorDomain] = useState("");
   const [blogId, setBlogId] = useState<string | null>(propBlogId || null);
+  const [websiteExists, setWebsiteExists] = useState(false);
 
   // Define onboarding steps for the stepper
   const onboardingSteps = [
@@ -237,6 +239,56 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     apiKey: "",
     apiSecret: "",
   });
+
+  // Check if website exists when on business-info step
+  useEffect(() => {
+    const checkWebsiteExists = async () => {
+      if (currentStep === "business-info" && businessWebsiteUrl.trim() && !blogId) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const formattedUrl = businessWebsiteUrl.trim().match(/^https?:\/\//)
+            ? businessWebsiteUrl.trim()
+            : `https://${businessWebsiteUrl.trim()}`;
+          const normalizedUrl = formattedUrl.toLowerCase().replace(/\/$/, "");
+
+          const { data: existingSites } = await supabase
+            .from("blogs")
+            .select("id, website_homepage")
+            .eq("user_id", user.id);
+
+          const exists = existingSites?.some((site) => {
+            if (!site.website_homepage) return false;
+            const existingHomepage = site.website_homepage.toLowerCase().replace(/\/$/, "");
+            return existingHomepage === normalizedUrl;
+          });
+
+          if (exists) {
+            const existingBlog = existingSites?.find((site) => {
+              if (!site.website_homepage) return false;
+              const existingHomepage = site.website_homepage.toLowerCase().replace(/\/$/, "");
+              return existingHomepage === normalizedUrl;
+            });
+            if (existingBlog?.id) {
+              setBlogId(existingBlog.id);
+              setWebsiteExists(true);
+            }
+          } else {
+            setWebsiteExists(false);
+          }
+        } catch (error) {
+          console.error("Error checking website existence:", error);
+        }
+      } else if (blogId) {
+        setWebsiteExists(true);
+      } else {
+        setWebsiteExists(false);
+      }
+    };
+
+    checkWebsiteExists();
+  }, [currentStep, businessWebsiteUrl, blogId]);
 
   // Check site limit on mount and load existing blog data if reconnecting
   useEffect(() => {
@@ -474,6 +526,8 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       return;
     }
 
+    setIsSavingBusinessInfo(true);
+
     try {
       const {
         data: { user },
@@ -503,6 +557,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
       // Use existing blog ID if found, otherwise use state blogId
       const blogIdToUse = existingBlog?.id || blogId;
+      const isUpdating = !!blogIdToUse;
 
       // Extract site name from URL for title
       const siteName = new URL(formattedUrl).hostname.split(".")[0];
@@ -573,8 +628,10 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         setCurrentStep("competitors");
       }
     } catch (error: any) {
-      console.error("Error creating site:", error);
-      toast.error("Failed to create site: " + error.message);
+      console.error("Error creating/updating site:", error);
+      toast.error("Failed to save business information: " + error.message);
+    } finally {
+      setIsSavingBusinessInfo(false);
     }
   };
 
@@ -1447,18 +1504,56 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
             />
           </div>
 
+          {/* Status indicator */}
+          {(blogId || websiteExists) && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+                <Check className="w-4 h-4" />
+                <span>Website already created. Changes will update your existing site.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Loading indicator when processing */}
+          {isSavingBusinessInfo && (
+            <div className="mb-4 p-4 bg-muted rounded-lg">
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {(blogId || websiteExists) ? "Updating website..." : "Creating website..."}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {(blogId || websiteExists)
+                      ? "Saving your business information..." 
+                      : "Setting up your website, this will only take a moment..."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-4">
-            <Button variant="outline" onClick={() => setCurrentStep("website-url")} className="flex-1">
+            <Button 
+              variant="outline" 
+              onClick={() => setCurrentStep("website-url")} 
+              className="flex-1"
+              disabled={isSavingBusinessInfo}
+            >
               Back
             </Button>
-            <Button onClick={handleBusinessInfoContinue} className="flex-1" disabled={loading}>
-              {loading ? (
+            <Button 
+              onClick={handleBusinessInfoContinue} 
+              className="flex-1" 
+              disabled={isSavingBusinessInfo || !businessInfo.company_name.trim() || !businessInfo.company_description.trim()}
+            >
+              {isSavingBusinessInfo ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating...
+                  {(blogId || websiteExists) ? "Updating..." : "Creating..."}
                 </>
               ) : (
-                "Continue"
+                (blogId || websiteExists) ? "Update & Continue" : "Create Website & Continue"
               )}
             </Button>
           </div>
