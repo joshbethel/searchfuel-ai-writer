@@ -1062,6 +1062,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   // Step 1: Business Website URL
   if (currentStep === "website-url" && !propBlogId) {
     return (
+      <>
       <Card className="p-8 bg-card max-w-2xl">
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-foreground mb-2">Welcome to SearchFuel</h2>
@@ -1188,6 +1189,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           </div>
         </div>
       )}
+      </>
     );
   }
 
