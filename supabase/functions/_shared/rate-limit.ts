@@ -33,7 +33,7 @@ export async function checkRateLimit(
       .from('rate_limits')
       .select('count, reset_at')
       .eq('key', key)
-      .single();
+      .single() as { data: { count: number; reset_at: number } | null; error: { code?: string; message?: string } | null };
 
     let currentCount = 0;
     if (!getError && existing) {
@@ -54,8 +54,8 @@ export async function checkRateLimit(
 
     // Increment count (upsert)
     const newCount = currentCount + 1;
-    const { error: upsertError } = await supabaseService
-      .from('rate_limits')
+    const { error: upsertError } = await (supabaseService
+      .from('rate_limits') as any)
       .upsert({
         key,
         identifier,
