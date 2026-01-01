@@ -88,7 +88,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   
   // Set initial step based on whether we're reconnecting
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(
-    propBlogId ? "connection" : "website-url",
+    propBlogId ? "cms-connection" : "website-url",
   );
   
   // NEW: Business website URL (Step 1)
@@ -130,6 +130,10 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
   // Check if a step is accessible (can navigate to it)
   const isStepAccessible = (stepId: string) => {
+    // When reconnecting, only allow navigation to the current step (CMS connection)
+    if (propBlogId) {
+      return stepId === currentStep;
+    }
     // Can navigate to completed steps or current step
     return isStepCompleted(stepId) || stepId === currentStep;
   };
@@ -1030,15 +1034,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
             variant="ghost"
             size="sm"
             onClick={() => {
-              if (propBlogId) {
-                // When reconnecting, go back to sites tab
-                onCancel();
-                navigate("/settings?tab=sites");
-              } else {
-                // When creating new site, go back to CMS platform selection
-                setSelectedPlatform(null);
-                setCurrentStep("cms-connection");
-              }
+              // Go back to CMS platform selection (works for both new and reconnecting)
+              setSelectedPlatform(null);
+              setCurrentStep("cms-connection");
             }}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1716,11 +1714,16 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
   // Connection Form Step - show if we're on connection step and have platform, or if reconnecting
   if ((currentStep === "connection" && selectedPlatform) || (propBlogId && selectedPlatform)) {
-    return <Card className="p-8 bg-card max-w-2xl">{renderConnectionForm()}</Card>;
+    return (
+      <Card className="p-8 bg-card max-w-2xl">
+        {propBlogId && <OnboardingStepper />}
+        {renderConnectionForm()}
+      </Card>
+    );
   }
 
   // CMS Connection Step (Step 4) - Platform Selection with Skip option
-  if (currentStep === "cms-connection" && !selectedPlatform && !propBlogId) {
+  if (currentStep === "cms-connection" && !selectedPlatform) {
     return (
       <Card className="p-8 bg-card max-w-4xl">
         <OnboardingStepper />
@@ -1728,15 +1731,27 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCurrentStep("competitors")}
+            onClick={() => {
+              if (propBlogId) {
+                // When reconnecting, cancel and go back to dashboard
+                onCancel();
+              } else {
+                // When in normal flow, go back to competitors step
+                setCurrentStep("competitors");
+              }
+            }}
             className="mb-4"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
-          <h2 className="text-2xl font-bold text-foreground mb-2">Connect Your CMS (Optional)</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            {propBlogId ? "Reconnect CMS" : "Connect Your CMS (Optional)"}
+          </h2>
           <p className="text-muted-foreground">
-            Connect your CMS now to enable automatic publishing, or skip and connect later from Settings.
+            {propBlogId 
+              ? "Choose your CMS platform to enable automatic publishing of AI-generated articles"
+              : "Connect your CMS now to enable automatic publishing, or skip and connect later from Settings."}
           </p>
         </div>
 
@@ -1789,9 +1804,11 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         </div>
 
         <div className="mt-8 flex justify-between">
-          <Button variant="outline" onClick={handleSkipCMS}>
-            Skip & Continue
-          </Button>
+          {!propBlogId && (
+            <Button variant="outline" onClick={handleSkipCMS}>
+              Skip & Continue
+            </Button>
+          )}
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
