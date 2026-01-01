@@ -87,38 +87,53 @@ export function SiteProvider({ children }: { children: ReactNode }) {
 
   // Select a site
   const selectSite = useCallback(async (siteId: string) => {
-    // First try to find in allSites
-    let site = allSites.find(s => s.id === siteId);
-    
-    // If not found, fetch it directly
-    if (!site) {
-      try {
-        const { data, error } = await supabase
-          .from('blogs')
-          .select('*')
-          .eq('id', siteId)
-          .single();
+    // Always fetch fresh data from database to ensure we have the latest updates
+    try {
+      const { data, error } = await supabase
+        .from('blogs')
+        .select('*')
+        .eq('id', siteId)
+        .single();
+      
+      if (!error && data) {
+        const site = data as Blog;
+        setSelectedSite(site);
+        localStorage.setItem(STORAGE_KEY, siteId);
         
-        if (!error && data) {
-          site = data as Blog;
-          // Add to allSites if not already there
-          setAllSites(prev => {
-            if (!prev.find(s => s.id === siteId)) {
-              return [site!, ...prev];
-            }
-            return prev;
-          });
-        }
-      } catch (error) {
+        // Update allSites with the fresh data
+        setAllSites(prev => {
+          const index = prev.findIndex(s => s.id === siteId);
+          if (index >= 0) {
+            // Update existing site
+            const updated = [...prev];
+            updated[index] = site;
+            return updated;
+          } else {
+            // Add new site
+            return [site, ...prev];
+          }
+        });
+      } else {
         console.error('Error fetching site:', error);
+        // Fallback to cached data if fetch fails
+        const cachedSite = allSites.find(s => s.id === siteId);
+        if (cachedSite) {
+          setSelectedSite(cachedSite);
+          localStorage.setItem(STORAGE_KEY, siteId);
+        } else {
+          console.warn(`Site ${siteId} not found`);
+        }
       }
-    }
-    
-    if (site) {
-      setSelectedSite(site);
-      localStorage.setItem(STORAGE_KEY, siteId);
-    } else {
-      console.warn(`Site ${siteId} not found`);
+    } catch (error) {
+      console.error('Error fetching site:', error);
+      // Fallback to cached data if fetch fails
+      const cachedSite = allSites.find(s => s.id === siteId);
+      if (cachedSite) {
+        setSelectedSite(cachedSite);
+        localStorage.setItem(STORAGE_KEY, siteId);
+      } else {
+        console.warn(`Site ${siteId} not found`);
+      }
     }
   }, [allSites]);
 
