@@ -344,16 +344,17 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           platform: blog.cms_platform as CMSPlatform,
           siteUrl: blog.cms_site_url || "",
         }));
-        // Step is already set to "connection" initially when propBlogId exists
+        // If CMS is already connected, go to connection form step
+        setCurrentStep("connection");
       } else {
-        // Site doesn't have a CMS connected - show platform selection
-        setCurrentStep("platform");
+        // Site doesn't have a CMS connected - show CMS connection step with stepper
+        setCurrentStep("cms-connection");
       }
     } catch (error) {
       console.error("Error loading blog data:", error);
       toast.error("Failed to load site information");
-      // Fallback to platform selection if loading fails
-      setCurrentStep("platform");
+      // Fallback to CMS connection step if loading fails
+      setCurrentStep("cms-connection");
     } finally {
       setIsLoadingExistingData(false);
     }
