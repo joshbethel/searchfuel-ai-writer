@@ -118,7 +118,10 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
   // Get current step index
   const getCurrentStepIndex = () => {
-    return onboardingSteps.findIndex(step => step.id === currentStep);
+    // Map "connection" step to "cms-connection" for stepper display
+    // since "connection" is the form view of the CMS connection step
+    const stepForStepper = currentStep === "connection" ? "cms-connection" : currentStep;
+    return onboardingSteps.findIndex(step => step.id === stepForStepper);
   };
 
   // Check if a step is completed
@@ -130,8 +133,12 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
   // Check if a step is accessible (can navigate to it)
   const isStepAccessible = (stepId: string) => {
-    // When reconnecting, only allow navigation to the current step (CMS connection)
+    // When reconnecting, allow navigation to CMS connection step (or connection form)
     if (propBlogId) {
+      // Allow "cms-connection" if we're on "connection" (they're the same step)
+      if (currentStep === "connection" && stepId === "cms-connection") {
+        return true;
+      }
       return stepId === currentStep;
     }
     // Can navigate to completed steps or current step
@@ -175,7 +182,8 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
           {onboardingSteps.map((step, index) => {
             const isCompleted = isStepCompleted(step.id);
-            const isCurrent = step.id === currentStep;
+            // Treat "connection" step as "cms-connection" for stepper highlighting
+            const isCurrent = step.id === currentStep || (step.id === "cms-connection" && currentStep === "connection");
             const isAccessible = isStepAccessible(step.id);
 
             return (
