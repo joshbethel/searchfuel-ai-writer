@@ -270,7 +270,10 @@ async function discoverCompetitorsFromSERP(
   industry: string,
   description: string
 ): Promise<Array<{ domain: string; name?: string }>> {
+  console.log('Starting competitor discovery with:', { companyName, industry, description });
+  
   if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
+    console.warn('DataForSEO credentials not configured - DATAFORSEO_LOGIN:', !!DATAFORSEO_LOGIN, 'DATAFORSEO_PASSWORD:', !!DATAFORSEO_PASSWORD);
     return [];
   }
 
@@ -281,6 +284,8 @@ async function discoverCompetitorsFromSERP(
       : companyName 
         ? `companies like ${companyName}`
         : description.substring(0, 50);
+
+    console.log('DataForSEO search query:', searchQuery);
 
     const serpResponse = await fetch('https://api.dataforseo.com/v3/serp/google/organic/live', {
       method: 'POST',
@@ -297,13 +302,22 @@ async function discoverCompetitorsFromSERP(
       signal: AbortSignal.timeout(15000),
     });
 
+    console.log('DataForSEO API response status:', serpResponse.status, serpResponse.statusText);
+
     if (!serpResponse.ok) {
+      const errorText = await serpResponse.text();
+      console.error(`DataForSEO API error: ${serpResponse.status} ${serpResponse.statusText}`, errorText.substring(0, 500));
       return [];
     }
 
     const serpData = await serpResponse.json();
     
+    console.log('DataForSEO response status_code:', serpData.status_code);
+    console.log('DataForSEO response keys:', Object.keys(serpData));
+    console.log('DataForSEO response structure (first 1000 chars):', JSON.stringify(serpData).substring(0, 1000));
+    
     if (serpData.status_code !== 20000) {
+      console.error('DataForSEO API returned non-success status_code:', serpData.status_code, 'Full response:', JSON.stringify(serpData).substring(0, 2000));
       return [];
     }
 
@@ -311,11 +325,37 @@ async function discoverCompetitorsFromSERP(
     const seenDomains = new Set<string>();
 
     const tasks = serpData.tasks || [];
+    console.log('DataForSEO tasks count:', tasks.length);
+    
     for (const task of tasks) {
-      if (!task.result || !task.result[0]?.items) continue;
+      console.log('Processing task:', { 
+        id: task.id, 
+        status: task.status_code,
+        hasResult: !!task.result,
+        resultLength: task.result?.length,
+        firstResultItems: task.result?.[0]?.items?.length
+      });
       
-      for (const item of task.result[0].items.slice(0, 10)) {
+      if (!task.result || !task.result[0]?.items) {
+        console.warn('Task result structure unexpected:', {
+          hasResult: !!task.result,
+          resultType: typeof task.result,
+          isArray: Array.isArray(task.result),
+          firstResult: task.result?.[0] ? Object.keys(task.result[0]) : 'no first result',
+          items: task.result?.[0]?.items ? 'exists' : 'missing'
+        });
+        continue;
+      }
+      
+      const items = task.result[0].items;
+      console.log('Processing items:', items.length, 'items found');
+      
+      let organicCount = 0;
+      let skippedCount = 0;
+      
+      for (const item of items.slice(0, 10)) {
         if (item.type === 'organic' && item.url) {
+          organicCount++;
           try {
             const domain = new URL(item.url).hostname.replace(/^www\./, '');
             
@@ -326,6 +366,8 @@ async function discoverCompetitorsFromSERP(
                 domain.includes('twitter.com') ||
                 domain.includes('youtube.com') ||
                 domain.includes('wikipedia.org')) {
+              skippedCount++;
+              console.log('Skipping domain:', domain, 'reason:', seenDomains.has(domain) ? 'duplicate' : 'social media');
               continue;
             }
 
@@ -334,20 +376,33 @@ async function discoverCompetitorsFromSERP(
               domain,
               name: item.title || undefined
             });
+            
+            console.log('Added competitor:', { domain, name: item.title });
 
             if (competitors.length >= 7) break;
           } catch (e) {
-            // Skip invalid URLs
+            console.warn('Failed to parse URL:', item.url, 'error:', e);
           }
         }
       }
       
+      console.log('Item processing summary:', { 
+        totalItems: items.length, 
+        organicCount, 
+        skippedCount, 
+        competitorsAdded: competitors.length 
+      });
+      
       if (competitors.length >= 7) break;
     }
 
+    console.log('Final competitors found:', competitors.length, competitors);
     return competitors;
   } catch (error) {
     console.error('SERP competitor discovery error:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', { message: error.message, stack: error.stack });
+    }
     return [];
   }
 }
