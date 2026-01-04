@@ -264,13 +264,126 @@ Analyze this business and provide insights. If the description is missing or inc
   return {};
 }
 
-// SERP-based competitor discovery using DataForSEO
+// Generate intelligent search queries using AI
+async function generateCompetitorSearchQueries(
+  companyName: string,
+  industry: string,
+  description: string,
+  businessType?: string,
+  valueProposition?: string,
+  targetAudience?: string
+): Promise<string[]> {
+  if (!LOVABLE_API_KEY) {
+    // Fallback to basic queries if AI is not available
+    const queries: string[] = [];
+    if (industry) {
+      queries.push(`${industry} companies`);
+      queries.push(`top ${industry} companies`);
+      queries.push(`best ${industry} services`);
+    }
+    if (companyName) {
+      const cleanName = companyName.replace(/&#\d+;/g, '').replace(/[–—]/g, '').trim();
+      queries.push(`${cleanName} competitors`);
+      queries.push(`companies like ${cleanName}`);
+    }
+    return queries.slice(0, 5);
+  }
+
+  try {
+    const systemPrompt = `You are an expert SEO and market research analyst. Generate 5-7 highly specific Google search queries that would help discover direct competitors of a business.
+
+Consider:
+- Industry-specific terms
+- Service/product offerings
+- Target market
+- Business model (B2B, B2C, etc.)
+- Value proposition keywords
+
+Return ONLY a JSON array of search query strings, nothing else:
+["query 1", "query 2", "query 3", ...]`;
+
+    const userPrompt = `Company: ${companyName}
+Industry: ${industry || 'Unknown'}
+Description: ${description || 'No description'}
+Business Type: ${businessType || 'Unknown'}
+Value Proposition: ${valueProposition || 'Unknown'}
+Target Audience: ${targetAudience || 'Unknown'}
+
+Generate specific search queries to find competitors. Focus on:
+1. Companies offering similar services/products
+2. Companies targeting the same audience
+3. Companies in the same industry niche
+4. Alternative solutions to what this company offers`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (content) {
+        const cleanContent = content.replace(/```json\n?|```\n?/g, '').trim();
+        try {
+          const queries = JSON.parse(cleanContent);
+          if (Array.isArray(queries) && queries.length > 0) {
+            return queries.slice(0, 7); // Limit to 7 queries
+          }
+        } catch {
+          // Fall through to fallback
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error generating AI search queries:', error);
+  }
+
+  // Fallback queries
+  const queries: string[] = [];
+  if (industry) {
+    queries.push(`${industry} companies`);
+    queries.push(`top ${industry} companies`);
+    queries.push(`best ${industry} services`);
+    if (businessType) {
+      queries.push(`${businessType} ${industry} companies`);
+    }
+  }
+  if (companyName) {
+    const cleanName = companyName.replace(/&#\d+;/g, '').replace(/[–—]/g, '').trim();
+    queries.push(`${cleanName} competitors`);
+    queries.push(`companies like ${cleanName}`);
+  }
+  return queries.slice(0, 5);
+}
+
+// SERP-based competitor discovery using DataForSEO with enhanced search strategies
 async function discoverCompetitorsFromSERP(
   companyName: string,
   industry: string,
-  description: string
+  description: string,
+  businessType?: string,
+  valueProposition?: string,
+  targetAudience?: string
 ): Promise<Array<{ domain: string; name?: string }>> {
-  console.log('Starting competitor discovery with:', { companyName, industry, description });
+  console.log('Starting enhanced competitor discovery with:', { 
+    companyName, 
+    industry, 
+    businessType, 
+    valueProposition,
+    targetAudience 
+  });
   
   if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
     console.warn('DataForSEO credentials not configured - DATAFORSEO_LOGIN:', !!DATAFORSEO_LOGIN, 'DATAFORSEO_PASSWORD:', !!DATAFORSEO_PASSWORD);
@@ -278,197 +391,186 @@ async function discoverCompetitorsFromSERP(
   }
 
   try {
-    // Create search query from company info - use more specific queries for better results
-    let searchQuery = '';
-    if (industry) {
-      // Try multiple query variations to get more competitors
-      searchQuery = `${industry} companies`;
-    } else if (companyName) {
-      // Clean company name and create search query
-      const cleanName = companyName.replace(/&#\d+;/g, '').replace(/[–—]/g, '').trim();
-      searchQuery = `${cleanName} competitors`;
-    } else {
-      // Extract key terms from description
-      const descWords = description.split(/\s+/).slice(0, 5).join(' ');
-      searchQuery = `${descWords} companies`;
-    }
+    // Generate multiple intelligent search queries using AI
+    console.log('Generating competitor search queries...');
+    const searchQueries = await generateCompetitorSearchQueries(
+      companyName,
+      industry,
+      description,
+      businessType,
+      valueProposition,
+      targetAudience
+    );
+    
+    console.log(`Generated ${searchQueries.length} search queries:`, searchQueries);
 
-    console.log('DataForSEO search query:', searchQuery);
+    // Clean company name for filtering
+    const cleanCompanyName = companyName.replace(/&#\d+;/g, '').replace(/[–—]/g, '').trim().toLowerCase();
+    const companyNameWords = cleanCompanyName.split(/\s+/).filter(w => w.length > 2);
 
-    // DataForSEO endpoint - based on documentation at https://docs.dataforseo.com/v3/serp/google/organic/live/advanced/
-    // Try different variations if one fails (some endpoints may be deprecated or require different access)
-    // Note: If all return 404, verify your DataForSEO account has SERP API access
-    const endpoints = [
-      'https://api.dataforseo.com/v3/serp/google/organic/live/advanced', // Most common for live advanced results
-      'https://api.dataforseo.com/v3/serp/google/organic/live/regular', // Regular live results  
-      'https://api.dataforseo.com/v3/serp/google/organic/live', // Basic live endpoint
-    ];
-
-    let serpResponse: Response | null = null;
-    let lastError: string = '';
-
-    for (const endpoint of endpoints) {
+    // Helper function to execute a single SERP query
+    const executeSERPQuery = async (query: string): Promise<Array<{ domain: string; name?: string; score?: number }>> => {
+      const endpoint = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced';
+      const competitors: Array<{ domain: string; name?: string; score?: number }> = [];
+      
       try {
-        console.log(`Trying DataForSEO endpoint: ${endpoint}`);
-        serpResponse = await fetch(endpoint, {
+        const serpResponse = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Authorization': 'Basic ' + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`),
             'Content-Type': 'application/json'
           },
           body: JSON.stringify([{
-            keyword: searchQuery,
+            keyword: query,
             location_code: 2840, // United States
             language_code: 'en',
-            depth: 10, // Increased depth to get more results (up to 10 pages)
-            sort_by: 'relevance', // Sort by relevance for better competitor matches
-            calculate_rectangles: false // Don't need rectangle calculations
+            depth: 5, // Get 5 pages per query (reduced since we're running multiple queries)
+            sort_by: 'relevance',
+            calculate_rectangles: false
           }]),
           signal: AbortSignal.timeout(15000),
         });
 
-        if (serpResponse.ok) {
-          console.log(`Success with endpoint: ${endpoint}`);
-          break;
-        } else if (serpResponse.status === 404) {
-          const errorText = await serpResponse.text();
-          lastError = `${endpoint} returned 404: ${errorText.substring(0, 200)}`;
-          console.log(`Endpoint ${endpoint} returned 404, trying next...`);
-          serpResponse = null;
-          continue;
-        } else {
-          // Non-404 error, break and handle it
-          break;
+        if (!serpResponse.ok) {
+          console.warn(`Query "${query}" failed with status: ${serpResponse.status}`);
+          return [];
         }
-      } catch (fetchError) {
-        console.warn(`Error with endpoint ${endpoint}:`, fetchError);
-        lastError = fetchError instanceof Error ? fetchError.message : 'Unknown error';
-        serpResponse = null;
-        continue;
-      }
-    }
 
-    if (!serpResponse) {
-      console.error('All DataForSEO endpoints failed. Last error:', lastError);
-      console.error('NOTE: If all endpoints return 404, this may indicate:');
-      console.error('1. API endpoint structure has changed - check https://docs.dataforseo.com/v3/serp/google/organic/');
-      console.error('2. Your DataForSEO account may not have access to SERP API endpoints');
-      console.error('3. API credentials may be incorrect or expired');
-      console.error('4. The endpoint may require a different subscription tier');
-      return [];
-    }
-
-    console.log('DataForSEO API response status:', serpResponse.status, serpResponse.statusText);
-
-    if (!serpResponse.ok) {
-      const errorText = await serpResponse.text();
-      console.error(`DataForSEO API error: ${serpResponse.status} ${serpResponse.statusText}`, errorText.substring(0, 500));
-      return [];
-    }
-
-    const serpData = await serpResponse.json();
-    
-    console.log('DataForSEO response status_code:', serpData.status_code);
-    console.log('DataForSEO response keys:', Object.keys(serpData));
-    console.log('DataForSEO response structure (first 1000 chars):', JSON.stringify(serpData).substring(0, 1000));
-    
-    if (serpData.status_code !== 20000) {
-      console.error('DataForSEO API returned non-success status_code:', serpData.status_code, 'Full response:', JSON.stringify(serpData).substring(0, 2000));
-      return [];
-    }
-
-    const competitors: Array<{ domain: string; name?: string }> = [];
-    const seenDomains = new Set<string>();
-
-    const tasks = serpData.tasks || [];
-    console.log('DataForSEO tasks count:', tasks.length);
-    
-    for (const task of tasks) {
-      console.log('Processing task:', { 
-        id: task.id, 
-        status: task.status_code,
-        hasResult: !!task.result,
-        resultLength: task.result?.length,
-        firstResultItems: task.result?.[0]?.items?.length
-      });
-      
-      if (!task.result || !Array.isArray(task.result) || task.result.length === 0) {
-        console.warn('Task result structure unexpected:', {
-          hasResult: !!task.result,
-          resultType: typeof task.result,
-          isArray: Array.isArray(task.result),
-          resultLength: task.result?.length
-        });
-        continue;
-      }
-      
-      // Process all result pages (depth can return multiple pages)
-      let organicCount = 0;
-      let skippedCount = 0;
-      let totalItemsProcessed = 0;
-      
-      for (const resultPage of task.result) {
-        if (!resultPage?.items || !Array.isArray(resultPage.items)) {
-          continue;
+        const serpData = await serpResponse.json();
+        
+        if (serpData.status_code !== 20000) {
+          console.warn(`Query "${query}" returned status_code: ${serpData.status_code}`);
+          return [];
         }
+
+        const tasks = serpData.tasks || [];
         
-        const items = resultPage.items;
-        totalItemsProcessed += items.length;
-        console.log(`Processing page with ${items.length} items (total processed: ${totalItemsProcessed})`);
-        
-        // Process up to 50 items per page to get more competitors
-        for (const item of items.slice(0, 50)) {
-          if (item.type === 'organic' && item.url) {
-            organicCount++;
-            try {
-              const domain = new URL(item.url).hostname.replace(/^www\./, '');
-              
-              // Skip if we've seen this domain or if it's a social media/generic site
-              if (seenDomains.has(domain) || 
-                  domain.includes('facebook.com') ||
-                  domain.includes('linkedin.com') ||
-                  domain.includes('twitter.com') ||
-                  domain.includes('x.com') ||
-                  domain.includes('youtube.com') ||
-                  domain.includes('wikipedia.org') ||
-                  domain.includes('reddit.com')) {
-                skippedCount++;
-                console.log('Skipping domain:', domain, 'reason:', seenDomains.has(domain) ? 'duplicate' : 'social media');
-                continue;
+        for (const task of tasks) {
+          if (!task.result || !Array.isArray(task.result) || task.result.length === 0) {
+            continue;
+          }
+          
+          for (const resultPage of task.result) {
+            if (!resultPage?.items || !Array.isArray(resultPage.items)) {
+              continue;
+            }
+            
+            for (const item of resultPage.items) {
+              if (item.type === 'organic' && item.url) {
+                try {
+                  const domain = new URL(item.url).hostname.replace(/^www\./, '');
+                  const domainLower = domain.toLowerCase();
+                  
+                  // Enhanced filtering - skip non-competitor sites
+                  const skipPatterns = [
+                    'facebook.com', 'linkedin.com', 'twitter.com', 'x.com',
+                    'youtube.com', 'wikipedia.org', 'reddit.com', 'pinterest.com',
+                    'instagram.com', 'tiktok.com', 'quora.com', 'medium.com',
+                    'blogspot.com', 'wordpress.com', 'wix.com', 'squarespace.com',
+                    'amazon.com', 'ebay.com', 'etsy.com', 'shopify.com',
+                    'google.com', 'microsoft.com', 'apple.com', 'adobe.com'
+                  ];
+                  
+                  if (skipPatterns.some(pattern => domainLower.includes(pattern))) {
+                    continue;
+                  }
+                  
+                  // Skip if domain contains company name (likely the company itself)
+                  if (companyNameWords.some(word => domainLower.includes(word.toLowerCase()))) {
+                    continue;
+                  }
+                  
+                  // Skip directories, aggregators, and generic sites
+                  if (domainLower.includes('directory') || 
+                      domainLower.includes('list') || 
+                      domainLower.includes('top-') ||
+                      domainLower.includes('best-') ||
+                      domainLower.includes('.gov') ||
+                      domainLower.includes('.edu') ||
+                      domainLower.includes('crunchbase') ||
+                      domainLower.includes('zoominfo')) {
+                    continue;
+                  }
+                  
+                  // Calculate relevance score based on position and title
+                  const position = item.rank_absolute || 999;
+                  let score = Math.max(0, 100 - position); // Higher score for better positions
+                  
+                  // Boost score if title/domain contains industry keywords
+                  if (industry) {
+                    const industryLower = industry.toLowerCase();
+                    if (item.title?.toLowerCase().includes(industryLower) || 
+                        domainLower.includes(industryLower)) {
+                      score += 20;
+                    }
+                  }
+                  
+                  competitors.push({
+                    domain,
+                    name: item.title || undefined,
+                    score
+                  });
+                } catch (e) {
+                  console.warn('Failed to parse URL:', item.url, 'error:', e);
+                }
               }
-
-              seenDomains.add(domain);
-              competitors.push({
-                domain,
-                name: item.title || undefined
-              });
-              
-              console.log('Added competitor:', { domain, name: item.title });
-
-              if (competitors.length >= 7) break;
-            } catch (e) {
-              console.warn('Failed to parse URL:', item.url, 'error:', e);
             }
           }
         }
-        
-        // Break if we have enough competitors
-        if (competitors.length >= 7) break;
+      } catch (error) {
+        console.error(`Error executing query "${query}":`, error);
       }
       
-      console.log('Item processing summary:', { 
-        totalItemsProcessed,
-        resultPages: task.result.length,
-        organicCount, 
-        skippedCount, 
-        competitorsAdded: competitors.length 
-      });
-      
-      if (competitors.length >= 7) break;
-    }
+      return competitors;
+    };
 
-    console.log('Final competitors found:', competitors.length, competitors);
-    return competitors;
+    // Execute all queries in parallel (with limit to avoid rate limits)
+    console.log(`Executing ${searchQueries.length} search queries...`);
+    const queryResults = await Promise.all(
+      searchQueries.slice(0, 5).map(query => executeSERPQuery(query))
+    );
+    
+    // Combine and deduplicate results
+    const competitorMap = new Map<string, { domain: string; name?: string; score: number; queryCount: number }>();
+    
+    for (const results of queryResults) {
+      for (const competitor of results) {
+        const existing = competitorMap.get(competitor.domain);
+        if (existing) {
+          // If domain appears in multiple queries, it's more likely a competitor - boost score
+          existing.score = Math.max(existing.score, competitor.score || 0) + 10;
+          existing.queryCount += 1;
+        } else {
+          competitorMap.set(competitor.domain, {
+            domain: competitor.domain,
+            name: competitor.name,
+            score: competitor.score || 0,
+            queryCount: 1
+          });
+        }
+      }
+    }
+    
+    // Convert to array, sort by score (highest first), and limit to top 7
+    const finalCompetitors = Array.from(competitorMap.values())
+      .sort((a, b) => {
+        // Sort by queryCount first (appears in more queries = more relevant)
+        if (b.queryCount !== a.queryCount) {
+          return b.queryCount - a.queryCount;
+        }
+        // Then by score
+        return b.score - a.score;
+      })
+      .slice(0, 7)
+      .map(c => ({
+        domain: c.domain,
+        name: c.name
+      }));
+    
+    console.log(`Found ${finalCompetitors.length} unique competitors from ${searchQueries.length} queries`);
+    console.log('Final competitors:', finalCompetitors);
+    
+    return finalCompetitors;
   } catch (error) {
     console.error('SERP competitor discovery error:', error);
     if (error instanceof Error) {
@@ -678,15 +780,25 @@ function extractEnhancedBusinessInfo(
   return basicInfo;
 }
 
-// Generate competitors using SERP data
+// Generate competitors using SERP data with enhanced discovery
 async function generateCompetitors(
   url: string,
   companyName: string,
   industry: string,
-  description: string
+  description: string,
+  businessType?: string,
+  valueProposition?: string,
+  targetAudience?: string
 ): Promise<Array<{ domain: string; name?: string }>> {
-  // Use SERP-based discovery
-  const serpCompetitors = await discoverCompetitorsFromSERP(companyName, industry, description);
+  // Use enhanced SERP-based discovery with multiple queries
+  const serpCompetitors = await discoverCompetitorsFromSERP(
+    companyName, 
+    industry, 
+    description,
+    businessType,
+    valueProposition,
+    targetAudience
+  );
   
   // Filter out the current website
   try {
@@ -801,13 +913,16 @@ serve(async (req) => {
       structuredData
     );
 
-    // Generate competitors using SERP data
-    console.log('Discovering competitors from SERP...');
+    // Generate competitors using enhanced SERP data with multiple search strategies
+    console.log('Discovering competitors from SERP with enhanced search...');
     const competitors = await generateCompetitors(
       url,
       businessInfo.company_name,
       businessInfo.industry || aiInsights.enhanced_industry || '',
-      businessInfo.company_description
+      businessInfo.company_description,
+      aiInsights.business_type,
+      aiInsights.value_proposition,
+      aiInsights.target_audience
     );
 
     // Combine all insights
