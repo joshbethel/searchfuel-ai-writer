@@ -110,7 +110,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     target_audience: "",
   });
   
-  const [competitors, setCompetitors] = useState<Array<{ domain: string; name?: string }>>([]);
+  const [competitors, setCompetitors] = useState<Array<{ domain: string; name?: string; url?: string }>>([]);
   const [newCompetitorDomain, setNewCompetitorDomain] = useState("");
   const [blogId, setBlogId] = useState<string | null>(propBlogId || null);
   const [websiteExists, setWebsiteExists] = useState(false);
@@ -1620,7 +1620,14 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                   >
                     <div className="flex items-center gap-2">
                       <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                      <code className="text-sm">{competitor.domain}</code>
+                      <a
+                        href={competitor.url || `https://${competitor.domain}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-mono text-primary hover:underline cursor-pointer"
+                      >
+                        {competitor.domain}
+                      </a>
                     </div>
                     <Button
                       variant="ghost"

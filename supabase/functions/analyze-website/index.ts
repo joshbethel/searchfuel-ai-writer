@@ -630,13 +630,33 @@ async function validateCompetitorRelevance(
   }
 
   try {
-    // Fetch competitor homepage (quick fetch with timeout)
-    const competitorResponse = await fetch(competitorUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; SearchFuel/1.0; +https://searchfuel.app)',
-      },
-      signal: AbortSignal.timeout(3000), // 3 second timeout
-    });
+    // Ensure URL uses HTTPS
+    let secureUrl = competitorUrl;
+    try {
+      const urlObj = new URL(competitorUrl);
+      if (urlObj.protocol !== 'https:') {
+        urlObj.protocol = 'https:';
+        secureUrl = urlObj.toString();
+      }
+    } catch {
+      // If URL parsing fails, construct HTTPS URL from domain
+      secureUrl = `https://${competitorDomain}`;
+    }
+    
+    // Try HTTPS first
+    let competitorResponse: Response;
+    try {
+      competitorResponse = await fetch(secureUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SearchFuel/1.0; +https://searchfuel.app)',
+        },
+        signal: AbortSignal.timeout(3000), // 3 second timeout
+      });
+    } catch (httpsError) {
+      // If HTTPS fails, reject - we don't want insecure sites
+      console.warn(`HTTPS failed for ${competitorDomain}, skipping insecure site`);
+      return { ...defaultResult, reason: 'Site does not support HTTPS (insecure)' };
+    }
 
     if (!competitorResponse.ok) {
       return { ...defaultResult, reason: 'Failed to fetch competitor website' };
@@ -757,7 +777,7 @@ async function discoverCompetitorsFromSERP(
   targetAudience?: string,
   homepageHtml?: string,
   additionalPages?: Array<{ url: string; type: string; content?: string }>
-): Promise<Array<{ domain: string; name?: string }>> {
+): Promise<Array<{ domain: string; name?: string; url?: string }>> {
   console.log('Starting enhanced competitor discovery with:', { 
     companyName, 
     industry, 
@@ -852,7 +872,20 @@ async function discoverCompetitorsFromSERP(
             for (const item of resultPage.items) {
               if (item.type === 'organic' && item.url) {
                 try {
-                  const domain = new URL(item.url).hostname.replace(/^www\./, '');
+                  const itemUrl = new URL(item.url);
+                  
+                  // CRITICAL: Skip HTTP-only sites (insecure sites without HTTPS)
+                  if (itemUrl.protocol === 'http:') {
+                    console.log(`Skipping insecure HTTP site: ${item.url}`);
+                    continue;
+                  }
+                  
+                  // Ensure URL uses HTTPS
+                  if (itemUrl.protocol !== 'https:') {
+                    itemUrl.protocol = 'https:';
+                  }
+                  
+                  const domain = itemUrl.hostname.replace(/^www\./, '');
                   const domainLower = domain.toLowerCase();
                   
                   // Enhanced filtering - skip non-competitor sites
@@ -902,11 +935,14 @@ async function discoverCompetitorsFromSERP(
                   // Store snippet for later validation
                   const snippet = item.snippet || item.description || '';
                   
+                  // Use HTTPS URL
+                  const secureUrl = itemUrl.toString();
+                  
                   competitors.push({
                     domain,
                     name: item.title || undefined,
                     score,
-                    url: item.url,
+                    url: secureUrl,
                     snippet
                   });
                 } catch (e) {
@@ -947,8 +983,22 @@ async function discoverCompetitorsFromSERP(
           existing.score = Math.max(existing.score, competitor.score || 0) + 10;
           existing.queryCount += 1;
           // Keep the best URL (prefer https, prefer shorter paths)
-          if (competitor.url && (!existing.url || competitor.url.length < existing.url.length)) {
-            existing.url = competitor.url;
+          if (competitor.url) {
+            // Ensure URL is HTTPS
+            try {
+              const urlObj = new URL(competitor.url);
+              if (urlObj.protocol !== 'https:') {
+                urlObj.protocol = 'https:';
+                competitor.url = urlObj.toString();
+              }
+            } catch {
+              // If URL parsing fails, construct HTTPS URL from domain
+              competitor.url = `https://${competitor.domain}`;
+            }
+            
+            if (!existing.url || competitor.url.length < existing.url.length) {
+              existing.url = competitor.url;
+            }
           }
           if (competitor.snippet && !existing.snippet) {
             existing.snippet = competitor.snippet;
@@ -975,6 +1025,7 @@ async function discoverCompetitorsFromSERP(
       queryCount: number;
       relevanceScore: number;
       validationReason: string;
+      url?: string;
     }> = [];
     
     // Process top candidates first (limit validation to top 15 to avoid too many API calls)
@@ -989,7 +1040,17 @@ async function discoverCompetitorsFromSERP(
     
     // Validate competitors in parallel (but limit concurrency to avoid rate limits)
     const validationPromises = candidatesToValidate.map(async (candidate) => {
-      const competitorUrl = candidate.url || `https://${candidate.domain}`;
+      // Ensure URL is HTTPS
+      let competitorUrl = candidate.url || `https://${candidate.domain}`;
+      try {
+        const urlObj = new URL(competitorUrl);
+        if (urlObj.protocol !== 'https:') {
+          urlObj.protocol = 'https:';
+          competitorUrl = urlObj.toString();
+        }
+      } catch {
+        competitorUrl = `https://${candidate.domain}`;
+      }
       
       const validation = await validateCompetitorRelevance(
         competitorUrl,
@@ -1013,6 +1074,7 @@ async function discoverCompetitorsFromSERP(
           queryCount: candidate.queryCount,
           relevanceScore: validation.relevanceScore,
           validationReason: validation.reason,
+          url: competitorUrl, // Include HTTPS URL
           combinedScore
         };
       }
@@ -1031,7 +1093,8 @@ async function discoverCompetitorsFromSERP(
           score: result.score,
           queryCount: result.queryCount,
           relevanceScore: result.relevanceScore,
-          validationReason: result.validationReason
+          validationReason: result.validationReason,
+          url: result.url // Include HTTPS URL for navigation
         });
       }
     }
@@ -1047,12 +1110,13 @@ async function discoverCompetitorsFromSERP(
       return b.score - a.score;
     });
     
-    // Return top 7 validated competitors
+    // Return top 7 validated competitors with HTTPS URLs
     const finalCompetitors = validatedCompetitors
       .slice(0, 7)
       .map(c => ({
         domain: c.domain,
-        name: c.name
+        name: c.name,
+        url: c.url || `https://${c.domain}` // Always include HTTPS URL for navigation
       }));
     
     console.log(`Found ${finalCompetitors.length} validated competitors from ${searchQueries.length} queries`);
@@ -1284,7 +1348,7 @@ async function generateCompetitors(
   targetAudience?: string,
   homepageHtml?: string,
   additionalPages?: Array<{ url: string; type: string; content?: string }>
-): Promise<Array<{ domain: string; name?: string }>> {
+): Promise<Array<{ domain: string; name?: string; url?: string }>> {
   // Use enhanced SERP-based discovery with multiple queries and validation
   const serpCompetitors = await discoverCompetitorsFromSERP(
     companyName, 

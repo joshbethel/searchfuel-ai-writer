@@ -11,6 +11,7 @@ import { Plus, Trash2, ExternalLink } from "lucide-react";
 interface Competitor {
   domain: string;
   name?: string;
+  url?: string;
   added_at?: string;
 }
 
@@ -145,7 +146,14 @@ export function CompetitorSettings({ blogId }: CompetitorSettingsProps) {
                 >
                   <div className="flex items-center gap-2">
                     <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                    <code className="text-sm">{competitor.domain}</code>
+                    <a
+                      href={competitor.url || `https://${competitor.domain}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-mono text-primary hover:underline cursor-pointer"
+                    >
+                      {competitor.domain}
+                    </a>
                     {competitor.name && competitor.name !== competitor.domain && (
                       <span className="text-sm text-muted-foreground">({competitor.name})</span>
                     )}
