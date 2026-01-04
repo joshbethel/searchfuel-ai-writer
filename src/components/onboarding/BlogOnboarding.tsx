@@ -1592,9 +1592,9 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
-          <h2 className="text-2xl font-bold text-foreground mb-2">Audience & Competitors</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Competitors</h2>
           <p className="text-muted-foreground mb-4">
-            Understanding your audience and competition ensures we generate the most effective keywords. 
+            Add your competitors to help us generate more effective keywords. 
             You can add more later in Settings.
           </p>
         </div>

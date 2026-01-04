@@ -120,9 +120,9 @@ export function CompetitorSettings({ blogId }: CompetitorSettingsProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Audience & Competitors</CardTitle>
+        <CardTitle>Competitors</CardTitle>
         <CardDescription>
-          Understanding your audience and competition ensures we generate the most effective keywords.
+          Add your competitors to help us generate more effective keywords.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
