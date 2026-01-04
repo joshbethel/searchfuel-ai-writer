@@ -77,7 +77,7 @@ function analyzeContent(html: string): {
   // Extract headings
   const headings: Array<{ level: number; text: string }> = [];
   for (let level = 1; level <= 6; level++) {
-    const regex = new RegExp(`<h${level}[^>]*>([^<]+)<\/h${level}>`, 'gi');
+    const regex = new RegExp(`<h${level}[^>]*>([^<]+)</h${level}>`, 'gi');
     const matches = text.matchAll(regex);
     for (const match of matches) {
       headings.push({
@@ -264,61 +264,162 @@ Analyze this business and provide insights. If the description is missing or inc
   return {};
 }
 
-// Extract specific services and products from company information
+// Extract text content from HTML (removes tags, scripts, styles)
+function extractTextFromHTML(html: string, maxLength: number = 5000): string {
+  // Remove script and style tags
+  let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  
+  // Extract text from common content tags
+  const contentTags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'td', 'th', 'span', 'div'];
+  const extractedTexts: string[] = [];
+  
+  for (const tag of contentTags) {
+    const regex = new RegExp(`<${tag}[^>]*>([^<]+)</${tag}>`, 'gi');
+    const matches = text.matchAll(regex);
+    for (const match of matches) {
+      const cleanText = match[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+      if (cleanText.length > 10 && cleanText.length < 200) {
+        extractedTexts.push(cleanText);
+      }
+    }
+  }
+  
+  // Also extract from meta description
+  const metaMatch = text.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+  if (metaMatch) {
+    extractedTexts.unshift(metaMatch[1]);
+  }
+  
+  const combined = extractedTexts.join(' ').substring(0, maxLength);
+  return combined;
+}
+
+// Extract specific services and products from actual website pages
 async function extractServicesAndProducts(
   companyName: string,
-  description: string,
+  homepageHtml: string,
+  additionalPages: Array<{ url: string; type: string; content?: string }>,
   industry: string,
-  valueProposition?: string,
-  contentAnalysis?: ReturnType<typeof analyzeContent>
+  description?: string
 ): Promise<{ services: string[]; products: string[] }> {
+  console.log(`Extracting services/products from ${additionalPages.length} pages...`);
+  
+  // Prioritize services/products pages
+  const servicesPages = additionalPages.filter(p => 
+    p.type === 'services' || 
+    p.url.toLowerCase().includes('/service') || 
+    p.url.toLowerCase().includes('/product')
+  );
+  
+  const aboutPages = additionalPages.filter(p => p.type === 'about');
+  
+  // Combine content from relevant pages
+  let combinedContent = '';
+  
+  // Extract from homepage first
+  const homepageText = extractTextFromHTML(homepageHtml, 2000);
+  combinedContent += `HOMEPAGE:\n${homepageText}\n\n`;
+  
+  // Extract from services/products pages (most important)
+  for (const page of servicesPages.slice(0, 3)) {
+    if (page.content) {
+      const pageText = extractTextFromHTML(page.content, 3000);
+      combinedContent += `SERVICES/PRODUCTS PAGE (${page.url}):\n${pageText}\n\n`;
+    }
+  }
+  
+  // Extract from about page if available
+  if (aboutPages.length > 0 && aboutPages[0].content) {
+    const aboutText = extractTextFromHTML(aboutPages[0].content, 2000);
+    combinedContent += `ABOUT PAGE:\n${aboutText}\n\n`;
+  }
+  
+  // If no services pages found, try to find service/product links on homepage
+  if (servicesPages.length === 0) {
+    const serviceLinkRegex = /<a[^>]*href=["']([^"']*(?:service|product)[^"']*)["'][^>]*>([^<]+)<\/a>/gi;
+    const serviceLinkMatches = homepageHtml.matchAll(serviceLinkRegex);
+    const serviceLinks: string[] = [];
+    for (const match of serviceLinkMatches) {
+      const linkText = match[2].replace(/<[^>]+>/g, '').trim();
+      if (linkText.length > 3 && linkText.length < 100) {
+        serviceLinks.push(linkText);
+      }
+    }
+    if (serviceLinks.length > 0) {
+      combinedContent += `SERVICE/PRODUCT LINKS FROM HOMEPAGE:\n${serviceLinks.join(', ')}\n\n`;
+    }
+  }
+  
+  // Also extract headings from homepage (often list services)
+  const headingMatches = homepageHtml.matchAll(/<h[1-3][^>]*>([^<]+)<\/h[1-3]>/gi);
+  const headings: string[] = [];
+  for (const match of headingMatches) {
+    const heading = match[1].trim();
+    if (heading.length > 5 && heading.length < 100) {
+      headings.push(heading);
+    }
+  }
+  if (headings.length > 0) {
+    combinedContent += `PAGE HEADINGS:\n${headings.slice(0, 15).join(', ')}\n\n`;
+  }
+  
   if (!LOVABLE_API_KEY) {
-    // Fallback: try to extract from description using keywords
+    // Fallback: basic extraction from text
     const services: string[] = [];
     const products: string[] = [];
     
-    const descLower = description.toLowerCase();
-    const serviceKeywords = ['software', 'platform', 'tool', 'service', 'solution', 'app', 'system'];
-    const productKeywords = ['product', 'device', 'equipment'];
+    const contentLower = combinedContent.toLowerCase();
+    const servicePatterns = [
+      /(?:we offer|our services|we provide|services include)[:;]?\s*([^.\n]{10,200})/gi,
+      /(?:service|platform|software|tool|solution|system)[:;]?\s*([^.\n]{5,100})/gi
+    ];
     
-    // Basic extraction from description
-    const words = description.split(/\s+/);
-    for (let i = 0; i < words.length - 1; i++) {
-      const word = words[i].toLowerCase();
-      if (serviceKeywords.some(kw => word.includes(kw))) {
-        const phrase = words.slice(Math.max(0, i - 1), i + 2).join(' ');
-        if (phrase.length > 5 && phrase.length < 50) {
-          services.push(phrase);
+    for (const pattern of servicePatterns) {
+      const matches = combinedContent.matchAll(pattern);
+      for (const match of matches) {
+        const text = match[1] || match[0];
+        const clean = text.replace(/[^\w\s-]/g, '').trim();
+        if (clean.length > 5 && clean.length < 80) {
+          services.push(clean);
         }
       }
     }
     
-    return { services: [...new Set(services)].slice(0, 5), products: [...new Set(products)].slice(0, 5) };
+    return { 
+      services: [...new Set(services)].slice(0, 7), 
+      products: [...new Set(products)].slice(0, 7) 
+    };
   }
 
   try {
-    const systemPrompt = `You are an expert business analyst. Extract specific services and products that a company offers.
+    const systemPrompt = `You are an expert business analyst. Analyze website pages to extract SPECIFIC services and products that a company actually offers.
 
-Return ONLY a valid JSON object with these fields:
+CRITICAL: Extract from the actual page content, NOT from generic descriptions.
+
+Return ONLY a valid JSON object:
 {
   "services": ["service 1", "service 2", ...],
   "products": ["product 1", "product 2", ...]
 }
 
 Rules:
-- Extract specific, concrete services/products (e.g., "project management software", "cloud hosting", "email marketing platform")
-- NOT generic categories (e.g., NOT "software", "services", "solutions")
-- Focus on what customers would search for when looking for alternatives
-- Maximum 7 services and 7 products
-- If unclear, return empty arrays`;
+- Extract SPECIFIC, concrete services/products mentioned on the pages
+- Examples: "project management software", "cloud hosting", "email marketing platform", "CRM system"
+- NOT generic terms like "software", "services", "solutions", "products"
+- Look for actual service names, product names, feature lists
+- Maximum 10 services and 10 products
+- If a page says "We offer X, Y, Z" - extract X, Y, Z
+- If unclear or no specific services found, return empty arrays`;
 
     const userPrompt = `Company: ${companyName}
 Industry: ${industry || 'Unknown'}
-Description: ${description || 'No description'}
-${valueProposition ? `Value Proposition: ${valueProposition}` : ''}
-${contentAnalysis?.topics?.length ? `Topics: ${contentAnalysis.topics.join(', ')}` : ''}
+${description ? `Description: ${description}` : ''}
 
-Extract the specific services and products this company offers. Be specific and concrete.`;
+WEBSITE CONTENT (extracted from actual pages):
+${combinedContent.substring(0, 8000)}
+
+Analyze the actual website content above and extract the SPECIFIC services and products this company offers. Focus on what is actually mentioned on their services/products pages and homepage.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -333,7 +434,7 @@ Extract the specific services and products this company offers. Be specific and 
           { role: 'user', content: userPrompt }
         ],
       }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (response.ok) {
@@ -342,20 +443,31 @@ Extract the specific services and products this company offers. Be specific and 
       if (content) {
         const cleanContent = content.replace(/```json\n?|```\n?/g, '').trim();
         try {
-          const extracted = JSON.parse(cleanContent);
+          const extracted = JSON.parse(cleanContent) as { services?: unknown[]; products?: unknown[] };
+          const services = Array.isArray(extracted.services) 
+            ? extracted.services.filter((s: unknown) => typeof s === 'string' && s.length > 3 && s.length < 100) as string[]
+            : [];
+          const products = Array.isArray(extracted.products)
+            ? extracted.products.filter((p: unknown) => typeof p === 'string' && p.length > 3 && p.length < 100) as string[]
+            : [];
+          
+          console.log(`Extracted ${services.length} services and ${products.length} products from website pages`);
+          
           return {
-            services: Array.isArray(extracted.services) ? extracted.services.slice(0, 7) : [],
-            products: Array.isArray(extracted.products) ? extracted.products.slice(0, 7) : []
+            services: [...new Set(services)].slice(0, 10),
+            products: [...new Set(products)].slice(0, 10)
           };
-        } catch {
+        } catch (parseError) {
+          console.error('Error parsing AI response:', parseError);
           // Fall through to fallback
         }
       }
     }
   } catch (error) {
-    console.error('Error extracting services/products:', error);
+    console.error('Error extracting services/products from pages:', error);
   }
 
+  // Fallback: return empty if we can't extract
   return { services: [], products: [] };
 }
 
@@ -643,7 +755,8 @@ async function discoverCompetitorsFromSERP(
   businessType?: string,
   valueProposition?: string,
   targetAudience?: string,
-  contentAnalysis?: ReturnType<typeof analyzeContent>
+  homepageHtml?: string,
+  additionalPages?: Array<{ url: string; type: string; content?: string }>
 ): Promise<Array<{ domain: string; name?: string }>> {
   console.log('Starting enhanced competitor discovery with:', { 
     companyName, 
@@ -659,16 +772,16 @@ async function discoverCompetitorsFromSERP(
   }
 
   try {
-    // Phase 1: Extract specific services/products first
-    console.log('Extracting services and products...');
+    // Phase 1: Extract specific services/products from actual website pages
+    console.log('Extracting services and products from website pages...');
     const { services, products } = await extractServicesAndProducts(
       companyName,
-      description,
+      homepageHtml || '',
+      additionalPages || [],
       industry,
-      valueProposition,
-      contentAnalysis
+      description
     );
-    console.log(`Extracted ${services.length} services and ${products.length} products:`, { services, products });
+    console.log(`Extracted ${services.length} services and ${products.length} products from website:`, { services, products });
 
     // Phase 1: Generate service/product-specific search queries
     console.log('Generating competitor search queries...');
@@ -1169,7 +1282,8 @@ async function generateCompetitors(
   businessType?: string,
   valueProposition?: string,
   targetAudience?: string,
-  contentAnalysis?: ReturnType<typeof analyzeContent>
+  homepageHtml?: string,
+  additionalPages?: Array<{ url: string; type: string; content?: string }>
 ): Promise<Array<{ domain: string; name?: string }>> {
   // Use enhanced SERP-based discovery with multiple queries and validation
   const serpCompetitors = await discoverCompetitorsFromSERP(
@@ -1179,7 +1293,8 @@ async function generateCompetitors(
     businessType,
     valueProposition,
     targetAudience,
-    contentAnalysis
+    homepageHtml,
+    additionalPages
   );
   
   // Filter out the current website
@@ -1305,7 +1420,8 @@ serve(async (req) => {
       aiInsights.business_type,
       aiInsights.value_proposition,
       aiInsights.target_audience,
-      contentAnalysis
+      html, // Pass homepage HTML
+      additionalPages // Pass additional pages
     );
 
     // Combine all insights
