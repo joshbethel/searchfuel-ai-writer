@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { CheckCircle2, Loader2, Globe, Plus, Edit, Trash2, Check, AlertCircle, ArrowRight, FileText, Search, Wifi, WifiOff, ExternalLink, BarChart3, MoreVertical } from "lucide-react";
@@ -1290,7 +1291,7 @@ export default function Settings() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-description">Description</Label>
-                <Input
+                <Textarea
                   id="edit-description"
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
