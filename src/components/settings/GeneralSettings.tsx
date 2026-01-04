@@ -22,6 +22,7 @@ export function GeneralSettings({ blogId }: GeneralSettingsProps) {
     title: "",
     description: "",
     company_name: "",
+    target_audience: "",
     auto_post_enabled: true,
   });
 
@@ -30,7 +31,7 @@ export function GeneralSettings({ blogId }: GeneralSettingsProps) {
       try {
         const { data, error } = await supabase
           .from("blogs")
-          .select("title, description, company_name, auto_post_enabled")
+          .select("title, description, company_name, target_audience, auto_post_enabled")
           .eq("id", blogId)
           .single();
 
@@ -41,6 +42,7 @@ export function GeneralSettings({ blogId }: GeneralSettingsProps) {
             title: data.title || "",
             description: data.description || "",
             company_name: data.company_name || "",
+            target_audience: data.target_audience || "",
             auto_post_enabled: data.auto_post_enabled ?? true,
           });
         }
@@ -71,6 +73,7 @@ export function GeneralSettings({ blogId }: GeneralSettingsProps) {
           title: formData.title,
           description: formData.description || null,
           company_name: formData.company_name || null,
+          target_audience: formData.target_audience || null,
           auto_post_enabled: formData.auto_post_enabled,
         })
         .eq("id", blogId);
@@ -143,6 +146,20 @@ export function GeneralSettings({ blogId }: GeneralSettingsProps) {
           />
           <p className="text-xs text-muted-foreground">
             Optional company or organization name
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="target_audience">Target Audience</Label>
+          <Textarea
+            id="target_audience"
+            value={formData.target_audience}
+            onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
+            placeholder="Describe your target audience (e.g., demographics, interests, needs)"
+            rows={4}
+          />
+          <p className="text-xs text-muted-foreground">
+            Optional description of your target audience
           </p>
         </div>
 
