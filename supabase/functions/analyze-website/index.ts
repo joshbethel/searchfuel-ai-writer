@@ -278,12 +278,20 @@ async function discoverCompetitorsFromSERP(
   }
 
   try {
-    // Create search query from company info
-    const searchQuery = industry 
-      ? `${industry} companies`
-      : companyName 
-        ? `companies like ${companyName}`
-        : description.substring(0, 50);
+    // Create search query from company info - use more specific queries for better results
+    let searchQuery = '';
+    if (industry) {
+      // Try multiple query variations to get more competitors
+      searchQuery = `${industry} companies`;
+    } else if (companyName) {
+      // Clean company name and create search query
+      const cleanName = companyName.replace(/&#\d+;/g, '').replace(/[–—]/g, '').trim();
+      searchQuery = `${cleanName} competitors`;
+    } else {
+      // Extract key terms from description
+      const descWords = description.split(/\s+/).slice(0, 5).join(' ');
+      searchQuery = `${descWords} companies`;
+    }
 
     console.log('DataForSEO search query:', searchQuery);
 
@@ -312,7 +320,9 @@ async function discoverCompetitorsFromSERP(
             keyword: searchQuery,
             location_code: 2840, // United States
             language_code: 'en',
-            depth: 3
+            depth: 10, // Increased depth to get more results (up to 10 pages)
+            sort_by: 'relevance', // Sort by relevance for better competitor matches
+            calculate_rectangles: false // Don't need rectangle calculations
           }]),
           signal: AbortSignal.timeout(15000),
         });
@@ -382,58 +392,73 @@ async function discoverCompetitorsFromSERP(
         firstResultItems: task.result?.[0]?.items?.length
       });
       
-      if (!task.result || !task.result[0]?.items) {
+      if (!task.result || !Array.isArray(task.result) || task.result.length === 0) {
         console.warn('Task result structure unexpected:', {
           hasResult: !!task.result,
           resultType: typeof task.result,
           isArray: Array.isArray(task.result),
-          firstResult: task.result?.[0] ? Object.keys(task.result[0]) : 'no first result',
-          items: task.result?.[0]?.items ? 'exists' : 'missing'
+          resultLength: task.result?.length
         });
         continue;
       }
       
-      const items = task.result[0].items;
-      console.log('Processing items:', items.length, 'items found');
-      
+      // Process all result pages (depth can return multiple pages)
       let organicCount = 0;
       let skippedCount = 0;
+      let totalItemsProcessed = 0;
       
-      for (const item of items.slice(0, 10)) {
-        if (item.type === 'organic' && item.url) {
-          organicCount++;
-          try {
-            const domain = new URL(item.url).hostname.replace(/^www\./, '');
-            
-            // Skip if we've seen this domain or if it's a social media/generic site
-            if (seenDomains.has(domain) || 
-                domain.includes('facebook.com') ||
-                domain.includes('linkedin.com') ||
-                domain.includes('twitter.com') ||
-                domain.includes('youtube.com') ||
-                domain.includes('wikipedia.org')) {
-              skippedCount++;
-              console.log('Skipping domain:', domain, 'reason:', seenDomains.has(domain) ? 'duplicate' : 'social media');
-              continue;
+      for (const resultPage of task.result) {
+        if (!resultPage?.items || !Array.isArray(resultPage.items)) {
+          continue;
+        }
+        
+        const items = resultPage.items;
+        totalItemsProcessed += items.length;
+        console.log(`Processing page with ${items.length} items (total processed: ${totalItemsProcessed})`);
+        
+        // Process up to 50 items per page to get more competitors
+        for (const item of items.slice(0, 50)) {
+          if (item.type === 'organic' && item.url) {
+            organicCount++;
+            try {
+              const domain = new URL(item.url).hostname.replace(/^www\./, '');
+              
+              // Skip if we've seen this domain or if it's a social media/generic site
+              if (seenDomains.has(domain) || 
+                  domain.includes('facebook.com') ||
+                  domain.includes('linkedin.com') ||
+                  domain.includes('twitter.com') ||
+                  domain.includes('x.com') ||
+                  domain.includes('youtube.com') ||
+                  domain.includes('wikipedia.org') ||
+                  domain.includes('reddit.com')) {
+                skippedCount++;
+                console.log('Skipping domain:', domain, 'reason:', seenDomains.has(domain) ? 'duplicate' : 'social media');
+                continue;
+              }
+
+              seenDomains.add(domain);
+              competitors.push({
+                domain,
+                name: item.title || undefined
+              });
+              
+              console.log('Added competitor:', { domain, name: item.title });
+
+              if (competitors.length >= 7) break;
+            } catch (e) {
+              console.warn('Failed to parse URL:', item.url, 'error:', e);
             }
-
-            seenDomains.add(domain);
-            competitors.push({
-              domain,
-              name: item.title || undefined
-            });
-            
-            console.log('Added competitor:', { domain, name: item.title });
-
-            if (competitors.length >= 7) break;
-          } catch (e) {
-            console.warn('Failed to parse URL:', item.url, 'error:', e);
           }
         }
+        
+        // Break if we have enough competitors
+        if (competitors.length >= 7) break;
       }
       
       console.log('Item processing summary:', { 
-        totalItems: items.length, 
+        totalItemsProcessed,
+        resultPages: task.result.length,
         organicCount, 
         skippedCount, 
         competitorsAdded: competitors.length 
