@@ -264,40 +264,166 @@ Analyze this business and provide insights. If the description is missing or inc
   return {};
 }
 
-// Generate intelligent search queries using AI
+// Extract specific services and products from company information
+async function extractServicesAndProducts(
+  companyName: string,
+  description: string,
+  industry: string,
+  valueProposition?: string,
+  contentAnalysis?: ReturnType<typeof analyzeContent>
+): Promise<{ services: string[]; products: string[] }> {
+  if (!LOVABLE_API_KEY) {
+    // Fallback: try to extract from description using keywords
+    const services: string[] = [];
+    const products: string[] = [];
+    
+    const descLower = description.toLowerCase();
+    const serviceKeywords = ['software', 'platform', 'tool', 'service', 'solution', 'app', 'system'];
+    const productKeywords = ['product', 'device', 'equipment'];
+    
+    // Basic extraction from description
+    const words = description.split(/\s+/);
+    for (let i = 0; i < words.length - 1; i++) {
+      const word = words[i].toLowerCase();
+      if (serviceKeywords.some(kw => word.includes(kw))) {
+        const phrase = words.slice(Math.max(0, i - 1), i + 2).join(' ');
+        if (phrase.length > 5 && phrase.length < 50) {
+          services.push(phrase);
+        }
+      }
+    }
+    
+    return { services: [...new Set(services)].slice(0, 5), products: [...new Set(products)].slice(0, 5) };
+  }
+
+  try {
+    const systemPrompt = `You are an expert business analyst. Extract specific services and products that a company offers.
+
+Return ONLY a valid JSON object with these fields:
+{
+  "services": ["service 1", "service 2", ...],
+  "products": ["product 1", "product 2", ...]
+}
+
+Rules:
+- Extract specific, concrete services/products (e.g., "project management software", "cloud hosting", "email marketing platform")
+- NOT generic categories (e.g., NOT "software", "services", "solutions")
+- Focus on what customers would search for when looking for alternatives
+- Maximum 7 services and 7 products
+- If unclear, return empty arrays`;
+
+    const userPrompt = `Company: ${companyName}
+Industry: ${industry || 'Unknown'}
+Description: ${description || 'No description'}
+${valueProposition ? `Value Proposition: ${valueProposition}` : ''}
+${contentAnalysis?.topics?.length ? `Topics: ${contentAnalysis.topics.join(', ')}` : ''}
+
+Extract the specific services and products this company offers. Be specific and concrete.`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (content) {
+        const cleanContent = content.replace(/```json\n?|```\n?/g, '').trim();
+        try {
+          const extracted = JSON.parse(cleanContent);
+          return {
+            services: Array.isArray(extracted.services) ? extracted.services.slice(0, 7) : [],
+            products: Array.isArray(extracted.products) ? extracted.products.slice(0, 7) : []
+          };
+        } catch {
+          // Fall through to fallback
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error extracting services/products:', error);
+  }
+
+  return { services: [], products: [] };
+}
+
+// Generate intelligent search queries using AI with service-specific focus
 async function generateCompetitorSearchQueries(
   companyName: string,
   industry: string,
   description: string,
   businessType?: string,
   valueProposition?: string,
-  targetAudience?: string
+  targetAudience?: string,
+  services?: string[],
+  products?: string[]
 ): Promise<string[]> {
   if (!LOVABLE_API_KEY) {
-    // Fallback to basic queries if AI is not available
+    // Fallback to service/product-specific queries if available
     const queries: string[] = [];
-    if (industry) {
-      queries.push(`${industry} companies`);
-      queries.push(`top ${industry} companies`);
-      queries.push(`best ${industry} services`);
+    
+    // Use services/products for specific queries
+    if (services && services.length > 0) {
+      for (const service of services.slice(0, 3)) {
+        queries.push(`${service} alternatives`);
+        queries.push(`${service} competitors`);
+      }
     }
-    if (companyName) {
+    if (products && products.length > 0) {
+      for (const product of products.slice(0, 2)) {
+        queries.push(`${product} alternatives`);
+      }
+    }
+    
+    // Fallback to company name queries
+    if (companyName && queries.length < 3) {
       const cleanName = companyName.replace(/&#\d+;/g, '').replace(/[–—]/g, '').trim();
       queries.push(`${cleanName} competitors`);
-      queries.push(`companies like ${cleanName}`);
+      queries.push(`alternatives to ${cleanName}`);
     }
-    return queries.slice(0, 5);
+    
+    // Last resort: industry queries (but more specific)
+    if (queries.length < 3 && industry && businessType) {
+      queries.push(`${businessType} ${industry} companies`);
+    }
+    
+    return queries.slice(0, 7);
   }
 
   try {
-    const systemPrompt = `You are an expert SEO and market research analyst. Generate 5-7 highly specific Google search queries that would help discover direct competitors of a business.
+    const systemPrompt = `You are an expert SEO and market research analyst. Generate 5-7 HIGHLY SPECIFIC Google search queries to find DIRECT competitors.
 
-Consider:
-- Industry-specific terms
-- Service/product offerings
-- Target market
-- Business model (B2B, B2C, etc.)
-- Value proposition keywords
+CRITICAL: Generate queries that target companies offering the EXACT SAME services/products, NOT just the same industry.
+
+Query Format Guidelines:
+- Use service/product names + "alternatives" or "competitors"
+- Use specific service descriptions + "software" or "platform"
+- Include business model (B2B/B2C) when relevant
+- Avoid generic queries like "industry companies" or "top companies"
+- Focus on what customers search when looking for alternatives
+
+Examples of GOOD queries:
+- "project management software alternatives"
+- "B2B email marketing platform competitors"
+- "cloud hosting services for small business"
+- "CRM software for sales teams"
+
+Examples of BAD queries (too generic):
+- "SaaS companies"
+- "top software companies"
+- "best tech companies"
 
 Return ONLY a JSON array of search query strings, nothing else:
 ["query 1", "query 2", "query 3", ...]`;
@@ -308,12 +434,16 @@ Description: ${description || 'No description'}
 Business Type: ${businessType || 'Unknown'}
 Value Proposition: ${valueProposition || 'Unknown'}
 Target Audience: ${targetAudience || 'Unknown'}
+${services && services.length > 0 ? `Services: ${services.join(', ')}` : ''}
+${products && products.length > 0 ? `Products: ${products.join(', ')}` : ''}
 
-Generate specific search queries to find competitors. Focus on:
-1. Companies offering similar services/products
-2. Companies targeting the same audience
-3. Companies in the same industry niche
-4. Alternative solutions to what this company offers`;
+Generate HIGHLY SPECIFIC search queries to find DIRECT competitors. Focus on:
+1. Companies offering the EXACT SAME services/products (use service/product names in queries)
+2. Alternative solutions to specific services/products
+3. Competitors targeting the same audience with similar offerings
+4. Use service/product names + "alternatives" or "competitors" format
+
+DO NOT generate generic industry queries. Be specific and concrete.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -365,7 +495,144 @@ Generate specific search queries to find competitors. Focus on:
     queries.push(`${cleanName} competitors`);
     queries.push(`companies like ${cleanName}`);
   }
-  return queries.slice(0, 5);
+  return queries.slice(0, 7);
+}
+
+// Validate competitor relevance by analyzing their website content
+async function validateCompetitorRelevance(
+  competitorUrl: string,
+  competitorDomain: string,
+  companyName: string,
+  companyDescription: string,
+  industry: string,
+  businessType?: string,
+  services?: string[],
+  products?: string[]
+): Promise<{ isCompetitor: boolean; relevanceScore: number; reason: string }> {
+  // Default: assume not a competitor until validated
+  const defaultResult = { isCompetitor: false, relevanceScore: 0, reason: 'Failed to validate' };
+
+  if (!LOVABLE_API_KEY) {
+    // Without AI, we can't validate - be conservative
+    return defaultResult;
+  }
+
+  try {
+    // Fetch competitor homepage (quick fetch with timeout)
+    const competitorResponse = await fetch(competitorUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; SearchFuel/1.0; +https://searchfuel.app)',
+      },
+      signal: AbortSignal.timeout(3000), // 3 second timeout
+    });
+
+    if (!competitorResponse.ok) {
+      return { ...defaultResult, reason: 'Failed to fetch competitor website' };
+    }
+
+    const competitorHtml = await competitorResponse.text();
+    
+    // Extract basic info from competitor site
+    const titleMatch = competitorHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : '';
+    
+    const descMatch = competitorHtml.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+    const metaDesc = descMatch ? descMatch[1].trim() : '';
+    
+    // Extract first paragraph or hero section
+    let contentPreview = '';
+    const heroMatch = competitorHtml.match(/<section[^>]*class=["'][^"']*hero[^"']*["'][^>]*>(.*?)<\/section>/is);
+    const mainMatch = competitorHtml.match(/<main[^>]*>(.*?)<\/main>/is);
+    const contentSection = heroMatch?.[1] || mainMatch?.[1] || competitorHtml;
+    
+    const pMatches = contentSection.match(/<p[^>]*>([^<]{50,300})<\/p>/gi);
+    if (pMatches && pMatches.length > 0) {
+      contentPreview = pMatches.slice(0, 2)
+        .map(p => p.replace(/<[^>]+>/g, ' ').trim())
+        .join(' ')
+        .substring(0, 500);
+    }
+
+    // Use AI to validate if this is a true competitor
+    const systemPrompt = `You are an expert market research analyst. Determine if a website represents a DIRECT COMPETITOR of a company.
+
+A DIRECT COMPETITOR must meet ALL of these criteria:
+1. Offers similar or the same services/products (not just same industry)
+2. Targets similar customer base/audience
+3. Has similar business model (B2B vs B2C must match)
+4. Customers would consider them as an alternative solution
+
+NOT a competitor if:
+- Offers complementary services (partner/integration)
+- Different business model (B2B vs B2C mismatch)
+- Different target audience
+- Only in same broad industry but different services
+
+Return ONLY a valid JSON object:
+{
+  "isCompetitor": true/false,
+  "relevanceScore": 0-100 (how similar they are, 0 = not competitor, 100 = direct competitor),
+  "reason": "brief explanation of why they are/aren't a competitor"
+}`;
+
+    const userPrompt = `Company Looking For Competitors:
+Name: ${companyName}
+Industry: ${industry || 'Unknown'}
+Description: ${companyDescription || 'No description'}
+Business Type: ${businessType || 'Unknown'}
+${services && services.length > 0 ? `Services: ${services.join(', ')}` : ''}
+${products && products.length > 0 ? `Products: ${products.join(', ')}` : ''}
+
+Potential Competitor Website:
+Domain: ${competitorDomain}
+Title: ${title || 'No title'}
+Meta Description: ${metaDesc || 'No description'}
+Content Preview: ${contentPreview || 'No content available'}
+
+Is this website a DIRECT COMPETITOR? Analyze if they offer similar services/products and target the same audience.`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (content) {
+        const cleanContent = content.replace(/```json\n?|```\n?/g, '').trim();
+        try {
+          const validation = JSON.parse(cleanContent);
+          return {
+            isCompetitor: validation.isCompetitor === true,
+            relevanceScore: typeof validation.relevanceScore === 'number' 
+              ? Math.max(0, Math.min(100, validation.relevanceScore)) 
+              : 0,
+            reason: validation.reason || 'Validated by AI'
+          };
+        } catch {
+          // Fall through to default
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Error validating competitor ${competitorDomain}:`, error);
+    // On error, be conservative - don't include as competitor
+    return { ...defaultResult, reason: 'Validation error' };
+  }
+
+  return defaultResult;
 }
 
 // SERP-based competitor discovery using DataForSEO with enhanced search strategies
@@ -375,7 +642,8 @@ async function discoverCompetitorsFromSERP(
   description: string,
   businessType?: string,
   valueProposition?: string,
-  targetAudience?: string
+  targetAudience?: string,
+  contentAnalysis?: ReturnType<typeof analyzeContent>
 ): Promise<Array<{ domain: string; name?: string }>> {
   console.log('Starting enhanced competitor discovery with:', { 
     companyName, 
@@ -391,7 +659,18 @@ async function discoverCompetitorsFromSERP(
   }
 
   try {
-    // Generate multiple intelligent search queries using AI
+    // Phase 1: Extract specific services/products first
+    console.log('Extracting services and products...');
+    const { services, products } = await extractServicesAndProducts(
+      companyName,
+      description,
+      industry,
+      valueProposition,
+      contentAnalysis
+    );
+    console.log(`Extracted ${services.length} services and ${products.length} products:`, { services, products });
+
+    // Phase 1: Generate service/product-specific search queries
     console.log('Generating competitor search queries...');
     const searchQueries = await generateCompetitorSearchQueries(
       companyName,
@@ -399,7 +678,9 @@ async function discoverCompetitorsFromSERP(
       description,
       businessType,
       valueProposition,
-      targetAudience
+      targetAudience,
+      services,
+      products
     );
     
     console.log(`Generated ${searchQueries.length} search queries:`, searchQueries);
@@ -409,9 +690,9 @@ async function discoverCompetitorsFromSERP(
     const companyNameWords = cleanCompanyName.split(/\s+/).filter(w => w.length > 2);
 
     // Helper function to execute a single SERP query
-    const executeSERPQuery = async (query: string): Promise<Array<{ domain: string; name?: string; score?: number }>> => {
+    const executeSERPQuery = async (query: string): Promise<Array<{ domain: string; name?: string; score?: number; url?: string; snippet?: string }>> => {
       const endpoint = 'https://api.dataforseo.com/v3/serp/google/organic/live/advanced';
-      const competitors: Array<{ domain: string; name?: string; score?: number }> = [];
+      const competitors: Array<{ domain: string; name?: string; score?: number; url?: string; snippet?: string }> = [];
       
       try {
         const serpResponse = await fetch(endpoint, {
@@ -492,7 +773,7 @@ async function discoverCompetitorsFromSERP(
                     continue;
                   }
                   
-                  // Calculate relevance score based on position and title
+                  // Calculate base relevance score based on position
                   const position = item.rank_absolute || 999;
                   let score = Math.max(0, 100 - position); // Higher score for better positions
                   
@@ -505,10 +786,15 @@ async function discoverCompetitorsFromSERP(
                     }
                   }
                   
+                  // Store snippet for later validation
+                  const snippet = item.snippet || item.description || '';
+                  
                   competitors.push({
                     domain,
                     name: item.title || undefined,
-                    score
+                    score,
+                    url: item.url,
+                    snippet
                   });
                 } catch (e) {
                   console.warn('Failed to parse URL:', item.url, 'error:', e);
@@ -531,7 +817,14 @@ async function discoverCompetitorsFromSERP(
     );
     
     // Combine and deduplicate results
-    const competitorMap = new Map<string, { domain: string; name?: string; score: number; queryCount: number }>();
+    const competitorMap = new Map<string, { 
+      domain: string; 
+      name?: string; 
+      score: number; 
+      queryCount: number;
+      url?: string;
+      snippet?: string;
+    }>();
     
     for (const results of queryResults) {
       for (const competitor of results) {
@@ -540,35 +833,122 @@ async function discoverCompetitorsFromSERP(
           // If domain appears in multiple queries, it's more likely a competitor - boost score
           existing.score = Math.max(existing.score, competitor.score || 0) + 10;
           existing.queryCount += 1;
+          // Keep the best URL (prefer https, prefer shorter paths)
+          if (competitor.url && (!existing.url || competitor.url.length < existing.url.length)) {
+            existing.url = competitor.url;
+          }
+          if (competitor.snippet && !existing.snippet) {
+            existing.snippet = competitor.snippet;
+          }
         } else {
           competitorMap.set(competitor.domain, {
             domain: competitor.domain,
             name: competitor.name,
             score: competitor.score || 0,
-            queryCount: 1
+            queryCount: 1,
+            url: competitor.url,
+            snippet: competitor.snippet
           });
         }
       }
     }
     
-    // Convert to array, sort by score (highest first), and limit to top 7
-    const finalCompetitors = Array.from(competitorMap.values())
+    // Phase 2: Validate competitors with content analysis
+    console.log(`Validating ${competitorMap.size} potential competitors...`);
+    const validatedCompetitors: Array<{
+      domain: string;
+      name?: string;
+      score: number;
+      queryCount: number;
+      relevanceScore: number;
+      validationReason: string;
+    }> = [];
+    
+    // Process top candidates first (limit validation to top 15 to avoid too many API calls)
+    const candidatesToValidate = Array.from(competitorMap.values())
       .sort((a, b) => {
-        // Sort by queryCount first (appears in more queries = more relevant)
         if (b.queryCount !== a.queryCount) {
           return b.queryCount - a.queryCount;
         }
-        // Then by score
         return b.score - a.score;
       })
+      .slice(0, 15);
+    
+    // Validate competitors in parallel (but limit concurrency to avoid rate limits)
+    const validationPromises = candidatesToValidate.map(async (candidate) => {
+      const competitorUrl = candidate.url || `https://${candidate.domain}`;
+      
+      const validation = await validateCompetitorRelevance(
+        competitorUrl,
+        candidate.domain,
+        companyName,
+        description,
+        industry,
+        businessType,
+        services,
+        products
+      );
+      
+      if (validation.isCompetitor && validation.relevanceScore >= 40) {
+        // Combine SERP score with validation score
+        const combinedScore = (candidate.score * 0.3) + (validation.relevanceScore * 0.7);
+        
+        return {
+          domain: candidate.domain,
+          name: candidate.name,
+          score: candidate.score,
+          queryCount: candidate.queryCount,
+          relevanceScore: validation.relevanceScore,
+          validationReason: validation.reason,
+          combinedScore
+        };
+      }
+      
+      return null;
+    });
+    
+    const validationResults = await Promise.all(validationPromises);
+    
+    // Filter out null results and sort by combined score
+    for (const result of validationResults) {
+      if (result) {
+        validatedCompetitors.push({
+          domain: result.domain,
+          name: result.name,
+          score: result.score,
+          queryCount: result.queryCount,
+          relevanceScore: result.relevanceScore,
+          validationReason: result.validationReason
+        });
+      }
+    }
+    
+    // Sort by relevance score (from validation) first, then by queryCount, then by SERP score
+    validatedCompetitors.sort((a, b) => {
+      if (b.relevanceScore !== a.relevanceScore) {
+        return b.relevanceScore - a.relevanceScore;
+      }
+      if (b.queryCount !== a.queryCount) {
+        return b.queryCount - a.queryCount;
+      }
+      return b.score - a.score;
+    });
+    
+    // Return top 7 validated competitors
+    const finalCompetitors = validatedCompetitors
       .slice(0, 7)
       .map(c => ({
         domain: c.domain,
         name: c.name
       }));
     
-    console.log(`Found ${finalCompetitors.length} unique competitors from ${searchQueries.length} queries`);
+    console.log(`Found ${finalCompetitors.length} validated competitors from ${searchQueries.length} queries`);
     console.log('Final competitors:', finalCompetitors);
+    
+    // If we have fewer than 3 validated competitors, log a warning
+    if (finalCompetitors.length < 3) {
+      console.warn(`Only found ${finalCompetitors.length} validated competitors. Consider relaxing validation criteria.`);
+    }
     
     return finalCompetitors;
   } catch (error) {
@@ -788,16 +1168,18 @@ async function generateCompetitors(
   description: string,
   businessType?: string,
   valueProposition?: string,
-  targetAudience?: string
+  targetAudience?: string,
+  contentAnalysis?: ReturnType<typeof analyzeContent>
 ): Promise<Array<{ domain: string; name?: string }>> {
-  // Use enhanced SERP-based discovery with multiple queries
+  // Use enhanced SERP-based discovery with multiple queries and validation
   const serpCompetitors = await discoverCompetitorsFromSERP(
     companyName, 
     industry, 
     description,
     businessType,
     valueProposition,
-    targetAudience
+    targetAudience,
+    contentAnalysis
   );
   
   // Filter out the current website
@@ -913,8 +1295,8 @@ serve(async (req) => {
       structuredData
     );
 
-    // Generate competitors using enhanced SERP data with multiple search strategies
-    console.log('Discovering competitors from SERP with enhanced search...');
+    // Generate competitors using enhanced SERP data with multiple search strategies and validation
+    console.log('Discovering competitors from SERP with enhanced search and validation...');
     const competitors = await generateCompetitors(
       url,
       businessInfo.company_name,
@@ -922,7 +1304,8 @@ serve(async (req) => {
       businessInfo.company_description,
       aiInsights.business_type,
       aiInsights.value_proposition,
-      aiInsights.target_audience
+      aiInsights.target_audience,
+      contentAnalysis
     );
 
     // Combine all insights
