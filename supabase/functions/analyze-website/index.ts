@@ -287,20 +287,66 @@ async function discoverCompetitorsFromSERP(
 
     console.log('DataForSEO search query:', searchQuery);
 
-    const serpResponse = await fetch('https://api.dataforseo.com/v3/serp/google/organic/live', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Basic ' + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`),
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify([{
-        keyword: searchQuery,
-        location_code: 2840, // United States
-        language_code: 'en',
-        depth: 3
-      }]),
-      signal: AbortSignal.timeout(15000),
-    });
+    // DataForSEO endpoint - based on documentation at https://docs.dataforseo.com/v3/serp/google/organic/live/advanced/
+    // Try different variations if one fails (some endpoints may be deprecated or require different access)
+    // Note: If all return 404, verify your DataForSEO account has SERP API access
+    const endpoints = [
+      'https://api.dataforseo.com/v3/serp/google/organic/live/advanced', // Most common for live advanced results
+      'https://api.dataforseo.com/v3/serp/google/organic/live/regular', // Regular live results  
+      'https://api.dataforseo.com/v3/serp/google/organic/live', // Basic live endpoint
+    ];
+
+    let serpResponse: Response | null = null;
+    let lastError: string = '';
+
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`Trying DataForSEO endpoint: ${endpoint}`);
+        serpResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify([{
+            keyword: searchQuery,
+            location_code: 2840, // United States
+            language_code: 'en',
+            depth: 3
+          }]),
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (serpResponse.ok) {
+          console.log(`Success with endpoint: ${endpoint}`);
+          break;
+        } else if (serpResponse.status === 404) {
+          const errorText = await serpResponse.text();
+          lastError = `${endpoint} returned 404: ${errorText.substring(0, 200)}`;
+          console.log(`Endpoint ${endpoint} returned 404, trying next...`);
+          serpResponse = null;
+          continue;
+        } else {
+          // Non-404 error, break and handle it
+          break;
+        }
+      } catch (fetchError) {
+        console.warn(`Error with endpoint ${endpoint}:`, fetchError);
+        lastError = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+        serpResponse = null;
+        continue;
+      }
+    }
+
+    if (!serpResponse) {
+      console.error('All DataForSEO endpoints failed. Last error:', lastError);
+      console.error('NOTE: If all endpoints return 404, this may indicate:');
+      console.error('1. API endpoint structure has changed - check https://docs.dataforseo.com/v3/serp/google/organic/');
+      console.error('2. Your DataForSEO account may not have access to SERP API endpoints');
+      console.error('3. API credentials may be incorrect or expired');
+      console.error('4. The endpoint may require a different subscription tier');
+      return [];
+    }
 
     console.log('DataForSEO API response status:', serpResponse.status, serpResponse.statusText);
 
