@@ -85,6 +85,14 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<string>("");
   const [isSavingBusinessInfo, setIsSavingBusinessInfo] = useState(false);
+
+  // Helper function to decode HTML entities
+  const decodeHtmlEntities = (text: string): string => {
+    if (!text) return "";
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = text;
+    return textarea.value;
+  };
   
   // Set initial step based on whether we're reconnecting
   const [currentStep, setCurrentStep] = useState<OnboardingStep>(
@@ -479,10 +487,10 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       if (data?.success && data?.businessInfo) {
         // Auto-populate business info with extracted data
         setBusinessInfo({
-          company_name: data.businessInfo.company_name || "",
-          company_description: data.businessInfo.company_description || "",
-          industry: data.businessInfo.industry || "",
-          target_audience: data.businessInfo.target_audience || "",
+          company_name: decodeHtmlEntities(data.businessInfo.company_name || ""),
+          company_description: decodeHtmlEntities(data.businessInfo.company_description || ""),
+          industry: decodeHtmlEntities(data.businessInfo.industry || ""),
+          target_audience: decodeHtmlEntities(data.businessInfo.target_audience || ""),
         });
 
         // Auto-populate competitors if available
