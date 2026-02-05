@@ -58,7 +58,11 @@ export const locationCodeSchema = z.number().int().nonnegative({
 // Publish to CMS request schema
 export const publishToCmsSchema = z.object({
   blog_post_id: uuidSchema,
-}).strict(); // Reject unknown fields
+  // Optional metadata from plugins (Framer, etc.)
+  source: z.string().optional(),
+  timestamp: z.string().optional(),
+  selected_content: z.any().optional(),
+});
 
 // Extract post keywords request schema
 export const extractPostKeywordsSchema = z.object({
