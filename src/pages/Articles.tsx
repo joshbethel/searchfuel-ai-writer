@@ -14,7 +14,7 @@ import { ArticleCalendar } from "@/components/ArticleCalendar";
 import { EditArticleDialog } from "@/components/EditArticleDialog";
 import { RescheduleArticleDialog } from "@/components/RescheduleArticleDialog";
 import { toast } from "sonner";
-import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, Edit, AlertTriangle } from "lucide-react";
+import { Loader2, FileText, Eye, Clock, AlertCircle, Calendar, Edit, AlertTriangle, Copy, Check } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import {
   AlertDialog,
@@ -79,6 +79,20 @@ export default function Articles() {
   const [isLoadingScheduled, setIsLoadingScheduled] = useState(true);
   const [cmsConnected, setCmsConnected] = useState<boolean | null>(null);
   const [cmsPlatform, setCmsPlatform] = useState<string | null>(null);
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
+
+  // Copy post ID to clipboard
+  const handleCopyPostId = async (postId: string) => {
+    try {
+      await navigator.clipboard.writeText(postId);
+      setCopiedPostId(postId);
+      toast.success("Post ID copied to clipboard!");
+      setTimeout(() => setCopiedPostId(null), 2000);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+      toast.error("Failed to copy Post ID");
+    }
+  };
 
   // Check CMS connection status
   const checkCMSConnection = useCallback(async () => {
@@ -754,13 +768,26 @@ export default function Articles() {
                         <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
                       </div>
                       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                        <div className="flex items-start gap-2">
-                          <Badge variant="outline" className="text-xs font-mono">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs font-mono flex-1 truncate">
                             Post ID: {post.id}
                           </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 hover:bg-blue-100 dark:hover:bg-blue-800"
+                            onClick={() => handleCopyPostId(post.id)}
+                            title="Copy Post ID"
+                          >
+                            {copiedPostId === post.id ? (
+                              <Check className="w-3 h-3 text-green-600" />
+                            ) : (
+                              <Copy className="w-3 h-3 text-blue-600" />
+                            )}
+                          </Button>
                         </div>
                         <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                          💡 Use this Post ID to manually sync with Framer CMS, then click "Publish" below to update the status here
+                          💡 Copy this Post ID to use in the Framer plugin, then click "Publish" below to update the status here
                         </p>
                       </div>
                       <div className="flex gap-2 mt-4">
