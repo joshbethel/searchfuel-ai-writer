@@ -1761,6 +1761,7 @@ export default function Settings() {
               <div className="space-y-2">
                 <Label>Permissions *</Label>
                 <div className="space-y-2">
+                  {/* Publish Only - Currently the only supported option for Framer plugin */}
                   <div
                     className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                       createKeyForm.preset === 'publish_only'
@@ -1783,10 +1784,13 @@ export default function Settings() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 ml-6">
-                      Best for Framer plugin and CMS integrations. Scopes: posts:publish, posts:read
+                      For Framer plugin. Marks posts as published in SearchFuel.
                     </p>
                   </div>
 
+                  {/* NOTE: Read Only, Full Access, and Custom options are hidden but backend logic remains.
+                      Uncomment below when additional integrations are supported.
+                  
                   <div
                     className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                       createKeyForm.preset === 'read_only'
@@ -1874,6 +1878,7 @@ export default function Settings() {
                       ))}
                     </div>
                   )}
+                  */}
                 </div>
               </div>
 
