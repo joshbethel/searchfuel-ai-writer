@@ -79,8 +79,87 @@ serve(async (req: any) => {
         // Service role auth - this is an internal call, we'll get the user from the blog post
         console.log("Authenticated via service role key (internal call)");
         userId = "service_role"; // Will be overridden by blog post owner
+      } else if (token.startsWith("sk_live_") || token.startsWith("sk_")) {
+        // Custom API key authentication
+        console.log("Attempting API key authentication...");
+        
+        // Hash the API key for lookup
+        const encoder = new TextEncoder();
+        const data = encoder.encode(token);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const keyHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+        
+        // Use service role to query api_keys table
+        const supabaseAdmin = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        );
+        
+        const { data: keyRecord, error: keyError } = await supabaseAdmin
+          .from("api_keys")
+          .select("user_id, scopes, revoked_at, expires_at")
+          .eq("key_hash", keyHash)
+          .single();
+        
+        // Check key exists
+        if (keyError || !keyRecord) {
+          console.error("API key lookup failed:", keyError);
+          return new Response(
+            JSON.stringify({ error: "Invalid API key" }),
+            { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        // Check key is not revoked
+        if (keyRecord.revoked_at) {
+          console.log("API key has been revoked");
+          return new Response(
+            JSON.stringify({ error: "API key has been revoked" }),
+            { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        // Check key is not expired
+        if (keyRecord.expires_at && new Date(keyRecord.expires_at) < new Date()) {
+          console.log("API key has expired");
+          return new Response(
+            JSON.stringify({ error: "API key has expired" }),
+            { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        // Check key has required scope for publishing
+        const requiredScope = "posts:publish";
+        const hasScope = keyRecord.scopes.includes(requiredScope) || 
+                         keyRecord.scopes.includes("full_access");
+        
+        if (!hasScope) {
+          console.log(`API key missing required scope: ${requiredScope}`);
+          return new Response(
+            JSON.stringify({ 
+              error: "Insufficient permissions",
+              required_scope: requiredScope,
+              your_scopes: keyRecord.scopes,
+              hint: "This API key doesn't have the 'posts:publish' scope. Generate a new key with the correct permissions in Settings → API Keys."
+            }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        userId = keyRecord.user_id;
+        console.log(`Authenticated user via API key: ${userId}`);
+        
+        // Update last_used_at asynchronously (fire and forget)
+        supabaseAdmin
+          .from("api_keys")
+          .update({ last_used_at: new Date().toISOString() })
+          .eq("key_hash", keyHash)
+          .then(() => console.log("Updated API key last_used_at"))
+          .catch((err) => console.error("Failed to update last_used_at:", err));
+          
       } else {
-        // Regular user token
+        // Regular user token (Supabase session)
         const { data, error: authError } = await supabaseClient.auth.getUser(token);
         
         if (authError || !data.user) {
