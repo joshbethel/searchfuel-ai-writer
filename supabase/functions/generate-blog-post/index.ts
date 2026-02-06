@@ -309,7 +309,7 @@ serve(async (req: Request) => {
         // Perform competitor analysis if keyword is available or use industry-based analysis
         let competitorInsights = '';
         let competitorAnalysis = null;
-        const analysisKeyword = body.keyword || `${blog.industry || 'best practices'} ${blog.company_name || ''}`.trim();
+        const analysisKeyword = validationResult.data.keyword || `${blog.industry || 'best practices'} ${blog.company_name || ''}`.trim();
 
         try {
           // Call competitor analysis function
