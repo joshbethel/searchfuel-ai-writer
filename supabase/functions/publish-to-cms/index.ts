@@ -318,13 +318,21 @@ serve(async (req: any) => {
     }
 
     // Update blog post with external ID and status
+    const updateData: Record<string, unknown> = {
+      external_post_id: externalPostId,
+      publishing_status: publishSuccess ? "published" : "failed",
+      last_published_at: new Date().toISOString(),
+    };
+    
+    // Also update main status field on successful publish
+    if (publishSuccess) {
+      updateData.status = "published";
+      updateData.published_at = new Date().toISOString();
+    }
+    
     const { error: updateError } = await supabase
       .from("blog_posts")
-      .update({
-        external_post_id: externalPostId,
-        publishing_status: publishSuccess ? "published" : "failed",
-        last_published_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq("id", blog_post_id);
 
     if (updateError) {

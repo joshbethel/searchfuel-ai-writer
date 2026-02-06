@@ -523,6 +523,7 @@ Format: 16:9 aspect ratio, centered single subject.`;
         }
 
         // Insert blog post with article type and featured image
+        // Note: status starts as "draft" until actually published to CMS successfully
         const { data: post, error: insertError } = await supabase
           .from("blog_posts")
           .insert({
@@ -533,8 +534,8 @@ Format: 16:9 aspect ratio, centered single subject.`;
             content: processedContent,
             article_type: selectedArticleType.type,
             featured_image: featuredImage,
-            status: scheduledPublishDate ? "draft" : "published",
-            published_at: scheduledPublishDate ? null : new Date().toISOString(),
+            status: "draft", // Always start as draft, updated to "published" after successful CMS publish
+            published_at: null, // Set when actually published
             scheduled_publish_date: scheduledPublishDate || null,
             publishing_status: scheduledPublishDate ? "scheduled" : "pending",
             meta_title: postData.meta_title || postData.title,
