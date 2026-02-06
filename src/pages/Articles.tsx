@@ -10,6 +10,7 @@ import { useSiteContext } from "@/contexts/SiteContext";
 import KeywordPanel from '@/components/KeywordPanel';
 import { CompetitorAnalysisPanel } from '@/components/CompetitorAnalysisPanel';
 import { GenerateArticleDialog } from "@/components/GenerateArticleDialog";
+import { ArticleGenerationProgress, GenerationStep, GenerationResult } from "@/components/ArticleGenerationProgress";
 import { ArticleCalendar } from "@/components/ArticleCalendar";
 import { EditArticleDialog } from "@/components/EditArticleDialog";
 import { RescheduleArticleDialog } from "@/components/RescheduleArticleDialog";
@@ -72,6 +73,9 @@ export default function Articles() {
   const { articles, isLoading, blogId, fetchArticles, setArticles } = useArticles();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
+  const [generationStep, setGenerationStep] = useState<GenerationStep>('idle');
+  const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
+  const [lastScheduleDate, setLastScheduleDate] = useState<Date | undefined>();
   const [editArticleId, setEditArticleId] = useState<string | null>(null);
   const [rescheduleArticleId, setRescheduleArticleId] = useState<string | null>(null);
   const [rescheduleArticleDate, setRescheduleArticleDate] = useState<string | null>(null);
@@ -369,9 +373,12 @@ export default function Articles() {
       return;
     }
     
+    // Reset and start generation
     setIsGeneratingArticle(true);
     setShowGenerateDialog(false);
-    toast.info("Generating article... This may take a minute.");
+    setGenerationStep('generating');
+    setGenerationResult(null);
+    setLastScheduleDate(scheduleDate);
     
     try {
       const { data, error } = await supabase.functions.invoke('generate-blog-post', {
@@ -383,39 +390,95 @@ export default function Articles() {
       
       if (error) throw error;
       
-      if (data.success) {
-        if (scheduleDate) {
-          toast.success(`Article scheduled for publication on ${format(scheduleDate, "PPP 'at' p")}`);
-        } else if (cmsPlatform === 'framer') {
-          // Framer articles don't auto-publish
-          toast.success("✓ Article write done!");
-          toast.info("Article is in pending tab - Use the Post ID to sync in Framer, then click 'Publish' to update status");
-        } else if (data.results?.[0]?.success) {
-          toast.success("Article generated successfully!");
-          toast.info("Article published to CMS!");
-        } else {
-          toast.success("Article generated successfully!");
-          toast.warning(`Article created but publishing failed: ${data.results?.[0]?.error}`);
-        }
-        await fetchArticles();
-      } else {
-        toast.warning("Article generation completed with issues");
-      }
+      const result = data.results?.[0];
       
-      await fetchArticles();
-      await fetchScheduledKeywords();
+      if (data.success && result) {
+        const articleTitle = result.title || 'New Article';
+        const articleId = result.postId;
+        
+        if (scheduleDate) {
+          // Scheduled - complete
+          setGenerationResult({
+            success: true,
+            articleTitle,
+            articleId,
+            isScheduled: true,
+            scheduledDate: scheduleDate.toISOString(),
+          });
+          setGenerationStep('complete');
+        } else if (cmsPlatform === 'framer') {
+          // Framer - no auto-publish, mark as complete after generation
+          setGenerationResult({
+            success: true,
+            articleTitle,
+            articleId,
+            publishingSuccess: false,
+          });
+          setGenerationStep('complete');
+        } else {
+          // Other CMS - check publishing status
+          setGenerationStep('publishing');
+          
+          // Small delay to show publishing step
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          if (result.success) {
+            setGenerationResult({
+              success: true,
+              articleTitle,
+              articleId,
+              publishingSuccess: true,
+            });
+            setGenerationStep('complete');
+          } else {
+            setGenerationResult({
+              success: true,
+              articleTitle,
+              articleId,
+              publishingSuccess: false,
+              publishingError: result.error || 'Publishing failed',
+            });
+            setGenerationStep('error');
+          }
+        }
+        
+        await fetchArticles();
+        await fetchScheduledKeywords();
+      } else {
+        // Generation failed
+        setGenerationResult({
+          success: false,
+          error: result?.error || 'Article generation failed',
+        });
+        setGenerationStep('error');
+      }
     } catch (error: any) {
       console.error('Article generation error:', error);
       
+      let errorMessage = error.message || "Failed to generate article";
+      
       // Check if it's a limit exceeded error
       if (error?.context?.body?.code === 'LIMIT_EXCEEDED') {
-        toast.error(error.context.body.error || "You have reached your monthly post limit. Please upgrade your plan.");
-      } else {
-        toast.error(error.message || "Failed to generate article");
+        errorMessage = error.context.body.error || "You have reached your monthly post limit. Please upgrade your plan.";
       }
+      
+      setGenerationResult({
+        success: false,
+        error: errorMessage,
+      });
+      setGenerationStep('error');
     } finally {
       setIsGeneratingArticle(false);
     }
+  };
+
+  const handleDismissProgress = () => {
+    setGenerationStep('idle');
+    setGenerationResult(null);
+  };
+
+  const handleRetryGeneration = () => {
+    handleGenerateArticle(lastScheduleDate);
   };
 
   if (isLoading || isLoadingScheduled) {
@@ -490,6 +553,17 @@ export default function Articles() {
             )}
           </div>
         </Card>
+        
+        {/* Generation Progress Indicator */}
+        <div className="mt-6">
+          <ArticleGenerationProgress
+            step={generationStep}
+            result={generationResult}
+            onDismiss={handleDismissProgress}
+            onRetry={handleRetryGeneration}
+            cmsPlatform={cmsPlatform}
+          />
+        </div>
         
         <GenerateArticleDialog
           open={showGenerateDialog}
@@ -575,6 +649,15 @@ export default function Articles() {
           currentScheduledDate={rescheduleArticleDate}
         />
       </div>
+
+      {/* Generation Progress Indicator */}
+      <ArticleGenerationProgress
+        step={generationStep}
+        result={generationResult}
+        onDismiss={handleDismissProgress}
+        onRetry={handleRetryGeneration}
+        cmsPlatform={cmsPlatform}
+      />
 
       {cmsConnected === false && (
         <Card className="mb-6 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
