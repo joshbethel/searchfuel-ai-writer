@@ -619,6 +619,8 @@ export default function Articles() {
             onDismiss={handleDismissProgress}
             onRetry={handleRetryGeneration}
             onRetryPublish={handleRetryPublish}
+            onCopyId={handleCopyPostId}
+            copiedId={copiedPostId}
             cmsPlatform={cmsPlatform}
           />
         </div>
@@ -715,6 +717,8 @@ export default function Articles() {
         onDismiss={handleDismissProgress}
         onRetry={handleRetryGeneration}
         onRetryPublish={handleRetryPublish}
+        onCopyId={handleCopyPostId}
+        copiedId={copiedPostId}
         cmsPlatform={cmsPlatform}
       />
 

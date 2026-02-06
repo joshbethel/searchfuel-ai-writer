@@ -12,7 +12,9 @@ import {
   Sparkles,
   Clock,
   X,
-  RefreshCw
+  RefreshCw,
+  Copy,
+  Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +37,8 @@ interface ArticleGenerationProgressProps {
   onDismiss: () => void;
   onRetry?: () => void;
   onRetryPublish?: () => void;
+  onCopyId?: (id: string) => void;
+  copiedId?: string | null;
   cmsPlatform?: string | null;
 }
 
@@ -50,6 +54,8 @@ export function ArticleGenerationProgress({
   onDismiss,
   onRetry,
   onRetryPublish,
+  onCopyId,
+  copiedId,
   cmsPlatform,
 }: ArticleGenerationProgressProps) {
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -219,10 +225,27 @@ export function ArticleGenerationProgress({
             {result.articleTitle && (
               <div className="flex items-start gap-2">
                 <FileText className="w-4 h-4 text-muted-foreground mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-medium">{result.articleTitle}</p>
                   {result.articleId && (
-                    <p className="text-xs text-muted-foreground font-mono">ID: {result.articleId}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xs text-muted-foreground font-mono">ID: {result.articleId}</p>
+                      {onCopyId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0 hover:bg-muted"
+                          onClick={() => onCopyId(result.articleId!)}
+                          title="Copy Post ID"
+                        >
+                          {copiedId === result.articleId ? (
+                            <Check className="w-3 h-3 text-green-600" />
+                          ) : (
+                            <Copy className="w-3 h-3 text-muted-foreground" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
