@@ -814,6 +814,22 @@ export default function Articles() {
                       <h3 className="text-xl font-semibold text-foreground mb-2">
                         {post.title}
                       </h3>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <span className="font-mono">ID: {post.id}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0 hover:bg-muted"
+                          onClick={() => handleCopyPostId(post.id)}
+                          title="Copy Post ID"
+                        >
+                          {copiedPostId === post.id ? (
+                            <Check className="w-3 h-3 text-green-600" />
+                          ) : (
+                            <Copy className="w-3 h-3 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2">
@@ -840,11 +856,6 @@ export default function Articles() {
                             </Button>
                           )}
                         </div>
-                        {post.external_post_id && (
-                          <Badge variant="outline" className="text-xs">
-                            Post ID: {post.external_post_id}
-                          </Badge>
-                        )}
                       </div>
                       <div className="flex gap-2 mb-6">
                         <Button
@@ -1018,13 +1029,24 @@ export default function Articles() {
                     <h3 className="text-xl font-semibold text-foreground mb-2">
                       {post.title}
                     </h3>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                      <span className="font-mono">ID: {post.id}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 w-5 p-0 hover:bg-muted"
+                        onClick={() => handleCopyPostId(post.id)}
+                        title="Copy Post ID"
+                      >
+                        {copiedPostId === post.id ? (
+                          <Check className="w-3 h-3 text-green-600" />
+                        ) : (
+                          <Copy className="w-3 h-3 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span>Published {format(new Date(post.published_at || post.created_at), 'MMM d, yyyy')}</span>
-                      {post.external_post_id && (
-                        <Badge variant="outline" className="text-xs">
-                          Post ID: {post.external_post_id}
-                        </Badge>
-                      )}
                     </div>
                     <div className="flex gap-2 mt-2">
                       <Button
@@ -1082,13 +1104,24 @@ export default function Articles() {
                     <h3 className="text-xl font-semibold text-foreground mb-2">
                       {post.title}
                     </h3>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                      <span className="font-mono">ID: {post.id}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 w-5 p-0 hover:bg-muted"
+                        onClick={() => handleCopyPostId(post.id)}
+                        title="Copy Post ID"
+                      >
+                        {copiedPostId === post.id ? (
+                          <Check className="w-3 h-3 text-green-600" />
+                        ) : (
+                          <Copy className="w-3 h-3 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span>Created {format(new Date(post.created_at), 'MMM d, yyyy')}</span>
-                      {post.external_post_id && (
-                        <Badge variant="outline" className="text-xs">
-                          Post ID: {post.external_post_id}
-                        </Badge>
-                      )}
                     </div>
                   </div>
                   <div className="flex gap-2">
