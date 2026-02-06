@@ -416,13 +416,14 @@ export default function Articles() {
           });
           setGenerationStep('complete');
         } else {
-          // Other CMS - check publishing status
+          // Other CMS - check publishing status from result
           setGenerationStep('publishing');
           
           // Small delay to show publishing step
           await new Promise(resolve => setTimeout(resolve, 500));
           
-          if (result.success) {
+          // Check the actual publishingSuccess field from the API response
+          if (result.publishingSuccess === true) {
             setGenerationResult({
               success: true,
               articleTitle,
@@ -430,15 +431,25 @@ export default function Articles() {
               publishingSuccess: true,
             });
             setGenerationStep('complete');
-          } else {
+          } else if (result.publishingSuccess === false) {
+            // Publishing explicitly failed
             setGenerationResult({
               success: true,
               articleTitle,
               articleId,
               publishingSuccess: false,
-              publishingError: result.error || 'Publishing failed',
+              publishingError: result.publishingError || 'Publishing failed',
             });
             setGenerationStep('error');
+          } else {
+            // publishingSuccess is null (no CMS or manual publishing required)
+            setGenerationResult({
+              success: true,
+              articleTitle,
+              articleId,
+              publishingSuccess: false, // Mark as not published
+            });
+            setGenerationStep('complete');
           }
         }
         

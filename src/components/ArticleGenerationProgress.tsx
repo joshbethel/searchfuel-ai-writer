@@ -86,6 +86,9 @@ export function ArticleGenerationProgress({
       return 'pending';
     }
 
+    // When step is 'complete', all steps including 'complete' should show as complete
+    if (step === 'complete') return 'complete';
+
     if (stepIndex < currentIndex) return 'complete';
     if (stepIndex === currentIndex) return 'active';
     return 'pending';

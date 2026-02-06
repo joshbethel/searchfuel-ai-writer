@@ -662,22 +662,17 @@ Format: 16:9 aspect ratio, centered single subject.`;
             unique_visitors: 0,
           }, { onConflict: "blog_id,date" });
 
-        results.push({
-          blogId: blog.id,
-          postId: post.id,
-          title: postData.title,
-          articleType: selectedArticleType.name,
-          backlinksInserted: linksInserted,
-          links: insertedLinks,
-          success: true,
-        });
-
         console.log(`Generated ${selectedArticleType.name} post for blog ${blog.id}: ${postData.title}`);
+
+        // Track publishing status for the result
+        let publishingSuccess: boolean | null = null;
+        let publishingError: string | null = null;
 
         // Check if we should schedule or publish immediately
         if (scheduledPublishDate) {
           // Already set as scheduled in the insert above
           console.log(`Post scheduled for ${scheduledPublishDate}`);
+          publishingSuccess = null; // Not applicable for scheduled posts
         } else if (blog.cms_platform === 'framer') {
           // Framer posts stay pending for manual publishing
           console.log(`✓ Article created for Framer. Status: PENDING for manual publishing.`);
@@ -685,6 +680,7 @@ Format: 16:9 aspect ratio, centered single subject.`;
           console.log(`  - Title: ${postData.title}`);
           console.log(`  - Publishing Status: pending`);
           // Article stays as "pending" - no auto-publish to Framer
+          publishingSuccess = null; // Manual publishing required
         } else if (blog.cms_platform && blog.cms_credentials) {
           // Auto-publish to other CMS platforms (WordPress, Shopify, Wix, etc.)
           console.log(`Auto-publishing to ${blog.cms_platform}...`);
@@ -703,6 +699,8 @@ Format: 16:9 aspect ratio, centered single subject.`;
           
           if (postCheckErr || !postCheck) {
             console.error('Post not found for publishing:', postCheckErr);
+            publishingSuccess = false;
+            publishingError = 'Post not found for publishing';
           } else {
             console.log(`Post verified: ${postCheck.title}, has image: ${!!postCheck.featured_image}`);
             
@@ -715,7 +713,7 @@ Format: 16:9 aspect ratio, centered single subject.`;
             // Retry logic for Wix (race condition on first attempt)
             const maxRetries = blog.cms_platform === 'wix' ? 3 : 1;
             let lastError: any = null;
-            let publishSuccess = false;
+            let publishSuccessFlag = false;
             
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
               try {
@@ -738,7 +736,7 @@ Format: 16:9 aspect ratio, centered single subject.`;
                   console.error(`Publish attempt ${attempt} failed:`, publishError);
                 } else if (publishResult?.success) {
                   console.log(`Successfully published to ${blog.cms_platform} on attempt ${attempt}`);
-                  publishSuccess = true;
+                  publishSuccessFlag = true;
                   break;
                 } else {
                   lastError = publishResult?.error || 'Unknown publish error';
@@ -763,9 +761,11 @@ Format: 16:9 aspect ratio, centered single subject.`;
               }
             }
             
-            // Update final status
-            if (!publishSuccess) {
+            // Update final status and track result
+            publishingSuccess = publishSuccessFlag;
+            if (!publishSuccessFlag) {
               console.error('All publish attempts failed. Last error:', lastError);
+              publishingError = lastError instanceof Error ? lastError.message : String(lastError || 'Publishing failed');
               await supabase
                 .from('blog_posts')
                 .update({ publishing_status: 'failed' })
@@ -775,7 +775,21 @@ Format: 16:9 aspect ratio, centered single subject.`;
         } else {
           // No CMS connected - article stays pending
           console.log(`Article created without CMS connection. Status: pending`);
+          publishingSuccess = null; // No CMS to publish to
         }
+
+        // Push result AFTER publishing completes
+        results.push({
+          blogId: blog.id,
+          postId: post.id,
+          title: postData.title,
+          articleType: selectedArticleType.name,
+          backlinksInserted: linksInserted,
+          links: insertedLinks,
+          success: true, // Article was generated successfully
+          publishingSuccess, // null = N/A, true = published, false = failed
+          publishingError, // Error message if publishing failed
+        });
       } catch (error) {
         console.error(`Error generating post for blog ${blog.id}:`, error);
         results.push({
