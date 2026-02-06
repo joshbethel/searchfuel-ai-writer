@@ -373,19 +373,47 @@ serve(async (req: any) => {
       }
     }
     
-    // Determine if we're in development mode
-    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development" || 
-                          Deno.env.get("DENO_ENV") === "development";
+    // Extract user-friendly error message
+    // These are actionable messages that help users fix the issue
+    const errorMessage = error.message || "Publishing failed";
     
-    // Only expose detailed error information in development
-    // In production, return generic error message to prevent information disclosure
+    // List of safe error patterns that can be shown to users
+    const safeErrorPatterns = [
+      /authentication failed/i,
+      /please reconnect/i,
+      /credentials.*invalid/i,
+      /credentials.*expired/i,
+      /api key.*invalid/i,
+      /permission denied/i,
+      /access denied/i,
+      /not found/i,
+      /rate limit/i,
+      /quota exceeded/i,
+      /timeout/i,
+      /connection failed/i,
+      /network error/i,
+      /cms.*not configured/i,
+      /blog.*not found/i,
+      /post.*not found/i,
+    ];
+    
+    // Check if the error message is safe to show to users
+    const isSafeError = safeErrorPatterns.some(pattern => pattern.test(errorMessage));
+    
+    // Return user-friendly error message (no stack traces or technical details)
+    const userFriendlyError = isSafeError 
+      ? errorMessage 
+      : "Publishing failed. Please check your CMS connection and try again.";
+    
+    // Return 200 with success: false to ensure the error message is preserved
+    // (Supabase functions.invoke wraps non-2xx responses with generic error messages)
     return new Response(
       JSON.stringify({ 
-        error: isDevelopment ? error.message : "Internal server error. Please try again later.",
-        details: isDevelopment ? error.stack : undefined,
+        success: false,
+        error: userFriendlyError,
         timestamp: new Date().toISOString()
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

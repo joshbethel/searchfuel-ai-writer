@@ -492,6 +492,52 @@ export default function Articles() {
     handleGenerateArticle(lastScheduleDate);
   };
 
+  // Retry publishing only (don't regenerate article)
+  const handleRetryPublish = async () => {
+    if (!generationResult?.articleId) {
+      toast.error("No article to publish");
+      return;
+    }
+
+    setGenerationStep('publishing');
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('publish-to-cms', {
+        body: { blog_post_id: generationResult.articleId }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        setGenerationResult(prev => prev ? {
+          ...prev,
+          publishingSuccess: true,
+          publishingError: undefined,
+        } : null);
+        setGenerationStep('complete');
+        toast.success("Article published successfully!");
+        await fetchArticles();
+      } else {
+        setGenerationResult(prev => prev ? {
+          ...prev,
+          publishingSuccess: false,
+          publishingError: data?.error || 'Publishing failed',
+        } : null);
+        setGenerationStep('error');
+        toast.error("Publishing failed: " + (data?.error || 'Unknown error'));
+      }
+    } catch (error: any) {
+      console.error('Retry publish error:', error);
+      setGenerationResult(prev => prev ? {
+        ...prev,
+        publishingSuccess: false,
+        publishingError: error.message || 'Publishing failed',
+      } : null);
+      setGenerationStep('error');
+      toast.error("Publishing failed: " + (error.message || 'Unknown error'));
+    }
+  };
+
   if (isLoading || isLoadingScheduled) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -572,6 +618,7 @@ export default function Articles() {
             result={generationResult}
             onDismiss={handleDismissProgress}
             onRetry={handleRetryGeneration}
+            onRetryPublish={handleRetryPublish}
             cmsPlatform={cmsPlatform}
           />
         </div>
@@ -667,6 +714,7 @@ export default function Articles() {
         result={generationResult}
         onDismiss={handleDismissProgress}
         onRetry={handleRetryGeneration}
+        onRetryPublish={handleRetryPublish}
         cmsPlatform={cmsPlatform}
       />
 

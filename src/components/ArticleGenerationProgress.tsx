@@ -34,6 +34,7 @@ interface ArticleGenerationProgressProps {
   result: GenerationResult | null;
   onDismiss: () => void;
   onRetry?: () => void;
+  onRetryPublish?: () => void;
   cmsPlatform?: string | null;
 }
 
@@ -48,6 +49,7 @@ export function ArticleGenerationProgress({
   result,
   onDismiss,
   onRetry,
+  onRetryPublish,
   cmsPlatform,
 }: ArticleGenerationProgressProps) {
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -141,7 +143,15 @@ export function ArticleGenerationProgress({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isError && onRetry && (
+            {/* Show "Retry Publish" when article was generated but publishing failed */}
+            {isError && result?.success && result?.publishingError && onRetryPublish && (
+              <Button variant="outline" size="sm" onClick={onRetryPublish}>
+                <Send className="w-4 h-4 mr-1" />
+                Retry Publish
+              </Button>
+            )}
+            {/* Show "Retry" (regenerate) only when article generation itself failed */}
+            {isError && !result?.success && onRetry && (
               <Button variant="outline" size="sm" onClick={onRetry}>
                 <RefreshCw className="w-4 h-4 mr-1" />
                 Retry
