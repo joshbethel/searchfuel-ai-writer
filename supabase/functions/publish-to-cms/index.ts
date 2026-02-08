@@ -347,6 +347,20 @@ serve(async (req: any) => {
         success: true,
         external_post_id: externalPostId,
         platform: blog.cms_platform,
+        // Include post data for Framer plugin CMS sync
+        post: {
+          id: post.id,
+          title: post.title,
+          slug: post.slug,
+          content: post.content,
+          excerpt: post.excerpt || "",
+          featured_image: post.featured_image || "",
+          meta_title: post.meta_title || post.title,
+          meta_description: post.meta_description || post.excerpt || "",
+          published_at: post.published_at || new Date().toISOString(),
+          article_type: post.article_type || "",
+          content_score: post.content_score || 0,
+        },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
