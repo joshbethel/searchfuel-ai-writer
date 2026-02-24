@@ -1145,16 +1145,7 @@ export default function Dashboard() {
                 </p>
               </div>
               <Button 
-                onClick={async () => {
-                  const { data: { user } } = await supabase.auth.getUser();
-                  if (user) {
-                    const canCreate = await canCreateSite(user.id);
-                    if (!canCreate) {
-                      toast.error("You've reached your site limit. Please upgrade your plan to add more sites.");
-                      navigate("/plans");
-                      return;
-                    }
-                  }
+                onClick={() => {
                   setIsReconnectingCMS(true);
                   setShowOnboarding(true);
                 }} 
