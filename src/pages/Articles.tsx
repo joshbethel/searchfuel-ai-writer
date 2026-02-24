@@ -83,6 +83,8 @@ export default function Articles() {
   const [isLoadingScheduled, setIsLoadingScheduled] = useState(true);
   const [cmsConnected, setCmsConnected] = useState<boolean | null>(null);
   const [cmsPlatform, setCmsPlatform] = useState<string | null>(null);
+  const [canGenerateArticles, setCanGenerateArticles] = useState(false);
+  const [setupBlockedReason, setSetupBlockedReason] = useState<string | null>(null);
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
 
   // Copy post ID to clipboard
@@ -102,28 +104,46 @@ export default function Articles() {
   const checkCMSConnection = useCallback(async () => {
     if (!blogId) {
       setCmsConnected(false);
+      setCanGenerateArticles(false);
+      setSetupBlockedReason("No blog selected. Please connect your CMS first.");
       return;
     }
 
     try {
       const { data: blog, error } = await supabase
         .from("blogs")
-        .select("cms_platform, cms_site_url, cms_credentials")
+        .select("cms_platform, cms_site_url, cms_credentials, onboarding_completed")
         .eq("id", blogId)
         .single();
 
       if (error) {
         console.error("Error checking CMS connection:", error);
         setCmsConnected(false);
+        setCanGenerateArticles(false);
+        setSetupBlockedReason("Unable to verify CMS setup. Please reconnect your CMS.");
         return;
       }
 
-      const isConnected = !!(blog?.cms_platform && blog?.cms_site_url && blog?.cms_credentials);
+      const isConnected = !!(blog?.cms_platform && blog?.cms_credentials);
+      const hasCompletedOnboarding = !!blog?.onboarding_completed;
       setCmsConnected(isConnected);
       setCmsPlatform(blog?.cms_platform || null);
+
+      if (!hasCompletedOnboarding) {
+        setCanGenerateArticles(false);
+        setSetupBlockedReason("Finish onboarding first, then connect your CMS to generate articles.");
+      } else if (!isConnected) {
+        setCanGenerateArticles(false);
+        setSetupBlockedReason("Connect your CMS to generate and publish articles.");
+      } else {
+        setCanGenerateArticles(true);
+        setSetupBlockedReason(null);
+      }
     } catch (error) {
       console.error("Error checking CMS connection:", error);
       setCmsConnected(false);
+      setCanGenerateArticles(false);
+      setSetupBlockedReason("Unable to verify CMS setup. Please reconnect your CMS.");
     }
   }, [blogId]);
 
@@ -340,6 +360,12 @@ export default function Articles() {
   const handleGenerateArticle = async (scheduleDate?: Date) => {
     if (!blogId) {
       toast.error("No blog found. Please connect your CMS first.");
+      return;
+    }
+
+    if (!canGenerateArticles) {
+      toast.error(setupBlockedReason || "Finish setup and connect your CMS before generating articles.");
+      navigate("/dashboard");
       return;
     }
 
@@ -592,20 +618,26 @@ export default function Articles() {
               Your AI engine is ready! Generate your first article or connect your CMS to enable automatic publishing.
             </p>
             <div className="flex gap-3 justify-center">
-              <Button 
-                onClick={() => setShowGenerateDialog(true)} 
-                disabled={!blogId}
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Generate Article
-              </Button>
+              {canGenerateArticles ? (
+                <Button 
+                  onClick={() => setShowGenerateDialog(true)} 
+                  disabled={!blogId}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Generate Article
+                </Button>
+              ) : (
+                <Button onClick={() => navigate("/dashboard")}>
+                  Connect CMS
+                </Button>
+              )}
               <Button variant="outline" onClick={() => navigate("/dashboard")}>
                 Go to Dashboard
               </Button>
             </div>
-            {!blogId && (
+            {(!canGenerateArticles || !blogId) && (
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-4">
-                💡 Tip: Connect your CMS first to enable article generation and publishing
+                {setupBlockedReason || "Tip: Connect your CMS first to enable article generation and publishing"}
               </p>
             )}
           </div>
@@ -674,7 +706,7 @@ export default function Articles() {
         <div className="flex gap-2">
           <Button 
             onClick={() => setShowGenerateDialog(true)}
-            disabled={isGeneratingArticle || !blogId}
+            disabled={isGeneratingArticle || !blogId || !canGenerateArticles}
           >
             {isGeneratingArticle && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             <FileText className="w-4 h-4 mr-2" />
