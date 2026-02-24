@@ -636,9 +636,19 @@ export default function Articles() {
               </Button>
             </div>
             {(!canGenerateArticles || !blogId) && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-4">
-                {setupBlockedReason || "Tip: Connect your CMS first to enable article generation and publishing"}
-              </p>
+              <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-left dark:border-amber-800 dark:bg-amber-900/20">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                      Setup incomplete
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      {setupBlockedReason || "Finish onboarding and connect your CMS to generate articles."}
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </Card>
