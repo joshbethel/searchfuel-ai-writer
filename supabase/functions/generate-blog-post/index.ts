@@ -229,6 +229,12 @@ serve(async (req: Request) => {
         .single();
       
       if (error || !data) {
+        console.error("Blog lookup failed or access denied", {
+          userId,
+          blogId,
+          hasData: Boolean(data),
+          error,
+        });
         return new Response(
           JSON.stringify({ error: "Blog not found or access denied" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
