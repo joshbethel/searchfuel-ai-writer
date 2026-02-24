@@ -365,7 +365,7 @@ export default function Articles() {
 
     if (!canGenerateArticles) {
       toast.error(setupBlockedReason || "Finish setup and connect your CMS before generating articles.");
-      navigate("/dashboard");
+      navigate("/dashboard?action=reconnect-cms");
       return;
     }
 
@@ -627,7 +627,7 @@ export default function Articles() {
                   Generate Article
                 </Button>
               ) : (
-                <Button onClick={() => navigate("/dashboard")}>
+                <Button onClick={() => navigate("/dashboard?action=reconnect-cms")}>
                   Connect CMS
                 </Button>
               )}
@@ -771,7 +771,7 @@ export default function Articles() {
             <div>
               <h3 className="font-semibold text-amber-900 dark:text-amber-100 mb-1">CMS Not Connected</h3>
               <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
-                Your CMS is not connected. Articles are stored locally but publishing is disabled. Go to your <button onClick={() => navigate("/dashboard")} className="underline font-medium hover:no-underline">dashboard</button> to connect a CMS.
+                Your CMS is not connected. Articles are stored locally but publishing is disabled. Go to your <button onClick={() => navigate("/dashboard?action=reconnect-cms")} className="underline font-medium hover:no-underline">dashboard</button> to connect a CMS.
               </p>
             </div>
           </div>
