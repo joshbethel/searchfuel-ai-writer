@@ -159,6 +159,68 @@ function selectRandomArticleType(articleTypes: Record<string, boolean>): { type:
   };
 }
 
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+
+  if (error && typeof error === "object") {
+    const maybeError = error as {
+      message?: string;
+      details?: string;
+      code?: string;
+      error?: string;
+    };
+
+    if (typeof maybeError.message === "string" && maybeError.message.trim()) {
+      const details = typeof maybeError.details === "string" && maybeError.details.trim()
+        ? ` (${maybeError.details})`
+        : "";
+      return `${maybeError.message}${details}`;
+    }
+
+    if (typeof maybeError.error === "string" && maybeError.error.trim()) {
+      return maybeError.error;
+    }
+
+    if (typeof maybeError.code === "string" && maybeError.code.trim()) {
+      return `Operation failed with code ${maybeError.code}`;
+    }
+  }
+
+  if (typeof error === "string" && error.trim()) return error;
+
+  return "Unknown error";
+}
+
+async function generateUniqueSlug(
+  supabase: ReturnType<typeof createClient>,
+  blogId: string,
+  title: string
+): Promise<string> {
+  const baseSlug = (title || "new-blog-post")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || `post-${Date.now()}`;
+
+  const { data: existing, error } = await supabase
+    .from("blog_posts")
+    .select("slug")
+    .eq("blog_id", blogId)
+    .like("slug", `${baseSlug}%`);
+
+  if (error || !Array.isArray(existing) || existing.length === 0) {
+    return baseSlug;
+  }
+
+  const usedSlugs = new Set(existing.map((row: { slug: string }) => row.slug));
+  if (!usedSlugs.has(baseSlug)) return baseSlug;
+
+  let suffix = 2;
+  while (usedSlugs.has(`${baseSlug}-${suffix}`)) {
+    suffix++;
+  }
+  return `${baseSlug}-${suffix}`;
+}
+
 serve(async (req: Request) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
@@ -430,11 +492,8 @@ Focus on topics related to their industry that would help their target audience.
           };
         }
 
-        // Create slug from title
-        const slug = postData.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "");
+        // Create a unique slug for this blog to avoid duplicate key failures
+        let slug = await generateUniqueSlug(supabase, blog.id, postData.title);
 
         // Insert backlinks into content
         let processedContent = postData.content;
@@ -531,7 +590,7 @@ Format: 16:9 aspect ratio, centered single subject.`;
 
         // Insert blog post with article type and featured image
         // Note: status starts as "draft" until actually published to CMS successfully
-        const { data: post, error: insertError } = await supabase
+        let { data: post, error: insertError } = await supabase
           .from("blog_posts")
           .insert({
             blog_id: blog.id,
@@ -550,6 +609,33 @@ Format: 16:9 aspect ratio, centered single subject.`;
           })
           .select()
           .single();
+
+        // Handle race-condition duplicate slug by retrying once with timestamp suffix.
+        if (insertError?.code === "23505" && insertError?.message?.includes("blog_posts_blog_id_slug_key")) {
+          slug = `${slug}-${Date.now().toString().slice(-6)}`;
+          const retryInsert = await supabase
+            .from("blog_posts")
+            .insert({
+              blog_id: blog.id,
+              title: postData.title,
+              slug,
+              excerpt: postData.excerpt,
+              content: processedContent,
+              article_type: selectedArticleType.type,
+              featured_image: featuredImage,
+              status: "draft",
+              published_at: null,
+              scheduled_publish_date: scheduledPublishDate || null,
+              publishing_status: scheduledPublishDate ? "scheduled" : "pending",
+              meta_title: postData.meta_title || postData.title,
+              meta_description: postData.meta_description || postData.excerpt,
+            })
+            .select()
+            .single();
+
+          post = retryInsert.data;
+          insertError = retryInsert.error;
+        }
 
         if (insertError) throw insertError;
 
@@ -803,15 +889,20 @@ Format: 16:9 aspect ratio, centered single subject.`;
         results.push({
           blogId: blog.id,
           success: false,
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: formatErrorMessage(error),
         });
       }
     }
 
+    const successfulCount = results.filter((result) => result.success).length;
+    const failedCount = results.length - successfulCount;
+
     return new Response(
       JSON.stringify({
-        success: true,
+        success: failedCount === 0,
         processed: blogsToProcess.length,
+        successful: successfulCount,
+        failed: failedCount,
         results,
       }),
       {
@@ -821,7 +912,7 @@ Format: 16:9 aspect ratio, centered single subject.`;
   } catch (error) {
     console.error("Error in generate-blog-post function:", error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: formatErrorMessage(error) }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
