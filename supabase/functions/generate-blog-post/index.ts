@@ -327,6 +327,7 @@ serve(async (req: Request) => {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'x-internal-edge-call': 'true',
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
@@ -573,6 +574,7 @@ Format: 16:9 aspect ratio, centered single subject.`;
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                'x-internal-edge-call': 'true',
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({ postId: post.id })

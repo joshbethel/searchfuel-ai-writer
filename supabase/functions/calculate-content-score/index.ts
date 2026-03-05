@@ -113,16 +113,16 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate user
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY');
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Missing SUPABASE_URL, SUPABASE_ANON_KEY, or SUPABASE_SERVICE_ROLE_KEY');
     }
 
-    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const authHeader = req.headers.get('Authorization');
+    const internalCallHeader = req.headers.get('x-internal-edge-call');
     
     if (!authHeader) {
       return new Response(
@@ -132,19 +132,20 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: authData, error: authError } = await supabaseClient.auth.getUser(token);
-    
-    if (authError || !authData.user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const isInternalServiceCall =
+      internalCallHeader === "true" && token === SUPABASE_SERVICE_ROLE_KEY;
 
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
+    let authenticatedUserId: string | null = null;
+    if (!isInternalServiceCall) {
+      const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data: authData, error: authError } = await supabaseClient.auth.getUser(token);
+      if (authError || !authData.user) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      authenticatedUserId = authData.user.id;
     }
     
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -159,8 +160,10 @@ serve(async (req) => {
 
     const { postId } = validationResult.data;
 
-    // Get post with competitor analysis
-    const { data: post, error: postError } = await supabase
+    // Get post with competitor analysis:
+    // - Internal service call: post must exist
+    // - External/user call: post must belong to authenticated user
+    let postQuery = supabase
       .from("blog_posts")
       .select(`
         id, 
@@ -169,9 +172,13 @@ serve(async (req) => {
         competitor_analysis, 
         blogs!inner(user_id)
       `)
-      .eq("id", postId)
-      .eq("blogs.user_id", authData.user.id)
-      .single();
+      .eq("id", postId);
+
+    if (!isInternalServiceCall && authenticatedUserId) {
+      postQuery = postQuery.eq("blogs.user_id", authenticatedUserId);
+    }
+
+    const { data: post, error: postError } = await postQuery.single();
 
     if (postError || !post) {
       return new Response(
