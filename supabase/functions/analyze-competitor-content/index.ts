@@ -155,7 +155,7 @@ serve(async (req) => {
       );
     }
 
-    const serpResponse = await fetch('https://api.dataforseo.com/v3/serp/google/organic/live', {
+    const serpResponse = await fetch('https://api.dataforseo.com/v3/serp/google/organic/live/advanced', {
       method: 'POST',
       headers: {
         'Authorization': 'Basic ' + btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`),
@@ -170,7 +170,8 @@ serve(async (req) => {
     });
 
     if (!serpResponse.ok) {
-      throw new Error(`DataForSEO SERP API error: ${serpResponse.status}`);
+      const errorBody = await serpResponse.text();
+      throw new Error(`DataForSEO SERP API error: ${serpResponse.status} - ${errorBody}`);
     }
 
     const serpData = await serpResponse.json();
