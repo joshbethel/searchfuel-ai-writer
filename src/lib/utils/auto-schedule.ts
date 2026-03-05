@@ -1,7 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 import { format, addDays } from "date-fns";
 
-export async function autoScheduleKeyword(keyword: string): Promise<{ success: boolean; date?: Date; error?: string }> {
+export async function autoScheduleKeyword(
+  keyword: string,
+  blogId?: string
+): Promise<{ success: boolean; date?: Date; error?: string }> {
   try {
     // Get user
     const { data: { user } } = await supabase.auth.getUser();
@@ -9,29 +12,36 @@ export async function autoScheduleKeyword(keyword: string): Promise<{ success: b
       return { success: false, error: "Please sign in" };
     }
 
-    // Get user's blog
-    const { data: blog, error: blogError } = await supabase
-      .from("blogs")
-      .select("id")
-      .eq("user_id", user.id)
-      .single();
+    // Prefer the currently selected site blog when provided. Fallback to most recently created blog.
+    let resolvedBlogId = blogId;
+    if (!resolvedBlogId) {
+      const { data: blog, error: blogError } = await supabase
+        .from("blogs")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (blogError || !blog) {
-      return { success: false, error: "No blog found" };
+      if (blogError || !blog) {
+        return { success: false, error: "No blog found" };
+      }
+
+      resolvedBlogId = blog.id;
     }
 
     // Get all scheduled dates
     const { data: scheduledDates } = await supabase
       .from("scheduled_keywords")
       .select("scheduled_date")
-      .eq("blog_id", blog.id)
+      .eq("blog_id", resolvedBlogId)
       .eq("status", "pending");
 
     // Also check blog_posts for scheduled dates
     const { data: scheduledPosts } = await supabase
       .from("blog_posts")
       .select("scheduled_publish_date")
-      .eq("blog_id", blog.id)
+      .eq("blog_id", resolvedBlogId)
       .not("scheduled_publish_date", "is", null);
 
     // Create a Set of occupied dates
@@ -65,7 +75,7 @@ export async function autoScheduleKeyword(keyword: string): Promise<{ success: b
     const { error: scheduleError } = await supabase
       .from("scheduled_keywords")
       .insert({
-        blog_id: blog.id,
+        blog_id: resolvedBlogId,
         user_id: user.id,
         keyword,
         scheduled_date: nextDate.toISOString(),

@@ -24,6 +24,7 @@ import {
 import { autoScheduleKeyword } from "@/lib/utils/auto-schedule";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useSiteContext } from "@/contexts/SiteContext";
 
 interface SEOStats {
   searchVolume?: number;
@@ -58,6 +59,7 @@ interface ExtractedData {
 }
 
 export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; kind?: 'blog_post' | 'article' }) {
+  const { selectedSite } = useSiteContext();
   const [isExpanded, setIsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [keywords, setKeywords] = useState<KeywordItem[]>([]);
@@ -77,18 +79,32 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: blog } = await supabase
+      const { data: blog, error: blogError } = await supabase
         .from("blogs")
         .select("id")
         .eq("user_id", user.id)
-        .single();
+        .eq("id", selectedSite?.id ?? "")
+        .maybeSingle();
 
-      if (!blog) return;
+      // Fallback for contexts where selectedSite is not available.
+      const resolvedBlogId =
+        blog?.id ??
+        (
+          await supabase
+            .from("blogs")
+            .select("id")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        ).data?.id;
+
+      if (blogError || !resolvedBlogId) return;
 
       const { data: scheduled } = await supabase
         .from("scheduled_keywords")
         .select("keyword")
-        .eq("blog_id", blog.id)
+        .eq("blog_id", resolvedBlogId)
         .eq("status", "pending");
 
       if (scheduled) {
@@ -104,7 +120,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
   const handleScheduleKeyword = async (keyword: string) => {
     setSchedulingKeywords(prev => new Set(prev).add(keyword));
     
-    const result = await autoScheduleKeyword(keyword);
+    const result = await autoScheduleKeyword(keyword, selectedSite?.id);
     
     setSchedulingKeywords(prev => {
       const next = new Set(prev);
@@ -123,7 +139,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
   const handleScheduleTopic = async (topic: string) => {
     setSchedulingTopics(prev => new Set(prev).add(topic));
     
-    const result = await autoScheduleKeyword(topic);
+    const result = await autoScheduleKeyword(topic, selectedSite?.id);
     
     setSchedulingTopics(prev => {
       const next = new Set(prev);
@@ -716,10 +732,23 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
       const { data: blog } = await supabase
         .from('blogs')
         .select('id')
+        .eq('id', selectedSite?.id ?? '')
         .eq('user_id', session.user.id)
-        .single();
+        .maybeSingle();
 
-      if (!blog?.id) {
+      const resolvedBlogId =
+        blog?.id ??
+        (
+          await supabase
+            .from('blogs')
+            .select('id')
+            .eq('user_id', session.user.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        ).data?.id;
+
+      if (!resolvedBlogId) {
         throw new Error('No blog found. Please connect your CMS first.');
       }
 
@@ -728,7 +757,7 @@ export default function KeywordPanel({ id, kind = 'blog_post' }: { id: string; k
         'generate-blog-post',
         {
           body: { 
-            blogId: blog.id,
+            blogId: resolvedBlogId,
             initialTopic: topic // This will be used to guide the article generation
           }
         }
