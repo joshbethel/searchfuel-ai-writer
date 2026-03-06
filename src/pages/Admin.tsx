@@ -113,19 +113,6 @@ interface UserWithSubscription {
 
 type SubscriptionFilter = "all" | "paid" | "manual" | "no_subscription";
 
-interface RepairResponse {
-  success: boolean;
-  mode: "dry_run" | "apply";
-  summary: {
-    scanned: number;
-    affected: number;
-    updated: number;
-    failed: number;
-  };
-  touched_post_ids?: string[];
-  failures?: Array<{ id: string; reason: string }>;
-}
-
 export default function Admin() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -149,11 +136,6 @@ export default function Admin() {
   const [adminRoleDialogOpen, setAdminRoleDialogOpen] = useState(false);
   const [adminRoleAction, setAdminRoleAction] = useState<"grant" | "revoke">("grant");
   const [adminRoleUser, setAdminRoleUser] = useState<UserWithSubscription | null>(null);
-  const [repairPostId, setRepairPostId] = useState("");
-  const [repairBlogId, setRepairBlogId] = useState("");
-  const [repairScanLimit, setRepairScanLimit] = useState("1000");
-  const [repairMode, setRepairMode] = useState<"dry_run" | "apply" | null>(null);
-  const [repairResult, setRepairResult] = useState<RepairResponse | null>(null);
 
   // Load all users on mount
   useEffect(() => {
@@ -373,62 +355,6 @@ export default function Admin() {
     }
   };
 
-  const runContentRepair = async (dryRun: boolean) => {
-    const postId = repairPostId.trim();
-    const blogId = repairBlogId.trim();
-
-    if (postId && blogId) {
-      toast.error("Use either Post ID or Blog ID, not both");
-      return;
-    }
-
-    const parsedScanLimit = Number.parseInt(repairScanLimit, 10);
-    const scanLimit = Number.isFinite(parsedScanLimit)
-      ? Math.min(Math.max(parsedScanLimit, 1), 5000)
-      : 1000;
-
-    if (!dryRun) {
-      const confirmed = window.confirm(
-        "Apply content repairs now? This will update affected blog_posts records."
-      );
-      if (!confirmed) return;
-    }
-
-    setRepairMode(dryRun ? "dry_run" : "apply");
-    setRepairResult(null);
-
-    try {
-      const body: Record<string, unknown> = {
-        dry_run: dryRun,
-        scan_limit: scanLimit,
-      };
-      if (postId) body.post_id = postId;
-      if (blogId) body.blog_id = blogId;
-
-      const { data, error } = await supabase.functions.invoke("repair-blog-post-content", {
-        body,
-      });
-
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Repair function failed");
-
-      setRepairResult(data as RepairResponse);
-      const updatedCount = data?.summary?.updated || 0;
-      const affectedCount = data?.summary?.affected || 0;
-
-      if (dryRun) {
-        toast.success(`Dry-run complete: ${affectedCount} affected post(s) found`);
-      } else {
-        toast.success(`Repair complete: ${updatedCount} post(s) updated`);
-      }
-    } catch (error: any) {
-      console.error("Content repair failed:", error);
-      toast.error(error.message || "Failed to run content repair");
-    } finally {
-      setRepairMode(null);
-    }
-  };
-
   // Calculate statistics
   const stats = {
     totalUsers: users.length,
@@ -596,71 +522,6 @@ export default function Admin() {
           </Alert>
         </CollapsibleContent>
       </Collapsible>
-
-      <Card className="mb-6 border-amber-200 dark:border-amber-900/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-600" />
-            Repair Blog Post Content
-          </CardTitle>
-          <CardDescription>
-            Fix existing posts where article content was stored as JSON/code-fenced payload instead of markdown.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Input
-              placeholder="Optional: Post ID"
-              value={repairPostId}
-              onChange={(e) => setRepairPostId(e.target.value)}
-            />
-            <Input
-              placeholder="Optional: Blog ID"
-              value={repairBlogId}
-              onChange={(e) => setRepairBlogId(e.target.value)}
-            />
-            <Input
-              type="number"
-              min={1}
-              max={5000}
-              placeholder="Scan limit (1-5000)"
-              value={repairScanLimit}
-              onChange={(e) => setRepairScanLimit(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => runContentRepair(true)}
-              disabled={repairMode !== null}
-            >
-              {repairMode === "dry_run" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Run Dry-Run
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => runContentRepair(false)}
-              disabled={repairMode !== null}
-            >
-              {repairMode === "apply" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Apply Repairs
-            </Button>
-          </div>
-
-          {repairResult && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertTitle>
-                Repair Result ({repairResult.mode === "dry_run" ? "Dry-Run" : "Apply"})
-              </AlertTitle>
-              <AlertDescription>
-                Scanned: {repairResult.summary.scanned} | Affected: {repairResult.summary.affected} | Updated: {repairResult.summary.updated} | Failed: {repairResult.summary.failed}
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
 
       <Card className="mb-6">
         <CardHeader>
