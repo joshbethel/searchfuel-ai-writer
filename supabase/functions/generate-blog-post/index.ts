@@ -191,6 +191,126 @@ function formatErrorMessage(error: unknown): string {
   return "Unknown error";
 }
 
+function stripMarkdownCodeFence(text: string): string {
+  const trimmed = (text || "").trim();
+  const fencedMatch = trimmed.match(/^```(?:json|markdown)?\s*([\s\S]*?)\s*```$/i);
+  return fencedMatch ? fencedMatch[1].trim() : trimmed;
+}
+
+function stripSurroundingQuotes(text: string): string {
+  const value = (text || "").trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1).trim();
+  }
+  return value;
+}
+
+function decodeCommonEscapes(text: string): string {
+  return (text || "")
+    .replace(/\\\\n/g, "\n")
+    .replace(/\\\\r/g, "\r")
+    .replace(/\\\\t/g, "\t")
+    .replace(/\\\\"/g, '"')
+    .replace(/\\\\\\\\/g, "\\");
+}
+
+function extractJsonLikeField(raw: string, key: string, nextKeys: string[]): string {
+  const keyPattern = new RegExp(`"${key}"\\s*:\\s*"`, "i");
+  const startMatch = keyPattern.exec(raw);
+  if (!startMatch || startMatch.index === undefined) return "";
+
+  const start = startMatch.index + startMatch[0].length;
+  let end = -1;
+
+  for (const nextKey of nextKeys) {
+    const delimiterPattern = new RegExp(`",\\s*\\n?\\s*"${nextKey}"\\s*:`, "i");
+    const tail = raw.slice(start);
+    const nextMatch = delimiterPattern.exec(tail);
+    if (nextMatch && nextMatch.index !== undefined) {
+      const candidate = start + nextMatch.index;
+      if (end === -1 || candidate < end) end = candidate;
+    }
+  }
+
+  if (end === -1) {
+    const objectEnd = raw.lastIndexOf('"\n}');
+    if (objectEnd > start) end = objectEnd;
+  }
+
+  const slice = end === -1 ? raw.slice(start) : raw.slice(start, end);
+  return decodeCommonEscapes(stripSurroundingQuotes(slice.trim()));
+}
+
+function normalizePostDataFromAi(generatedText: string): {
+  title: string;
+  excerpt: string;
+  content: string;
+  meta_title: string;
+  meta_description: string;
+} {
+  const cleaned = stripMarkdownCodeFence(generatedText);
+  const defaults = {
+    title: "New Blog Post",
+    excerpt: "",
+    content: cleaned,
+    meta_title: "",
+    meta_description: "",
+  };
+
+  // 1) Happy path: valid JSON payload
+  try {
+    const parsed = JSON.parse(cleaned);
+    const title = stripSurroundingQuotes(parsed?.title || "");
+    const excerpt = stripSurroundingQuotes(parsed?.excerpt || "");
+    const content = stripMarkdownCodeFence(parsed?.content || "");
+    const metaTitle = stripSurroundingQuotes(parsed?.meta_title || "");
+    const metaDescription = stripSurroundingQuotes(parsed?.meta_description || "");
+
+    return {
+      title: title || defaults.title,
+      excerpt,
+      content: content || defaults.content,
+      meta_title: metaTitle || title || defaults.title,
+      meta_description: metaDescription || excerpt,
+    };
+  } catch {
+    // Fall through to a resilient extraction path
+  }
+
+  // 2) JSON-like but malformed: extract fields without throwing
+  const looksJsonLike = /^\s*\{[\s\S]*"title"\s*:/i.test(cleaned) || /"content"\s*:/i.test(cleaned);
+  if (looksJsonLike) {
+    const title = extractJsonLikeField(cleaned, "title", ["excerpt", "content", "meta_title", "meta_description"]);
+    const excerpt = extractJsonLikeField(cleaned, "excerpt", ["content", "meta_title", "meta_description"]);
+    const content = extractJsonLikeField(cleaned, "content", ["meta_title", "meta_description"]);
+    const metaTitle = extractJsonLikeField(cleaned, "meta_title", ["meta_description"]);
+    const metaDescription = extractJsonLikeField(cleaned, "meta_description", []);
+
+    if (title || excerpt || content || metaTitle || metaDescription) {
+      return {
+        title: title || defaults.title,
+        excerpt: excerpt || "",
+        content: stripMarkdownCodeFence(content || defaults.content),
+        meta_title: metaTitle || title || defaults.title,
+        meta_description: metaDescription || excerpt || "",
+      };
+    }
+  }
+
+  // 3) Plain markdown/text response
+  const markdownTitle = cleaned.match(/^\s*#{1,2}\s+(.+)$/m)?.[1]?.trim() || "";
+  return {
+    title: stripSurroundingQuotes(markdownTitle) || defaults.title,
+    excerpt: "",
+    content: cleaned,
+    meta_title: stripSurroundingQuotes(markdownTitle) || defaults.title,
+    meta_description: "",
+  };
+}
+
 async function generateUniqueSlug(
   supabase: ReturnType<typeof createClient>,
   blogId: string,
@@ -476,21 +596,8 @@ Focus on topics related to their industry that would help their target audience.
         const aiData = await aiResponse.json();
         const generatedText = aiData.choices[0].message.content;
 
-        // Try to parse JSON from the response
-        let postData;
-        try {
-          // Remove markdown code blocks if present
-          const cleanedText = generatedText.replace(/```json\n?|\n?```/g, '').trim();
-          postData = JSON.parse(cleanedText);
-        } catch {
-          // If not JSON, extract manually
-          const lines = generatedText.split("\n");
-          postData = {
-            title: lines.find((l: string) => l.includes("title"))?.split(":")[1]?.trim() || "New Blog Post",
-            excerpt: lines.find((l: string) => l.includes("excerpt"))?.split(":")[1]?.trim() || "",
-            content: generatedText,
-          };
-        }
+        // Normalize AI output without extra API calls; recovers malformed JSON-like payloads.
+        const postData = normalizePostDataFromAi(generatedText);
 
         // Create a unique slug for this blog to avoid duplicate key failures
         let slug = await generateUniqueSlug(supabase, blog.id, postData.title);
