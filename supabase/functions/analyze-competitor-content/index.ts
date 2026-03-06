@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.49/deno-dom-wasm.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { 
   safeValidateRequest, 
@@ -26,6 +27,7 @@ interface CompetitorAnalysis {
     keyword_density: number;
     meta_description?: string;
     first_100_words?: string;
+    extraction_method?: "direct_html" | "jina_ai" | "serp_snippet";
   }>;
   insights: {
     avg_word_count: number;
@@ -36,6 +38,177 @@ interface CompetitorAnalysis {
     content_gaps: string[];
     volume?: number;
     difficulty?: number;
+  };
+}
+
+interface TopUrlCandidate {
+  url: string;
+  title: string;
+  domain: string;
+  snippet: string;
+}
+
+type ParsedHtmlDocument = NonNullable<ReturnType<DOMParser["parseFromString"]>>;
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function stripHtmlToText(html: string, parsedDocument?: ParsedHtmlDocument): string {
+  const document = parsedDocument ?? new DOMParser().parseFromString(html, "text/html");
+  if (!document?.body) return "";
+
+  document.querySelectorAll("script, style, noscript").forEach((element) => element.remove());
+  return normalizeWhitespace(document.body.textContent || "");
+}
+
+function extractHeadingsFromHtml(
+  html: string,
+  parsedDocument?: ParsedHtmlDocument
+): Array<{ level: number; text: string }> {
+  const document = parsedDocument ?? new DOMParser().parseFromString(html, "text/html");
+  if (!document) return [];
+
+  const headings: Array<{ level: number; text: string }> = [];
+  for (const node of document.querySelectorAll("h1, h2, h3")) {
+    const heading = node as { tagName?: string; textContent?: string | null };
+    const level = Number((heading.tagName || "").replace("H", ""));
+    const text = normalizeWhitespace(heading.textContent || "");
+    if (level >= 1 && level <= 3 && text) headings.push({ level, text });
+    if (headings.length >= 20) break;
+  }
+
+  return headings;
+}
+
+function extractHeadingsFromMarkdown(text: string): Array<{ level: number; text: string }> {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^#{1,3}\s+/.test(line))
+    .map((line) => {
+      const level = line.match(/^#+/)?.[0]?.length ?? 2;
+      return {
+        level: Math.min(3, Math.max(1, level)),
+        text: line.replace(/^#{1,3}\s+/, "").trim(),
+      };
+    })
+    .filter((h) => h.text.length > 0)
+    .slice(0, 20);
+}
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+async function fetchWithTimeout(url: string, timeoutMs = 15000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function analyzeUrlContent(
+  urlData: TopUrlCandidate,
+  requestId: string
+): Promise<{
+  method: "direct_html" | "jina_ai" | "serp_snippet";
+  word_count: number;
+  headings: Array<{ level: number; text: string }>;
+  first_100_words: string;
+  meta_description?: string;
+}> {
+  // 1) Direct HTML fetch + parse
+  try {
+    const directResponse = await fetchWithTimeout(urlData.url);
+    if (directResponse.ok) {
+      const contentType = directResponse.headers.get("content-type") || "";
+      if (contentType.includes("text/html") || contentType.includes("application/xhtml+xml")) {
+        const html = await directResponse.text();
+        const parsedHtml = new DOMParser().parseFromString(html, "text/html") ?? undefined;
+        const plain = stripHtmlToText(html, parsedHtml);
+        const headings = extractHeadingsFromHtml(html, parsedHtml);
+        const wc = wordCount(plain);
+
+        if (wc >= 250) {
+          console.log(
+            `[analyze-competitor-content][${requestId}] URL analyzed via direct HTML`,
+            { url: urlData.url, wordCount: wc, headingCount: headings.length }
+          );
+          return {
+            method: "direct_html",
+            word_count: wc,
+            headings: headings.length > 0 ? headings : [{ level: 2, text: urlData.title }],
+            first_100_words: plain.split(/\s+/).slice(0, 100).join(" "),
+            meta_description: urlData.snippet,
+          };
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[analyze-competitor-content][${requestId}] Direct HTML fetch failed, trying jina fallback`,
+      { url: urlData.url, error: error instanceof Error ? error.message : String(error) }
+    );
+  }
+
+  // 2) r.jina.ai fallback
+  try {
+    const jinaResponse = await fetchWithTimeout(`https://r.jina.ai/${urlData.url}`);
+    if (jinaResponse.ok) {
+      const jinaText = normalizeWhitespace(await jinaResponse.text());
+      const cleaned = normalizeWhitespace(
+        jinaText
+          .replace(/^Title:\s.*$/im, "")
+          .replace(/^URL Source:\s.*$/im, "")
+          .replace(/^Published Time:\s.*$/im, "")
+          .replace(/^Markdown Content:\s*/im, "")
+      );
+      const wc = wordCount(cleaned);
+      if (wc >= 150) {
+        const headings = extractHeadingsFromMarkdown(jinaText);
+        console.log(
+          `[analyze-competitor-content][${requestId}] URL analyzed via jina fallback`,
+          { url: urlData.url, wordCount: wc, headingCount: headings.length }
+        );
+        return {
+          method: "jina_ai",
+          word_count: wc,
+          headings: headings.length > 0 ? headings : [{ level: 2, text: urlData.title }],
+          first_100_words: cleaned.split(/\s+/).slice(0, 100).join(" "),
+          meta_description: urlData.snippet,
+        };
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[analyze-competitor-content][${requestId}] jina fallback failed, using snippet heuristic`,
+      { url: urlData.url, error: error instanceof Error ? error.message : String(error) }
+    );
+  }
+
+  // 3) Final heuristic fallback (existing behavior)
+  const estimatedWordCount = Math.floor((urlData.snippet?.length || 0) / 5) + 1500;
+  console.log(
+    `[analyze-competitor-content][${requestId}] URL analyzed via SERP snippet heuristic`,
+    { url: urlData.url, estimatedWordCount }
+  );
+  return {
+    method: "serp_snippet",
+    word_count: estimatedWordCount,
+    headings: [{ level: 2, text: urlData.title.split(" ").slice(0, 5).join(" ") || urlData.title }],
+    first_100_words: (urlData.snippet || "").substring(0, 100),
+    meta_description: urlData.snippet,
   };
 }
 
@@ -230,7 +403,7 @@ serve(async (req) => {
 
     // Extract top URLs from SERP
     const tasks = serpData.tasks || [];
-    const topUrls: any[] = [];
+    const topUrls: TopUrlCandidate[] = [];
     const serpCompetitorDomains = new Set<string>();
 
     for (const task of tasks) {
@@ -276,25 +449,35 @@ serve(async (req) => {
       }
     );
 
-    // Analyze content from top URLs (simplified - in production, you'd scrape content)
-    const analyzedUrls = topUrls.slice(0, 5).map((urlData) => {
-      // In production, you'd fetch and parse the actual HTML content
-      // For now, we'll estimate based on snippet length
-      const estimatedWordCount = Math.floor((urlData.snippet?.length || 0) / 5) + 1500;
-      
-      return {
-        url: urlData.url,
-        title: urlData.title,
-        domain: urlData.domain,
-        word_count: estimatedWordCount,
-        headings: [
-          { level: 2, text: urlData.title.split(' ').slice(0, 5).join(' ') }
-        ],
-        keyword_density: 2.5,
-        meta_description: urlData.snippet,
-        first_100_words: urlData.snippet?.substring(0, 100) || ''
-      };
-    });
+    // Analyze content from top URLs:
+    // - Primary: direct HTML fetch+parse
+    // - Fallback: r.jina.ai extraction
+    // - Final fallback: SERP snippet heuristic
+    const analyzedUrls = await Promise.all(
+      topUrls.slice(0, 5).map(async (urlData) => {
+        const extracted = await analyzeUrlContent(urlData, requestId);
+        return {
+          url: urlData.url,
+          title: urlData.title,
+          domain: urlData.domain,
+          word_count: extracted.word_count,
+          headings: extracted.headings,
+          keyword_density: 2.5,
+          meta_description: extracted.meta_description,
+          first_100_words: extracted.first_100_words,
+          extraction_method: extracted.method,
+        };
+      })
+    );
+    const extractionMethodCounts = analyzedUrls.reduce((acc: Record<string, number>, item) => {
+      const method = item.extraction_method || "unknown";
+      acc[method] = (acc[method] || 0) + 1;
+      return acc;
+    }, {});
+    console.log(
+      `[analyze-competitor-content][${requestId}] URL extraction methods summary`,
+      extractionMethodCounts
+    );
 
     // Calculate insights
     const wordCounts = analyzedUrls.map(u => u.word_count);
