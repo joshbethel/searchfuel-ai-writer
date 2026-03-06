@@ -217,31 +217,42 @@ function decodeCommonEscapes(text: string): string {
     .replace(/\\\\\\\\/g, "\\");
 }
 
-function extractJsonLikeField(raw: string, key: string, nextKeys: string[]): string {
-  const keyPattern = new RegExp(`"${key}"\\s*:\\s*"`, "i");
-  const startMatch = keyPattern.exec(raw);
-  if (!startMatch || startMatch.index === undefined) return "";
+function extractFirstJsonObject(raw: string): string | null {
+  const text = (raw || "").trim();
+  const start = text.indexOf("{");
+  if (start === -1) return null;
 
-  const start = startMatch.index + startMatch[0].length;
-  let end = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
 
-  for (const nextKey of nextKeys) {
-    const delimiterPattern = new RegExp(`",\\s*\\n?\\s*"${nextKey}"\\s*:`, "i");
-    const tail = raw.slice(start);
-    const nextMatch = delimiterPattern.exec(tail);
-    if (nextMatch && nextMatch.index !== undefined) {
-      const candidate = start + nextMatch.index;
-      if (end === -1 || candidate < end) end = candidate;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === "{") depth++;
+    if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
     }
   }
 
-  if (end === -1) {
-    const objectEnd = raw.lastIndexOf('"\n}');
-    if (objectEnd > start) end = objectEnd;
-  }
-
-  const slice = end === -1 ? raw.slice(start) : raw.slice(start, end);
-  return decodeCommonEscapes(stripSurroundingQuotes(slice.trim()));
+  return null;
 }
 
 function normalizePostDataFromAi(generatedText: string): {
@@ -252,62 +263,32 @@ function normalizePostDataFromAi(generatedText: string): {
   meta_description: string;
 } {
   const cleaned = stripMarkdownCodeFence(generatedText);
-  const defaults = {
-    title: "New Blog Post",
-    excerpt: "",
-    content: cleaned,
-    meta_title: "",
-    meta_description: "",
-  };
+  const jsonCandidate = extractFirstJsonObject(cleaned) ?? cleaned;
+  let parsed: unknown;
 
-  // 1) Happy path: valid JSON payload
   try {
-    const parsed = JSON.parse(cleaned);
-    const title = stripSurroundingQuotes(parsed?.title || "");
-    const excerpt = stripSurroundingQuotes(parsed?.excerpt || "");
-    const content = stripMarkdownCodeFence(parsed?.content || "");
-    const metaTitle = stripSurroundingQuotes(parsed?.meta_title || "");
-    const metaDescription = stripSurroundingQuotes(parsed?.meta_description || "");
-
-    return {
-      title: title || defaults.title,
-      excerpt,
-      content: content || defaults.content,
-      meta_title: metaTitle || title || defaults.title,
-      meta_description: metaDescription || excerpt,
-    };
+    parsed = JSON.parse(jsonCandidate);
   } catch {
-    // Fall through to a resilient extraction path
+    throw new Error("AI returned invalid JSON payload");
   }
 
-  // 2) JSON-like but malformed: extract fields without throwing
-  const looksJsonLike = /^\s*\{[\s\S]*"title"\s*:/i.test(cleaned) || /"content"\s*:/i.test(cleaned);
-  if (looksJsonLike) {
-    const title = extractJsonLikeField(cleaned, "title", ["excerpt", "content", "meta_title", "meta_description"]);
-    const excerpt = extractJsonLikeField(cleaned, "excerpt", ["content", "meta_title", "meta_description"]);
-    const content = extractJsonLikeField(cleaned, "content", ["meta_title", "meta_description"]);
-    const metaTitle = extractJsonLikeField(cleaned, "meta_title", ["meta_description"]);
-    const metaDescription = extractJsonLikeField(cleaned, "meta_description", []);
+  const obj = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+  const title = stripSurroundingQuotes(String(obj.title || "")).trim();
+  const excerpt = stripSurroundingQuotes(String(obj.excerpt || "")).trim();
+  const content = decodeCommonEscapes(stripMarkdownCodeFence(String(obj.content || ""))).trim();
+  const metaTitle = stripSurroundingQuotes(String(obj.meta_title || "")).trim();
+  const metaDescription = stripSurroundingQuotes(String(obj.meta_description || "")).trim();
 
-    if (title || excerpt || content || metaTitle || metaDescription) {
-      return {
-        title: title || defaults.title,
-        excerpt: excerpt || "",
-        content: stripMarkdownCodeFence(content || defaults.content),
-        meta_title: metaTitle || title || defaults.title,
-        meta_description: metaDescription || excerpt || "",
-      };
-    }
+  if (!title || !content) {
+    throw new Error("AI JSON missing required fields: title/content");
   }
 
-  // 3) Plain markdown/text response
-  const markdownTitle = cleaned.match(/^\s*#{1,2}\s+(.+)$/m)?.[1]?.trim() || "";
   return {
-    title: stripSurroundingQuotes(markdownTitle) || defaults.title,
-    excerpt: "",
-    content: cleaned,
-    meta_title: stripSurroundingQuotes(markdownTitle) || defaults.title,
-    meta_description: "",
+    title,
+    excerpt,
+    content,
+    meta_title: metaTitle || title,
+    meta_description: metaDescription || excerpt,
   };
 }
 
@@ -584,8 +565,28 @@ Focus on topics related to their industry that would help their target audience.
             model: "google/gemini-2.5-flash",
             messages: [
               { role: "system", content: systemPrompt },
-              { role: "user", content: "Generate a blog post with title, excerpt, content, meta title, and meta description. Format as JSON with keys: title, excerpt, content, meta_title (50-60 characters for SEO), meta_description (150-160 characters for SEO)" },
+              { role: "user", content: "Generate a blog post with title, excerpt, content, meta title, and meta description. Return ONLY valid JSON with keys: title, excerpt, content, meta_title (50-60 chars), meta_description (150-160 chars). Do not include markdown code fences or any extra text." },
             ],
+            temperature: 0.2,
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "blog_post",
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: "string" },
+                    excerpt: { type: "string" },
+                    content: { type: "string" },
+                    meta_title: { type: "string" },
+                    meta_description: { type: "string" },
+                  },
+                  required: ["title", "excerpt", "content", "meta_title", "meta_description"],
+                },
+                strict: true,
+              },
+            },
           }),
         });
 
