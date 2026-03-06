@@ -107,12 +107,14 @@ function calculateCompetitorComparison(
 serve(async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
+  const requestId = crypto.randomUUID();
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log(`[calculate-content-score][${requestId}] Request started`);
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -134,6 +136,9 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const isInternalServiceCall =
       internalCallHeader === "true" && token === SUPABASE_SERVICE_ROLE_KEY;
+    console.log(
+      `[calculate-content-score][${requestId}] Auth mode: ${isInternalServiceCall ? "internal-service" : "user-jwt"}`
+    );
 
     let authenticatedUserId: string | null = null;
     if (!isInternalServiceCall) {
@@ -159,6 +164,10 @@ serve(async (req) => {
     }
 
     const { postId } = validationResult.data;
+    console.log(
+      `[calculate-content-score][${requestId}] Validated request`,
+      { postId }
+    );
 
     // Get post with competitor analysis:
     // - Internal service call: post must exist
@@ -181,6 +190,10 @@ serve(async (req) => {
     const { data: post, error: postError } = await postQuery.single();
 
     if (postError || !post) {
+      console.warn(
+        `[calculate-content-score][${requestId}] Post not found or access denied`,
+        { postId, authenticatedUserId, isInternalServiceCall, postError }
+      );
       return new Response(
         JSON.stringify({ error: "Post not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -193,6 +206,17 @@ serve(async (req) => {
     
     // Extract keyword from competitor analysis or use first extracted keyword
     const keyword = competitorAnalysis?.keyword || '';
+    console.log(
+      `[calculate-content-score][${requestId}] Loaded post data`,
+      {
+        postId,
+        titleLength: title.length,
+        contentLength: content.length,
+        hasCompetitorAnalysis: Boolean(competitorAnalysis),
+        hasCompetitorInsights: Boolean(competitorAnalysis?.insights),
+        keyword,
+      }
+    );
 
     // Calculate scores
     const wordCount = content.split(/\s+/).length;
@@ -221,9 +245,18 @@ serve(async (req) => {
       competitor_comparison: Math.round(competitorScore),
       overall_score: overallScore
     };
+    console.log(
+      `[calculate-content-score][${requestId}] Scores calculated`,
+      {
+        postId,
+        wordCount,
+        recommendedWordCount,
+        factors,
+      }
+    );
 
     // Update post with score
-    await supabase
+    const { error: updateError } = await supabase
       .from("blog_posts")
       .update({
         content_score: overallScore,
@@ -231,13 +264,25 @@ serve(async (req) => {
       })
       .eq("id", postId);
 
+    if (updateError) {
+      console.error(
+        `[calculate-content-score][${requestId}] Failed to persist score`,
+        { postId, updateError }
+      );
+      throw updateError;
+    }
+    console.log(
+      `[calculate-content-score][${requestId}] Score persisted successfully`,
+      { postId, overallScore }
+    );
+
     return new Response(
       JSON.stringify({ score: overallScore, factors }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error: any) {
-    console.error("Error in calculate-content-score:", error);
+    console.error(`[calculate-content-score][${requestId}] Error`, error);
     return new Response(
       JSON.stringify({ error: error.message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -42,12 +42,14 @@ interface CompetitorAnalysis {
 serve(async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
+  const requestId = crypto.randomUUID();
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log(`[analyze-competitor-content][${requestId}] Request started`);
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -69,6 +71,9 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const isInternalServiceCall =
       internalCallHeader === "true" && token === SUPABASE_SERVICE_ROLE_KEY;
+    console.log(
+      `[analyze-competitor-content][${requestId}] Auth mode: ${isInternalServiceCall ? "internal-service" : "user-jwt"}`
+    );
 
     let userId: string | null = null;
     if (!isInternalServiceCall) {
@@ -94,6 +99,15 @@ serve(async (req) => {
     }
 
     const { keyword, blogId, location_code, language_code } = validationResult.data;
+    console.log(
+      `[analyze-competitor-content][${requestId}] Validated request`,
+      {
+        blogId,
+        keyword,
+        location_code,
+        language_code,
+      }
+    );
 
     // Verify blog access:
     // - Internal service call: blog must exist
@@ -110,6 +124,10 @@ serve(async (req) => {
     const { data: blog, error: blogError } = await blogQuery.single();
 
     if (blogError || !blog) {
+      console.warn(
+        `[analyze-competitor-content][${requestId}] Blog access denied or not found`,
+        { blogId, userId, isInternalServiceCall, blogError }
+      );
       return new Response(
         JSON.stringify({ error: "Blog not found or access denied" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -132,13 +150,20 @@ serve(async (req) => {
       const daysSince = (Date.now() - analyzedAt.getTime()) / (1000 * 60 * 60 * 24);
       
       if (daysSince < 7 && cached.keyword.toLowerCase() === keyword.toLowerCase()) {
-        console.log("Using cached competitor analysis");
+        console.log(
+          `[analyze-competitor-content][${requestId}] Cache hit`,
+          { blogId, keyword, cachedDaysOld: Number(daysSince.toFixed(2)) }
+        );
         return new Response(
           JSON.stringify({ analysis: cached }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }
+    console.log(
+      `[analyze-competitor-content][${requestId}] Cache miss, running fresh analysis`,
+      { blogId, keyword }
+    );
 
     // Get user-defined competitors
     const userCompetitors = (blog.competitors as any[]) || [];
@@ -146,6 +171,10 @@ serve(async (req) => {
       if (typeof c === 'string') return c.toLowerCase();
       return (c.domain || c.name || c).toLowerCase();
     }).filter(Boolean);
+    console.log(
+      `[analyze-competitor-content][${requestId}] Loaded user competitors`,
+      { count: userCompetitorDomains.length }
+    );
 
     // Fetch SERP data from DataForSEO
     if (!DATAFORSEO_LOGIN || !DATAFORSEO_PASSWORD) {
@@ -155,6 +184,10 @@ serve(async (req) => {
       );
     }
 
+    console.log(
+      `[analyze-competitor-content][${requestId}] Calling DataForSEO SERP API`,
+      { keyword, location_code, language_code, depth: 5 }
+    );
     const serpResponse = await fetch('https://api.dataforseo.com/v3/serp/google/organic/live/advanced', {
       method: 'POST',
       headers: {
@@ -171,12 +204,27 @@ serve(async (req) => {
 
     if (!serpResponse.ok) {
       const errorBody = await serpResponse.text();
+      console.error(
+        `[analyze-competitor-content][${requestId}] DataForSEO SERP API HTTP error`,
+        { status: serpResponse.status, errorBody }
+      );
       throw new Error(`DataForSEO SERP API error: ${serpResponse.status} - ${errorBody}`);
     }
 
     const serpData = await serpResponse.json();
+    console.log(
+      `[analyze-competitor-content][${requestId}] DataForSEO SERP API response received`,
+      {
+        status_code: serpData?.status_code,
+        tasks_count: Array.isArray(serpData?.tasks) ? serpData.tasks.length : 0,
+      }
+    );
     
     if (serpData.status_code !== 20000) {
+      console.error(
+        `[analyze-competitor-content][${requestId}] DataForSEO SERP API logical error`,
+        { status_code: serpData.status_code, status_message: serpData.status_message }
+      );
       throw new Error(`DataForSEO API error: ${serpData.status_message}`);
     }
 
@@ -206,12 +254,27 @@ serve(async (req) => {
         }
       }
     }
+    console.log(
+      `[analyze-competitor-content][${requestId}] Extracted SERP URLs`,
+      {
+        topUrlsCount: topUrls.length,
+        serpCompetitorDomainsCount: serpCompetitorDomains.size,
+      }
+    );
 
     // Combine user-defined and SERP competitors
     const allCompetitorDomains = [
       ...userCompetitorDomains,
       ...Array.from(serpCompetitorDomains).filter(d => !userCompetitorDomains.includes(d))
     ];
+    console.log(
+      `[analyze-competitor-content][${requestId}] Combined competitors`,
+      {
+        totalCompetitors: allCompetitorDomains.length,
+        userDefined: userCompetitorDomains.length,
+        serpDetected: serpCompetitorDomains.size,
+      }
+    );
 
     // Analyze content from top URLs (simplified - in production, you'd scrape content)
     const analyzedUrls = topUrls.slice(0, 5).map((urlData) => {
@@ -247,6 +310,10 @@ serve(async (req) => {
     let difficulty = 0;
 
     try {
+      console.log(
+        `[analyze-competitor-content][${requestId}] Calling DataForSEO keyword metrics API`,
+        { keyword }
+      );
       const keywordResponse = await fetch('https://api.dataforseo.com/v3/keywords_data/google/search_volume/live', {
         method: 'POST',
         headers: {
@@ -261,13 +328,26 @@ serve(async (req) => {
 
       if (keywordResponse.ok) {
         const keywordData = await keywordResponse.json();
+        console.log(
+          `[analyze-competitor-content][${requestId}] Keyword metrics API response`,
+          { status_code: keywordData?.status_code }
+        );
         if (keywordData.status_code === 20000 && keywordData.tasks?.[0]?.result?.[0]) {
           volume = keywordData.tasks[0].result[0].search_volume || 0;
           difficulty = keywordData.tasks[0].result[0].keyword_difficulty || 0;
         }
+      } else {
+        const keywordErrorBody = await keywordResponse.text();
+        console.warn(
+          `[analyze-competitor-content][${requestId}] Keyword metrics API HTTP error`,
+          { status: keywordResponse.status, errorBody: keywordErrorBody }
+        );
       }
     } catch (error) {
-      console.error("Error fetching keyword metrics:", error);
+      console.error(
+        `[analyze-competitor-content][${requestId}] Error fetching keyword metrics`,
+        error
+      );
       // Continue without volume/difficulty
     }
 
@@ -290,6 +370,17 @@ serve(async (req) => {
         difficulty
       }
     };
+    console.log(
+      `[analyze-competitor-content][${requestId}] Analysis completed successfully`,
+      {
+        keyword,
+        topUrlsCount: analysis.top_urls.length,
+        avgWordCount: analysis.insights.avg_word_count,
+        recommendedWordCount: analysis.insights.recommended_word_count,
+        volume: analysis.insights.volume,
+        difficulty: analysis.insights.difficulty,
+      }
+    );
 
     return new Response(
       JSON.stringify({ analysis }),
@@ -297,7 +388,7 @@ serve(async (req) => {
     );
 
   } catch (error: any) {
-    console.error("Error in analyze-competitor-content:", error);
+    console.error(`[analyze-competitor-content][${requestId}] Error`, error);
     return new Response(
       JSON.stringify({ error: error.message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
