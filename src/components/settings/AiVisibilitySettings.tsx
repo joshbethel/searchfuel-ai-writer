@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Lock } from "lucide-react";
+import { Cpu, Loader2, Lock } from "lucide-react";
 
 interface AiVisibilitySettingsProps {
   blogId: string;
@@ -32,16 +32,17 @@ const MODEL_CARDS: Array<{
   id: ProviderKey | "ai_overviews" | "ai_mode" | "claude" | "grok" | "copilot";
   label: string;
   availability: "enabled" | "upgrade";
+  logoSrc: string;
   description: string;
 }> = [
-  { id: "chat_gpt", label: "ChatGPT", availability: "enabled", description: "Track direct LLM responses." },
-  { id: "perplexity", label: "Perplexity", availability: "enabled", description: "Track answer and source behavior." },
-  { id: "gemini", label: "Gemini", availability: "enabled", description: "Track Gemini-generated recommendations." },
-  { id: "ai_overviews", label: "AI Overviews", availability: "upgrade", description: "Coming in a later plan tier." },
-  { id: "ai_mode", label: "AI Mode", availability: "upgrade", description: "Coming in a later plan tier." },
-  { id: "claude", label: "Claude", availability: "upgrade", description: "Planned post-MVP provider." },
-  { id: "grok", label: "Grok", availability: "upgrade", description: "Planned post-MVP provider." },
-  { id: "copilot", label: "Copilot", availability: "upgrade", description: "Planned post-MVP provider." },
+  { id: "chat_gpt", label: "ChatGPT", availability: "enabled", logoSrc: "/images/openai.svg", description: "Track direct LLM responses." },
+  { id: "perplexity", label: "Perplexity", availability: "enabled", logoSrc: "/images/perplexity-color.svg", description: "Track answer and source behavior." },
+  { id: "gemini", label: "Gemini", availability: "enabled", logoSrc: "/images/gemini-color.svg", description: "Track Gemini-generated recommendations." },
+  { id: "ai_overviews", label: "AI Overviews", availability: "upgrade", logoSrc: "/images/ai-overviews.svg", description: "Coming in a later plan tier." },
+  { id: "ai_mode", label: "AI Mode", availability: "upgrade", logoSrc: "/images/ai-mode.svg", description: "Coming in a later plan tier." },
+  { id: "claude", label: "Claude", availability: "upgrade", logoSrc: "/images/claude.svg", description: "Coming in a later plan tier." },
+  { id: "grok", label: "Grok", availability: "upgrade", logoSrc: "/images/grok.svg", description: "Coming in a later plan tier." },
+  { id: "copilot", label: "Copilot", availability: "upgrade", logoSrc: "/images/copilot-color.svg", description: "Coming in a later plan tier." },
 ];
 
 const clampRunCost = (input: unknown) => {
@@ -265,8 +266,13 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
         </div>
 
         <div className="space-y-3 border rounded-lg p-4">
-          <div>
-            <p className="font-medium">Enabled Models</p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-gradient-to-br from-slate-100 to-slate-50 border-slate-200/60">
+                <Cpu className="h-3.5 w-3.5 text-slate-600" />
+              </div>
+              <p className="font-medium">Enabled Models</p>
+            </div>
             <p className="text-sm text-muted-foreground">Choose which models should be included in each sync.</p>
           </div>
 
@@ -284,16 +290,26 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-sm font-medium">{modelCard.label}</Label>
-                        {!isEnabledModel ? (
-                          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
-                            Upgrade
-                          </Badge>
-                        ) : null}
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-background/80">
+                        <img
+                          src={modelCard.logoSrc}
+                          alt={modelCard.label}
+                          className="h-5 w-5 object-contain"
+                          loading="lazy"
+                        />
                       </div>
-                      <p className="text-xs text-muted-foreground">{modelCard.description}</p>
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm font-medium">{modelCard.label}</Label>
+                          {!isEnabledModel ? (
+                            <Badge variant="secondary" className="text-[10px] tracking-wide">
+                              Later Tier
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{modelCard.description}</p>
+                      </div>
                     </div>
 
                     {isEnabledModel ? (
