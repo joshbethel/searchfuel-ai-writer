@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { ArticleTypeSettings } from "@/components/settings/ArticleTypeSettings";
 import { canCreateSite, getSiteLimitInfo } from "@/lib/utils/site-limits";
 import { useNavigate } from "react-router-dom";
@@ -63,8 +64,9 @@ type OnboardingStep =
   | "website-url"      // NEW: Step 1 - Business Website URL
   | "business-info"    // NEW: Step 2 - Business Information
   | "competitors"       // ENHANCED: Step 3 - Competitors
-  | "cms-connection"   // ENHANCED: Step 4 - CMS (Optional)
-  | "article-types"    // UNCHANGED: Step 5 - Article Types
+  | "ai-visibility"    // NEW: Step 4 - AI Visibility setup
+  | "cms-connection"   // ENHANCED: Step 5 - CMS (Optional)
+  | "article-types"    // UNCHANGED: Step 6 - Article Types
   | "platform"         // Legacy: For reconnecting existing sites
   | "connection";      // Legacy: For reconnecting existing sites
 
@@ -114,14 +116,65 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
   const [newCompetitorDomain, setNewCompetitorDomain] = useState("");
   const [blogId, setBlogId] = useState<string | null>(propBlogId || null);
   const [websiteExists, setWebsiteExists] = useState(false);
+  const [aiVisibilitySetup, setAiVisibilitySetup] = useState({
+    mainPrompt: "",
+    languageCode: "en",
+    locationCode: "2840",
+    enabledModels: {
+      chat_gpt: true,
+      gemini: true,
+      perplexity: true,
+    },
+  });
+
+  const ensureAiVisibilityDefaults = async (targetBlogId: string) => {
+    try {
+      const defaultPrompt = `What are the best ${businessInfo.industry?.trim() || "solutions"} for ${businessInfo.company_name.trim()}?`;
+      const sb = supabase as any;
+
+      await sb.from("ai_visibility_settings").upsert(
+        {
+          blog_id: targetBlogId,
+          main_ai_prompt: defaultPrompt,
+          main_keyword: businessInfo.company_name?.trim() || null,
+          language_code: "en",
+          location_code: 2840,
+          enabled_models: {
+            chat_gpt: true,
+            gemini: true,
+            perplexity: true,
+          },
+          is_paused: false,
+          max_cost_usd: 5,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "blog_id" },
+      );
+
+      await sb.from("ai_visibility_prompts").upsert(
+        {
+          blog_id: targetBlogId,
+          prompt_text: defaultPrompt,
+          is_active: true,
+          sort_order: 0,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "blog_id,prompt_text" },
+      );
+    } catch (error) {
+      // Non-blocking for onboarding; users can edit in Site Settings > AI Visibility.
+      console.warn("Failed to initialize AI visibility defaults during onboarding:", error);
+    }
+  };
 
   // Define onboarding steps for the stepper
   const onboardingSteps = [
     { id: "website-url", label: "Website URL", number: 1 },
     { id: "business-info", label: "Business Info", number: 2 },
     { id: "competitors", label: "Competitors", number: 3 },
-    { id: "cms-connection", label: "CMS Connection", number: 4, optional: true },
-    { id: "article-types", label: "Article Types", number: 5 },
+    { id: "ai-visibility", label: "AI Visibility", number: 4 },
+    { id: "cms-connection", label: "CMS Connection", number: 5, optional: true },
+    { id: "article-types", label: "Article Types", number: 6 },
   ];
 
   // Get current step index
@@ -613,6 +666,15 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         // Ensure blogId is set in state
         setBlogId(blogIdToUse);
 
+        // Initialize defaults so onboarding includes AI visibility setup baseline.
+        await ensureAiVisibilityDefaults(blogIdToUse);
+        setAiVisibilitySetup((prev) => ({
+          ...prev,
+          mainPrompt:
+            prev.mainPrompt ||
+            `What are the best ${businessInfo.industry?.trim() || "solutions"} for ${businessInfo.company_name.trim()}?`,
+        }));
+
         // Refresh the site switcher to show updated site
         await refreshSites();
 
@@ -641,6 +703,15 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
 
         // Set blogId in state
         setBlogId(resultData.id);
+
+        // Initialize defaults so onboarding includes AI visibility setup baseline.
+        await ensureAiVisibilityDefaults(resultData.id);
+        setAiVisibilitySetup((prev) => ({
+          ...prev,
+          mainPrompt:
+            prev.mainPrompt ||
+            `What are the best ${businessInfo.industry?.trim() || "solutions"} for ${businessInfo.company_name.trim()}?`,
+        }));
 
         // Refresh the site switcher to show the new site
         await refreshSites();
@@ -995,19 +1066,71 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         toast.success("Competitors saved!");
       }
       
-      // Navigate to CMS connection step (optional)
-      setCurrentStep("cms-connection");
+      // Navigate to AI visibility step
+      setCurrentStep("ai-visibility");
     } catch (error: any) {
       console.error("Error saving competitors:", error);
       toast.error("Failed to save competitors, but continuing...");
-      // Continue to CMS step anyway
-      setCurrentStep("cms-connection");
+      // Continue to AI visibility step anyway
+      setCurrentStep("ai-visibility");
     }
   };
 
   const handleSkipCompetitors = () => {
-    // Skip competitors and go to CMS step
-    setCurrentStep("cms-connection");
+    // Skip competitors and go to AI visibility step
+    setCurrentStep("ai-visibility");
+  };
+
+  const handleAiVisibilityContinue = async () => {
+    if (!blogId) {
+      setCurrentStep("cms-connection");
+      return;
+    }
+
+    const sb = supabase as any;
+    const normalizedMainPrompt =
+      aiVisibilitySetup.mainPrompt.trim() ||
+      `What are the best ${businessInfo.industry?.trim() || "solutions"} for ${businessInfo.company_name.trim()}?`;
+    const parsedLocationCode = Number(aiVisibilitySetup.locationCode || "2840");
+
+    try {
+      const { error: settingsError } = await sb.from("ai_visibility_settings").upsert(
+        {
+          blog_id: blogId,
+          main_ai_prompt: normalizedMainPrompt,
+          main_keyword: businessInfo.company_name?.trim() || null,
+          language_code: aiVisibilitySetup.languageCode || "en",
+          location_code: Number.isNaN(parsedLocationCode) ? 2840 : parsedLocationCode,
+          enabled_models: aiVisibilitySetup.enabledModels,
+          is_paused: false,
+          max_cost_usd: 5,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "blog_id" },
+      );
+
+      if (settingsError) throw settingsError;
+
+      const { error: promptError } = await sb.from("ai_visibility_prompts").upsert(
+        {
+          blog_id: blogId,
+          prompt_text: normalizedMainPrompt,
+          is_active: true,
+          sort_order: 0,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "blog_id,prompt_text" },
+      );
+
+      if (promptError) throw promptError;
+
+      toast.success("AI visibility defaults saved");
+      setCurrentStep("cms-connection");
+    } catch (error: any) {
+      console.error("Error saving AI visibility setup:", error);
+      toast.error("Failed to save AI visibility setup, continuing...");
+      setCurrentStep("cms-connection");
+    }
   };
 
   // NEW: Handle skipping CMS connection
@@ -1706,6 +1829,116 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
     );
   }
 
+  // AI Visibility Setup Step
+  if (currentStep === "ai-visibility" && blogId) {
+    return (
+      <Card className="p-8 bg-card max-w-3xl">
+        <OnboardingStepper />
+        <div className="mb-6">
+          <Button variant="ghost" size="sm" onClick={() => setCurrentStep("competitors")} className="mb-4">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <h2 className="text-2xl font-bold text-foreground mb-2">AI Visibility Setup</h2>
+          <p className="text-muted-foreground">
+            Set your initial tracking defaults. You can edit all of this later in Site Settings → AI Visibility.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <Label htmlFor="ai-main-prompt">Main AI Prompt</Label>
+            <Input
+              id="ai-main-prompt"
+              value={aiVisibilitySetup.mainPrompt}
+              onChange={(e) => setAiVisibilitySetup({ ...aiVisibilitySetup, mainPrompt: e.target.value })}
+              placeholder={`What are the best ${businessInfo.industry?.trim() || "solutions"} for ${businessInfo.company_name.trim()}?`}
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Used as the default tracked prompt for first sync.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="ai-language-code">Language Code</Label>
+              <Input
+                id="ai-language-code"
+                value={aiVisibilitySetup.languageCode}
+                onChange={(e) => setAiVisibilitySetup({ ...aiVisibilitySetup, languageCode: e.target.value })}
+                placeholder="en"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="ai-location-code">Location Code</Label>
+              <Input
+                id="ai-location-code"
+                value={aiVisibilitySetup.locationCode}
+                onChange={(e) => setAiVisibilitySetup({ ...aiVisibilitySetup, locationCode: e.target.value })}
+                placeholder="2840"
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3 border rounded-lg p-4">
+            <h4 className="text-sm font-medium">Enabled Models (default)</h4>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="ob-model-chatgpt">ChatGPT</Label>
+                <Switch
+                  id="ob-model-chatgpt"
+                  checked={aiVisibilitySetup.enabledModels.chat_gpt}
+                  onCheckedChange={(checked) =>
+                    setAiVisibilitySetup({
+                      ...aiVisibilitySetup,
+                      enabledModels: { ...aiVisibilitySetup.enabledModels, chat_gpt: checked },
+                    })
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="ob-model-gemini">Gemini</Label>
+                <Switch
+                  id="ob-model-gemini"
+                  checked={aiVisibilitySetup.enabledModels.gemini}
+                  onCheckedChange={(checked) =>
+                    setAiVisibilitySetup({
+                      ...aiVisibilitySetup,
+                      enabledModels: { ...aiVisibilitySetup.enabledModels, gemini: checked },
+                    })
+                  }
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="ob-model-perplexity">Perplexity</Label>
+                <Switch
+                  id="ob-model-perplexity"
+                  checked={aiVisibilitySetup.enabledModels.perplexity}
+                  onCheckedChange={(checked) =>
+                    setAiVisibilitySetup({
+                      ...aiVisibilitySetup,
+                      enabledModels: { ...aiVisibilitySetup.enabledModels, perplexity: checked },
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button variant="outline" onClick={() => setCurrentStep("cms-connection")} className="flex-1">
+              Skip for Now
+            </Button>
+            <Button onClick={handleAiVisibilityContinue} className="flex-1">
+              Continue
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   // Article Types Step
   if (currentStep === "article-types" && blogId) {
     return (
@@ -1760,8 +1993,8 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
                 // When reconnecting, cancel and go back to dashboard
                 onCancel();
               } else {
-                // When in normal flow, go back to competitors step
-                setCurrentStep("competitors");
+                // When in normal flow, go back to AI visibility step
+                setCurrentStep("ai-visibility");
               }
             }}
             className="mb-4"

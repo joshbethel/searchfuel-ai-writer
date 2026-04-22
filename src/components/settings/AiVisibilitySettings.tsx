@@ -1,0 +1,267 @@
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+
+interface AiVisibilitySettingsProps {
+  blogId: string;
+}
+
+type ProviderKey = "chat_gpt" | "gemini" | "perplexity";
+
+const DEFAULT_MODELS: Record<ProviderKey, boolean> = {
+  chat_gpt: true,
+  gemini: true,
+  perplexity: true,
+};
+
+export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [mainPrompt, setMainPrompt] = useState("");
+  const [mainKeyword, setMainKeyword] = useState("");
+  const [languageCode, setLanguageCode] = useState("en");
+  const [locationCode, setLocationCode] = useState("2840");
+  const [isPaused, setIsPaused] = useState(false);
+  const [maxCostUsd, setMaxCostUsd] = useState("5");
+  const [promptsText, setPromptsText] = useState("");
+  const [models, setModels] = useState<Record<ProviderKey, boolean>>(DEFAULT_MODELS);
+
+  const prompts = useMemo(
+    () =>
+      promptsText
+        .split("\n")
+        .map((p) => p.trim())
+        .filter(Boolean),
+    [promptsText],
+  );
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const sb = supabase as any;
+        const [{ data: settings }, { data: promptsRows }] = await Promise.all([
+          sb.from("ai_visibility_settings").select("*").eq("blog_id", blogId).maybeSingle(),
+          sb
+            .from("ai_visibility_prompts")
+            .select("prompt_text, sort_order")
+            .eq("blog_id", blogId)
+            .eq("is_active", true)
+            .order("sort_order", { ascending: true }),
+        ]);
+
+        if (settings) {
+          setMainPrompt(settings.main_ai_prompt || "");
+          setMainKeyword(settings.main_keyword || "");
+          setLanguageCode(settings.language_code || "en");
+          setLocationCode(String(settings.location_code || 2840));
+          setIsPaused(Boolean(settings.is_paused));
+          setMaxCostUsd(String(settings.max_cost_usd ?? 5));
+          setModels({ ...DEFAULT_MODELS, ...(settings.enabled_models || {}) });
+        }
+
+        if (Array.isArray(promptsRows) && promptsRows.length > 0) {
+          setPromptsText(promptsRows.map((r: any) => r.prompt_text).join("\n"));
+        } else if (settings?.main_ai_prompt) {
+          setPromptsText(settings.main_ai_prompt);
+        }
+      } catch (error) {
+        console.error("Error loading AI visibility settings:", error);
+        toast.error("Failed to load AI visibility settings");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [blogId]);
+
+  const toggleModel = (model: ProviderKey, checked: boolean) => {
+    setModels((prev) => ({ ...prev, [model]: checked }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const sb = supabase as any;
+      const parsedLocation = Number(locationCode || "2840");
+      const parsedBudget = Number(maxCostUsd || "5");
+
+      if (Number.isNaN(parsedLocation) || parsedLocation <= 0) {
+        toast.error("Location code must be a positive number");
+        return;
+      }
+
+      if (Number.isNaN(parsedBudget) || parsedBudget <= 0) {
+        toast.error("Max cost must be a positive number");
+        return;
+      }
+
+      const { error: settingsError } = await sb.from("ai_visibility_settings").upsert(
+        {
+          blog_id: blogId,
+          main_ai_prompt: mainPrompt || null,
+          main_keyword: mainKeyword || null,
+          language_code: languageCode || "en",
+          location_code: parsedLocation,
+          enabled_models: models,
+          is_paused: isPaused,
+          max_cost_usd: parsedBudget,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "blog_id" },
+      );
+
+      if (settingsError) throw settingsError;
+
+      // Replace prompts with current text list.
+      const { error: deactivateError } = await sb
+        .from("ai_visibility_prompts")
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq("blog_id", blogId);
+
+      if (deactivateError) throw deactivateError;
+
+      if (prompts.length > 0) {
+        const promptPayload = prompts.map((prompt, index) => ({
+          blog_id: blogId,
+          prompt_text: prompt,
+          is_active: true,
+          sort_order: index,
+          updated_at: new Date().toISOString(),
+        }));
+
+        const { error: promptsError } = await sb.from("ai_visibility_prompts").upsert(promptPayload, {
+          onConflict: "blog_id,prompt_text",
+        });
+
+        if (promptsError) throw promptsError;
+      }
+
+      toast.success("AI visibility settings saved");
+    } catch (error: any) {
+      console.error("Error saving AI visibility settings:", error);
+      toast.error(`Failed to save settings: ${error?.message ?? "Unknown error"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>AI Visibility</CardTitle>
+        <CardDescription>Configure prompts, targeting, model tracking, pause state, and run budget guardrails.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="main-ai-prompt">Main AI Prompt</Label>
+            <Input
+              id="main-ai-prompt"
+              value={mainPrompt}
+              onChange={(e) => setMainPrompt(e.target.value)}
+              placeholder="e.g. best project management tools"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="main-keyword">Main Keyword (optional)</Label>
+            <Input
+              id="main-keyword"
+              value={mainKeyword}
+              onChange={(e) => setMainKeyword(e.target.value)}
+              placeholder="e.g. project management software"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="language-code">Language Code</Label>
+            <Input id="language-code" value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} placeholder="en" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="location-code">Location Code</Label>
+            <Input id="location-code" value={locationCode} onChange={(e) => setLocationCode(e.target.value)} placeholder="2840" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="max-cost-usd">Max Cost Per Run (USD)</Label>
+            <Input id="max-cost-usd" type="number" min="1" step="0.5" value={maxCostUsd} onChange={(e) => setMaxCostUsd(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="prompts">Tracked Prompts (one per line)</Label>
+          <Textarea
+            id="prompts"
+            value={promptsText}
+            onChange={(e) => setPromptsText(e.target.value)}
+            rows={8}
+            placeholder={"Why should I use a VPN at home?\nBest tools for SEO teams"}
+          />
+        </div>
+
+        <div className="space-y-3 border rounded-lg p-4">
+          <p className="font-medium">Enabled Models</p>
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="model-chatgpt">ChatGPT</Label>
+              <Switch id="model-chatgpt" checked={models.chat_gpt} onCheckedChange={(checked) => toggleModel("chat_gpt", checked)} />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="model-gemini">Gemini</Label>
+              <Switch id="model-gemini" checked={models.gemini} onCheckedChange={(checked) => toggleModel("gemini", checked)} />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="model-perplexity">Perplexity</Label>
+              <Switch
+                id="model-perplexity"
+                checked={models.perplexity}
+                onCheckedChange={(checked) => toggleModel("perplexity", checked)}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border rounded-lg p-4">
+          <div>
+            <p className="font-medium">Pause Domain</p>
+            <p className="text-sm text-muted-foreground">Pausing blocks manual and scheduled AI sync, but keeps historical data visible.</p>
+          </div>
+          <Switch id="pause-domain" checked={isPaused} onCheckedChange={setIsPaused} />
+        </div>
+
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save AI Visibility Settings"
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+

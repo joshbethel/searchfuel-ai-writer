@@ -13,6 +13,7 @@ import Calendar from "./pages/Calendar";
 import ArticleDetail from "./pages/ArticleDetail";
 import Settings from "./pages/Settings";
 import SiteSettings from "./pages/SiteSettings";
+import AiVisibility from "./pages/AiVisibility";
 import WordPressDebug from "./pages/WordPressDebug";
 import Presentation from "./pages/Presentation";
 import DashboardLayout from "./layouts/DashboardLayout";
@@ -56,6 +57,7 @@ const App = () => (
               <Route path="/articles/:id" element={<ArticleDetail />} />
               <Route path="/keywords" element={<Keywords />} />
               <Route path="/calendar" element={<Calendar />} />
+              <Route path="/ai-visibility" element={<AiVisibility />} />
               <Route path="/site-settings" element={<SiteSettings />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/debug" element={<WordPressDebug />} />

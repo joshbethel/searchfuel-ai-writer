@@ -26,3 +26,4 @@ dist-ssr
 docs/
 security
 planning
+.cursor/

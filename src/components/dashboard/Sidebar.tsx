@@ -6,6 +6,7 @@ import {
   Settings,
   Home,
   TrendingUp,
+  Eye,
   Calendar as CalendarIcon,
   Shield,
   History,
@@ -23,6 +24,7 @@ const navigation = [
   { name: "Articles", href: "/articles", icon: FileText },
   { name: "Keywords", href: "/keywords", icon: TrendingUp },
   { name: "Calendar", href: "/calendar", icon: CalendarIcon },
+  { name: "AI Visibility", href: "/ai-visibility", icon: Eye },
   { name: "Site Settings", href: "/site-settings", icon: Cog },
 ];
 
