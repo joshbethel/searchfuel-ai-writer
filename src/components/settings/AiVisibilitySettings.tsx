@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CirclePause, Cpu, DollarSign, Globe, Loader2, Lock, MessageSquareText, Sparkles } from "lucide-react";
+import { ArrowUpRight, CirclePause, Cpu, DollarSign, Globe, Loader2, Lock, MessageSquareText, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface AiVisibilitySettingsProps {
   blogId: string;
@@ -52,6 +53,7 @@ const clampRunCost = (input: unknown) => {
 };
 
 export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mainPrompt, setMainPrompt] = useState("");
@@ -204,11 +206,24 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
   return (
     <Card className="border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-indigo-500" />
-          AI Visibility
-        </CardTitle>
-        <CardDescription>Configure prompts, targeting, model tracking, pause state, and run budget guardrails.</CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-indigo-500" />
+              AI Visibility
+            </CardTitle>
+            <CardDescription>Configure prompts, targeting, model tracking, pause state, and run budget guardrails.</CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => navigate("/ai-visibility")}
+          >
+            <ArrowUpRight className="h-4 w-4 mr-2" />
+            Open AI Visibility
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid gap-3 sm:grid-cols-3">
