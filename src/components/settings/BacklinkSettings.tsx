@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ExternalLink } from "lucide-react";
+import { Link2, Loader2, Plus, Target, Trash2, ExternalLink } from "lucide-react";
 
 interface TargetPage {
   url: string;
@@ -103,55 +103,88 @@ export function BacklinkSettings({ blogId }: BacklinkSettingsProps) {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <Card>
+    <Card className="border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle>Automatic Backlink Settings</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Link2 className="h-4 w-4 text-indigo-500" />
+          Automatic Backlink Settings
+        </CardTitle>
         <CardDescription>
           Configure target pages and keywords for automatic backlink insertion in your blog posts
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Strategy Selection */}
-        <div className="space-y-2">
-          <Label>Backlink Strategy</Label>
-          <Select value={backlinkStrategy} onValueChange={setBacklinkStrategy}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="smart_contextual">Smart Contextual (Recommended)</SelectItem>
-              <SelectItem value="homepage_only">Homepage Only</SelectItem>
-              <SelectItem value="service_pages">Service Pages Focus</SelectItem>
-              <SelectItem value="disabled">Disabled</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-sm text-muted-foreground">
-            Choose how backlinks are automatically inserted into your content
-          </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Target Pages</p>
+            <p className="mt-1 text-lg font-semibold">{targetPages.length}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Strategy</p>
+            <p className="mt-1 text-sm font-semibold">{backlinkStrategy.replace(/_/g, " ")}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Max Links/Post</p>
+            <p className="mt-1 text-lg font-semibold">{maxLinks}</p>
+          </div>
         </div>
 
-        {/* Max Links Setting */}
-        <div className="space-y-2">
-          <Label htmlFor="max-links">Maximum Links Per Post</Label>
-          <Input
-            id="max-links"
-            type="number"
-            min="1"
-            max="10"
-            value={maxLinks}
-            onChange={(e) => setMaxLinks(parseInt(e.target.value) || 5)}
-          />
-          <p className="text-sm text-muted-foreground">
-            Limit the number of automatic backlinks per post (recommended: 3-5)
-          </p>
-        </div>
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
+              <Target className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Strategy Controls</p>
+              <p className="text-xs text-muted-foreground">Control how links are selected and distributed.</p>
+            </div>
+          </div>
 
-        {/* Target Pages List */}
-        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Backlink Strategy</Label>
+            <Select value={backlinkStrategy} onValueChange={setBacklinkStrategy}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="smart_contextual">Smart Contextual (Recommended)</SelectItem>
+                <SelectItem value="homepage_only">Homepage Only</SelectItem>
+                <SelectItem value="service_pages">Service Pages Focus</SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              Choose how backlinks are automatically inserted into your content
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="max-links">Maximum Links Per Post</Label>
+            <Input
+              id="max-links"
+              type="number"
+              min="1"
+              max="10"
+              value={maxLinks}
+              onChange={(e) => setMaxLinks(parseInt(e.target.value) || 5)}
+            />
+            <p className="text-sm text-muted-foreground">
+              Limit the number of automatic backlinks per post (recommended: 3-5)
+            </p>
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-xl border bg-card p-4">
           <Label>Target Pages</Label>
           
           {targetPages.length > 0 && (
@@ -159,7 +192,7 @@ export function BacklinkSettings({ blogId }: BacklinkSettingsProps) {
               {targetPages.map((page, index) => (
                 <div
                   key={index}
-                  className="flex items-start justify-between p-4 border rounded-lg bg-muted/50"
+                  className="flex items-start justify-between p-4 border rounded-xl bg-muted/20"
                 >
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2">
@@ -193,8 +226,7 @@ export function BacklinkSettings({ blogId }: BacklinkSettingsProps) {
             </div>
           )}
 
-          {/* Add New Page Form */}
-          <div className="space-y-3 p-4 border rounded-lg border-dashed">
+          <div className="space-y-3 p-4 border rounded-xl border-dashed">
             <h4 className="text-sm font-medium">Add Target Page</h4>
             
             <div className="space-y-2">
@@ -239,17 +271,15 @@ export function BacklinkSettings({ blogId }: BacklinkSettingsProps) {
               Add Target Page
             </Button>
           </div>
-        </div>
+        </section>
 
-        {/* Save Button */}
-        <div className="flex justify-end pt-4 border-t">
-          <Button onClick={handleSave}>
+        <div className="flex justify-end pt-2">
+          <Button onClick={handleSave} className="min-w-[220px]">
             Save Backlink Settings
           </Button>
         </div>
 
-        {/* Info Box */}
-        <div className="p-4 bg-muted rounded-lg space-y-2">
+        <div className="p-4 bg-muted rounded-xl space-y-2">
           <h4 className="text-sm font-medium">How It Works</h4>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• AI generates content naturally mentioning your keywords</li>

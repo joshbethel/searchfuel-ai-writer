@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Building2, Loader2, Sparkles, UserRound } from "lucide-react";
 import { useSiteContext } from "@/contexts/SiteContext";
 
 interface GeneralSettingsProps {
@@ -102,68 +103,114 @@ export function GeneralSettings({ blogId }: GeneralSettingsProps) {
   }
 
   return (
-    <Card>
+    <Card className="border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle>General Settings</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-indigo-500" />
+          General Settings
+        </CardTitle>
         <CardDescription>
           Update your site's basic information and preferences
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="title">Site Title *</Label>
-          <Input
-            id="title"
-            value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            placeholder="My Awesome Site"
-          />
-          <p className="text-xs text-muted-foreground">
-            The display name for your site
-          </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Site Title</p>
+            <p className="mt-1 font-semibold truncate">{formData.title || "Not set"}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Company</p>
+            <p className="mt-1 font-semibold truncate">{formData.company_name || "Not set"}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Auto Post</p>
+            <p className="mt-1">
+              <Badge variant={formData.auto_post_enabled ? "default" : "secondary"}>
+                {formData.auto_post_enabled ? "Enabled" : "Disabled"}
+              </Badge>
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="A brief description of your site"
-          />
-          <p className="text-xs text-muted-foreground">
-            Optional description of your site
-          </p>
-        </div>
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
+              <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Site Profile</p>
+              <p className="text-xs text-muted-foreground">Core site details used throughout your workspace.</p>
+            </div>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="company_name">Company Name</Label>
-          <Input
-            id="company_name"
-            value={formData.company_name}
-            onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-            placeholder="Your Company Name"
-          />
-          <p className="text-xs text-muted-foreground">
-            Optional company or organization name
-          </p>
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="title">Site Title *</Label>
+            <Input
+              id="title"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              placeholder="My Awesome Site"
+            />
+            <p className="text-xs text-muted-foreground">
+              The display name for your site
+            </p>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="target_audience">Target Audience</Label>
-          <Textarea
-            id="target_audience"
-            value={formData.target_audience}
-            onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
-            placeholder="Describe your target audience (e.g., demographics, interests, needs)"
-            rows={4}
-          />
-          <p className="text-xs text-muted-foreground">
-            Optional description of your target audience
-          </p>
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="A brief description of your site"
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional description of your site
+            </p>
+          </div>
+        </section>
 
-        <div className="flex items-center justify-between space-x-2 pt-4 border-t">
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
+              <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Audience Context</p>
+              <p className="text-xs text-muted-foreground">Guide content generation with company and audience context.</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="company_name">Company Name</Label>
+            <Input
+              id="company_name"
+              value={formData.company_name}
+              onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+              placeholder="Your Company Name"
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional company or organization name
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="target_audience">Target Audience</Label>
+            <Textarea
+              id="target_audience"
+              value={formData.target_audience}
+              onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
+              placeholder="Describe your target audience (e.g., demographics, interests, needs)"
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional description of your target audience
+            </p>
+          </div>
+        </section>
+
+        <section className="flex items-center justify-between space-x-2 rounded-xl border bg-card p-4">
           <div className="space-y-0.5">
             <Label htmlFor="auto_post">Auto-Post</Label>
             <p className="text-xs text-muted-foreground">
@@ -175,13 +222,13 @@ export function GeneralSettings({ blogId }: GeneralSettingsProps) {
             checked={formData.auto_post_enabled}
             onCheckedChange={(checked) => setFormData({ ...formData, auto_post_enabled: checked })}
           />
-        </div>
+        </section>
 
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-end pt-2">
           <Button
             onClick={handleSave}
             disabled={saving || !formData.title.trim()}
-            className="bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+            className="min-w-[180px]"
           >
             {saving ? (
               <>

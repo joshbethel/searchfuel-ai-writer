@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Wifi, WifiOff, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
+import { Clock3, Loader2, PlugZap, Wifi, WifiOff, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { useSiteContext } from "@/contexts/SiteContext";
@@ -144,16 +144,33 @@ export function CMSConnectionSettings({ blogId }: CMSConnectionSettingsProps) {
   const cmsName = getCMSName(siteData?.cms_platform || null);
 
   return (
-    <Card>
+    <Card className="border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle>CMS Connection</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <PlugZap className="h-4 w-4 text-indigo-500" />
+          CMS Connection
+        </CardTitle>
         <CardDescription>
           Manage your content management system connection
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Connection Status */}
-        <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Connection</p>
+            <p className="mt-1">
+              <Badge variant={isConnected ? "default" : "secondary"}>
+                {isConnected ? "Connected" : "Not Connected"}
+              </Badge>
+            </p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Platform</p>
+            <p className="mt-1 font-semibold">{isConnected ? cmsName : "-"}</p>
+          </div>
+        </div>
+
+        <section className="space-y-4 rounded-xl border bg-card p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`w-3 h-3 rounded-full ${isConnected ? "bg-green-500" : "bg-gray-400"}`} />
@@ -179,7 +196,6 @@ export function CMSConnectionSettings({ blogId }: CMSConnectionSettingsProps) {
 
           {isConnected && (
             <>
-              {/* CMS Platform */}
               <div className="space-y-2">
                 <Label>CMS Platform</Label>
                 <div className="flex items-center gap-2">
@@ -200,10 +216,12 @@ export function CMSConnectionSettings({ blogId }: CMSConnectionSettingsProps) {
                 </div>
               </div>
 
-              {/* Last Sync */}
               {siteData?.last_sync_at && (
                 <div className="space-y-2">
-                  <Label>Last Sync</Label>
+                  <Label className="inline-flex items-center gap-1.5">
+                    <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
+                    Last Sync
+                  </Label>
                   <p className="text-sm text-muted-foreground">
                     {format(new Date(siteData.last_sync_at), "MMM d, yyyy 'at' h:mm a")}
                   </p>
@@ -219,10 +237,9 @@ export function CMSConnectionSettings({ blogId }: CMSConnectionSettingsProps) {
               </p>
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Actions */}
-        <div className="flex gap-3 pt-4 border-t">
+        <div className="flex gap-3 pt-2">
           {isConnected && (
             <>
               <Button
@@ -256,7 +273,7 @@ export function CMSConnectionSettings({ blogId }: CMSConnectionSettingsProps) {
           {!isConnected && (
             <Button
               onClick={handleReconnect}
-              className="flex-1 bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+              className="flex-1"
             >
               <Wifi className="w-4 h-4 mr-2" />
               Connect CMS

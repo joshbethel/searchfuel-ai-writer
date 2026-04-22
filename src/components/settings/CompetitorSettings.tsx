@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ExternalLink } from "lucide-react";
+import { Loader2, Plus, Swords, Trash2, ExternalLink } from "lucide-react";
 
 interface Competitor {
   domain: string;
@@ -114,20 +114,43 @@ export function CompetitorSettings({ blogId }: CompetitorSettingsProps) {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <Card>
+    <Card className="border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle>Competitors</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Swords className="h-4 w-4 text-indigo-500" />
+          Competitors
+        </CardTitle>
         <CardDescription>
           Add your competitors to help us generate more effective keywords.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Competitors Section */}
-        <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Saved Competitors</p>
+            <p className="mt-1 text-lg font-semibold">{competitors.length}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Remaining Slots</p>
+            <p className="mt-1 text-lg font-semibold">{Math.max(MAX_COMPETITORS - competitors.length, 0)}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Limit</p>
+            <p className="mt-1 text-lg font-semibold">{MAX_COMPETITORS}</p>
+          </div>
+        </div>
+
+        <section className="space-y-4 rounded-xl border bg-card p-4">
           <div className="flex items-center justify-between">
             <Label>Competitors ({competitors.length}/{MAX_COMPETITORS})</Label>
             {competitors.length < MAX_COMPETITORS && (
@@ -142,7 +165,7 @@ export function CompetitorSettings({ blogId }: CompetitorSettingsProps) {
               {competitors.map((competitor, index) => (
                 <div
                   key={index}
-                  className="flex items-start justify-between p-4 border rounded-lg bg-muted/50"
+                  className="flex items-start justify-between p-4 border rounded-xl bg-muted/20"
                 >
                   <div className="flex items-center gap-2">
                     <ExternalLink className="w-4 h-4 text-muted-foreground" />
@@ -157,6 +180,7 @@ export function CompetitorSettings({ blogId }: CompetitorSettingsProps) {
                     {competitor.name && competitor.name !== competitor.domain && (
                       <span className="text-sm text-muted-foreground">({competitor.name})</span>
                     )}
+                    <Badge variant="secondary" className="text-[10px]">Tracked</Badge>
                   </div>
                   <Button
                     variant="ghost"
@@ -172,7 +196,7 @@ export function CompetitorSettings({ blogId }: CompetitorSettingsProps) {
 
           {/* Add New Competitor Form */}
           {competitors.length < MAX_COMPETITORS && (
-            <div className="space-y-3 p-4 border rounded-lg border-dashed">
+            <div className="space-y-3 p-4 border rounded-xl border-dashed">
               <h4 className="text-sm font-medium">Add Competitor</h4>
               
               <div className="space-y-2">
@@ -202,23 +226,21 @@ export function CompetitorSettings({ blogId }: CompetitorSettingsProps) {
           )}
 
           {competitors.length >= MAX_COMPETITORS && (
-            <div className="p-4 bg-muted rounded-lg">
+            <div className="p-4 bg-muted rounded-xl">
               <p className="text-sm text-muted-foreground">
                 Maximum {MAX_COMPETITORS} competitors reached. Remove one to add another.
               </p>
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Save Button */}
-        <div className="flex justify-end pt-4 border-t">
-          <Button onClick={handleSave}>
+        <div className="flex justify-end pt-2">
+          <Button onClick={handleSave} className="min-w-[220px]">
             Save Competitor Settings
           </Button>
         </div>
 
-        {/* Info Box */}
-        <div className="p-4 bg-muted rounded-lg space-y-2">
+        <div className="p-4 bg-muted rounded-xl space-y-2">
           <h4 className="text-sm font-medium">How It Works</h4>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• Define up to {MAX_COMPETITORS} competitor websites</li>

@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Lock } from "lucide-react";
+import { Globe, House, Loader2, Lock } from "lucide-react";
 import { useSiteContext } from "@/contexts/SiteContext";
 
 interface DomainSettingsProps {
@@ -89,64 +89,101 @@ export function DomainSettings({ blogId }: DomainSettingsProps) {
   }
 
   return (
-    <Card>
+    <Card className="border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle>Domain Settings</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Globe className="h-4 w-4 text-indigo-500" />
+          Domain Settings
+        </CardTitle>
         <CardDescription>
           Configure your site's domain and homepage URL
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="subdomain">Subdomain</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="subdomain"
-              value={formData.subdomain}
-              disabled
-              className="bg-muted"
-            />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">
-              .searchfuel.app
-            </span>
-            <Lock className="w-4 h-4 text-muted-foreground" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Subdomain</p>
+            <p className="mt-1 font-semibold truncate">{formData.subdomain || "-"}.searchfuel.app</p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Subdomain cannot be changed after creation
-          </p>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Custom Domain</p>
+            <p className="mt-1 font-semibold truncate">{formData.custom_domain || "Not set"}</p>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="custom_domain">Custom Domain</Label>
-          <Input
-            id="custom_domain"
-            value={formData.custom_domain}
-            onChange={(e) => setFormData({ ...formData, custom_domain: e.target.value })}
-            placeholder="example.com"
-          />
-          <p className="text-xs text-muted-foreground">
-            Your custom domain (without http:// or https://)
-          </p>
-        </div>
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
+              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Domain Mapping</p>
+              <p className="text-xs text-muted-foreground">Connect your branded domain to this site.</p>
+            </div>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="website_homepage">Website Homepage</Label>
-          <Input
-            id="website_homepage"
-            value={formData.website_homepage}
-            onChange={(e) => setFormData({ ...formData, website_homepage: e.target.value })}
-            placeholder="https://example.com"
-          />
-          <p className="text-xs text-muted-foreground">
-            The main URL of your website
-          </p>
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="subdomain">Subdomain</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="subdomain"
+                value={formData.subdomain}
+                disabled
+                className="bg-muted"
+              />
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                .searchfuel.app
+              </span>
+              <Lock className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Subdomain cannot be changed after creation
+            </p>
+          </div>
 
-        <div className="flex justify-end pt-4">
+          <div className="space-y-2">
+            <Label htmlFor="custom_domain">Custom Domain</Label>
+            <Input
+              id="custom_domain"
+              value={formData.custom_domain}
+              onChange={(e) => setFormData({ ...formData, custom_domain: e.target.value })}
+              placeholder="example.com"
+            />
+            <p className="text-xs text-muted-foreground">
+              Your custom domain (without http:// or https://)
+            </p>
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
+              <House className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Homepage URL</p>
+              <p className="text-xs text-muted-foreground">Set the main website destination used by your site profile.</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="website_homepage">Website Homepage</Label>
+            <Input
+              id="website_homepage"
+              value={formData.website_homepage}
+              onChange={(e) => setFormData({ ...formData, website_homepage: e.target.value })}
+              placeholder="https://example.com"
+            />
+            <p className="text-xs text-muted-foreground">
+              The main URL of your website
+            </p>
+          </div>
+        </section>
+
+        <div className="flex justify-end pt-2">
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-[#8B7355] hover:bg-[#8B7355]/90 text-white"
+            className="min-w-[180px]"
           >
             {saving ? (
               <>

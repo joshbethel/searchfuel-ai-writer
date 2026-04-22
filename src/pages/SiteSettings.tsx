@@ -8,7 +8,7 @@ import { CMSConnectionSettings } from "@/components/settings/CMSConnectionSettin
 import { DomainSettings } from "@/components/settings/DomainSettings";
 import { AiVisibilitySettings } from "@/components/settings/AiVisibilitySettings";
 import { useSiteContext } from "@/contexts/SiteContext";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Cpu, FileText, Globe, Link2, PlugZap, Settings2, Swords } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -51,21 +51,46 @@ export default function SiteSettings() {
   return (
     <div className="p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-6">Site Settings</h1>
+        <h1 className="text-2xl font-semibold mb-2">Site Settings</h1>
         <p className="text-muted-foreground mb-6">
           Configure settings for <strong>{selectedSite?.title || selectedSite?.subdomain}</strong>
         </p>
 
         <Tabs defaultValue={defaultTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-7">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="cms">CMS Connection</TabsTrigger>
-            <TabsTrigger value="domain">Domain</TabsTrigger>
-            <TabsTrigger value="ai-visibility">AI Visibility</TabsTrigger>
-            <TabsTrigger value="article-types">Article Types</TabsTrigger>
-            <TabsTrigger value="backlinks">Backlinks</TabsTrigger>
-            <TabsTrigger value="competitors">Competitors</TabsTrigger>
-          </TabsList>
+          <Card className="border-border/70 shadow-sm">
+            <CardContent className="p-2">
+              <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 xl:grid-cols-7 h-auto gap-2 bg-transparent">
+                <TabsTrigger value="general" className="gap-1.5">
+                  <Settings2 className="h-3.5 w-3.5" />
+                  General
+                </TabsTrigger>
+                <TabsTrigger value="cms" className="gap-1.5">
+                  <PlugZap className="h-3.5 w-3.5" />
+                  CMS Connection
+                </TabsTrigger>
+                <TabsTrigger value="domain" className="gap-1.5">
+                  <Globe className="h-3.5 w-3.5" />
+                  Domain
+                </TabsTrigger>
+                <TabsTrigger value="ai-visibility" className="gap-1.5">
+                  <Cpu className="h-3.5 w-3.5" />
+                  AI Visibility
+                </TabsTrigger>
+                <TabsTrigger value="article-types" className="gap-1.5">
+                  <FileText className="h-3.5 w-3.5" />
+                  Article Types
+                </TabsTrigger>
+                <TabsTrigger value="backlinks" className="gap-1.5">
+                  <Link2 className="h-3.5 w-3.5" />
+                  Backlinks
+                </TabsTrigger>
+                <TabsTrigger value="competitors" className="gap-1.5">
+                  <Swords className="h-3.5 w-3.5" />
+                  Competitors
+                </TabsTrigger>
+              </TabsList>
+            </CardContent>
+          </Card>
 
           <TabsContent value="general" className="mt-6">
             <GeneralSettings blogId={blogId} />

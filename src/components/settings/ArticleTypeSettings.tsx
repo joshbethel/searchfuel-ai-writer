@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, LayoutGrid, Sparkles } from "lucide-react";
 
 interface ArticleType {
   id: string;
@@ -190,9 +191,12 @@ export function ArticleTypeSettings({ blogId, isOnboarding = false, onSave }: Ar
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="border-border/70 shadow-sm">
         <CardHeader>
-          <CardTitle>Article Types</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <LayoutGrid className="h-4 w-4 text-indigo-500" />
+            Article Types
+          </CardTitle>
           <CardDescription>
             {isOnboarding
               ? "Choose the article formats that best fit your audience. You can change this anytime in settings."
@@ -200,8 +204,24 @@ export function ArticleTypeSettings({ blogId, isOnboarding = false, onSave }: Ar
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Quick Actions */}
-          <div className="flex items-center justify-between pb-4 border-b">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">Selected</p>
+              <p className="mt-1 text-lg font-semibold">{selectedCount}</p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">Available Types</p>
+              <p className="mt-1 text-lg font-semibold">{ARTICLE_TYPES.length}</p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">Coverage</p>
+              <p className="mt-1 text-lg font-semibold">
+                {Math.round((selectedCount / ARTICLE_TYPES.length) * 100)}%
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border bg-card p-4">
             <div className="text-sm text-muted-foreground">
               {selectedCount} of {ARTICLE_TYPES.length} types selected
             </div>
@@ -215,13 +235,12 @@ export function ArticleTypeSettings({ blogId, isOnboarding = false, onSave }: Ar
             </div>
           </div>
 
-          {/* Article Type Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {ARTICLE_TYPES.map((type) => (
               <div
                 key={type.id}
-                className={`border rounded-lg p-4 transition-all hover:shadow-md ${
-                  selectedTypes[type.id] ? "border-primary bg-primary/5" : "border-border"
+                className={`group border rounded-xl p-4 transition-all ${
+                  selectedTypes[type.id] ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:bg-accent/5"
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -238,6 +257,11 @@ export function ArticleTypeSettings({ blogId, isOnboarding = false, onSave }: Ar
                     >
                       <span className="text-2xl">{type.emoji}</span>
                       <span>{type.name}</span>
+                      {selectedTypes[type.id] ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Enabled
+                        </Badge>
+                      ) : null}
                     </label>
                     <p className="text-sm text-muted-foreground leading-relaxed">
                       {type.description}
@@ -257,14 +281,20 @@ export function ArticleTypeSettings({ blogId, isOnboarding = false, onSave }: Ar
             ))}
           </div>
 
-          {/* Save Button */}
-          <div className="pt-4 border-t">
+          <div className="pt-2">
             <Button
               onClick={handleSave}
               disabled={saving || selectedCount === 0}
-              className="w-full"
+              className="w-full min-h-10"
             >
-              {saving ? "Saving..." : "Save Article Type Preferences"}
+              {saving ? (
+                <span className="inline-flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 animate-pulse" />
+                  Saving...
+                </span>
+              ) : (
+                "Save Article Type Preferences"
+              )}
             </Button>
           </div>
         </CardContent>
