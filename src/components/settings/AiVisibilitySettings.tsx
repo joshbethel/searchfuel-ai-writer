@@ -14,11 +14,23 @@ interface AiVisibilitySettingsProps {
 }
 
 type ProviderKey = "chat_gpt" | "gemini" | "perplexity";
+const MIN_RUN_COST_USD = 1;
+const DEFAULT_MAX_COST_USD = 5;
+const ADMIN_MAX_COST_USD = Math.max(
+  MIN_RUN_COST_USD,
+  Number(import.meta.env.VITE_AI_VISIBILITY_ADMIN_MAX_COST_USD || DEFAULT_MAX_COST_USD),
+);
 
 const DEFAULT_MODELS: Record<ProviderKey, boolean> = {
   chat_gpt: true,
   gemini: true,
   perplexity: true,
+};
+
+const clampRunCost = (input: unknown) => {
+  const parsed = Number(input);
+  if (Number.isNaN(parsed)) return DEFAULT_MAX_COST_USD;
+  return Math.min(Math.max(parsed, MIN_RUN_COST_USD), ADMIN_MAX_COST_USD);
 };
 
 export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
@@ -63,7 +75,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           setLanguageCode(settings.language_code || "en");
           setLocationCode(String(settings.location_code || 2840));
           setIsPaused(Boolean(settings.is_paused));
-          setMaxCostUsd(String(settings.max_cost_usd ?? 5));
+          setMaxCostUsd(String(clampRunCost(settings.max_cost_usd ?? DEFAULT_MAX_COST_USD)));
           setModels({ ...DEFAULT_MODELS, ...(settings.enabled_models || {}) });
         }
 
@@ -92,17 +104,23 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
     try {
       const sb = supabase as any;
       const parsedLocation = Number(locationCode || "2840");
-      const parsedBudget = Number(maxCostUsd || "5");
+      const parsedBudget = Number(maxCostUsd || String(DEFAULT_MAX_COST_USD));
 
       if (Number.isNaN(parsedLocation) || parsedLocation <= 0) {
         toast.error("Location code must be a positive number");
         return;
       }
 
-      if (Number.isNaN(parsedBudget) || parsedBudget <= 0) {
-        toast.error("Max cost must be a positive number");
+      if (Number.isNaN(parsedBudget) || parsedBudget < MIN_RUN_COST_USD) {
+        toast.error(`Max cost must be at least ${MIN_RUN_COST_USD}`);
         return;
       }
+
+      const normalizedBudget = clampRunCost(parsedBudget);
+      if (normalizedBudget !== parsedBudget) {
+        toast.info(`Max cost was adjusted to ${normalizedBudget} based on admin policy.`);
+      }
+      setMaxCostUsd(String(normalizedBudget));
 
       const { error: settingsError } = await sb.from("ai_visibility_settings").upsert(
         {
@@ -113,7 +131,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           location_code: parsedLocation,
           enabled_models: models,
           is_paused: isPaused,
-          max_cost_usd: parsedBudget,
+          max_cost_usd: normalizedBudget,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "blog_id" },
@@ -203,7 +221,18 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="max-cost-usd">Max Cost Per Run (USD)</Label>
-            <Input id="max-cost-usd" type="number" min="1" step="0.5" value={maxCostUsd} onChange={(e) => setMaxCostUsd(e.target.value)} />
+            <Input
+              id="max-cost-usd"
+              type="number"
+              min={String(MIN_RUN_COST_USD)}
+              max={String(ADMIN_MAX_COST_USD)}
+              step="0.5"
+              value={maxCostUsd}
+              onChange={(e) => setMaxCostUsd(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Allowed range: ${MIN_RUN_COST_USD} - ${ADMIN_MAX_COST_USD}. Your selected value is always capped by admin policy.
+            </p>
           </div>
         </div>
 

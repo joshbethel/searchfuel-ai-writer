@@ -24,6 +24,12 @@ const DATAFORSEO_PASSWORD = Deno.env.get("DATAFORSEO_PASSWORD");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+const MIN_RUN_COST_USD = 1;
+const DEFAULT_MAX_COST_USD = 5;
+const ADMIN_MAX_COST_USD = Math.max(
+  MIN_RUN_COST_USD,
+  Number(Deno.env.get("AI_VISIBILITY_ADMIN_MAX_COST_USD") || DEFAULT_MAX_COST_USD),
+);
 
 const DEFAULT_ENABLED_MODELS: Record<Provider, boolean> = {
   chat_gpt: true,
@@ -97,6 +103,12 @@ function countDetected(text: string, terms: string[]): number {
   return terms.reduce((acc, term) => (term && lower.includes(term) ? acc + 1 : acc), 0);
 }
 
+function clampRunCost(input: unknown): number {
+  const parsed = Number(input);
+  if (Number.isNaN(parsed)) return DEFAULT_MAX_COST_USD;
+  return Math.min(Math.max(parsed, MIN_RUN_COST_USD), ADMIN_MAX_COST_USD);
+}
+
 serve(async (req) => {
   const origin = req.headers.get("origin");
   const corsHeaders = getCorsHeaders(origin, "POST, OPTIONS");
@@ -162,7 +174,7 @@ serve(async (req) => {
         enabled_models: DEFAULT_ENABLED_MODELS,
         language_code: "en",
         location_code: 2840,
-        max_cost_usd: 5,
+        max_cost_usd: Math.min(DEFAULT_MAX_COST_USD, ADMIN_MAX_COST_USD),
       });
     }
 
@@ -234,7 +246,8 @@ serve(async (req) => {
       return jsonResponse({ error: "No active prompts found. Add prompts first." }, 400, corsHeaders);
     }
 
-    const maxCostUsd = Number(body.max_cost_usd ?? settings?.max_cost_usd ?? 5);
+    const requestedMaxCost = body.max_cost_usd ?? settings?.max_cost_usd ?? DEFAULT_MAX_COST_USD;
+    const maxCostUsd = clampRunCost(requestedMaxCost);
     const runType = "manual";
 
     const { data: run, error: runError } = await service
@@ -417,6 +430,7 @@ serve(async (req) => {
         status: finalStatus,
         total_cost_usd: Number(totalCost.toFixed(2)),
         max_cost_usd: maxCostUsd,
+        admin_max_cost_usd: ADMIN_MAX_COST_USD,
         stopped_by_budget: stoppedByBudget,
         providers,
         prompts_processed: prompts.length,
