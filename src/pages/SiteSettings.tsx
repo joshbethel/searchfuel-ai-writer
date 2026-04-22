@@ -60,31 +60,52 @@ export default function SiteSettings() {
           <Card className="border-border/70 shadow-sm">
             <CardContent className="p-2">
               <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 xl:grid-cols-7 h-auto gap-2 bg-transparent">
-                <TabsTrigger value="general" className="gap-1.5">
+                <TabsTrigger
+                  value="general"
+                  className="gap-1.5 border border-transparent text-muted-foreground transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-sm"
+                >
                   <Settings2 className="h-3.5 w-3.5" />
                   General
                 </TabsTrigger>
-                <TabsTrigger value="cms" className="gap-1.5">
+                <TabsTrigger
+                  value="cms"
+                  className="gap-1.5 border border-transparent text-muted-foreground transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-sm"
+                >
                   <PlugZap className="h-3.5 w-3.5" />
                   CMS Connection
                 </TabsTrigger>
-                <TabsTrigger value="domain" className="gap-1.5">
+                <TabsTrigger
+                  value="domain"
+                  className="gap-1.5 border border-transparent text-muted-foreground transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-sm"
+                >
                   <Globe className="h-3.5 w-3.5" />
                   Domain
                 </TabsTrigger>
-                <TabsTrigger value="ai-visibility" className="gap-1.5">
+                <TabsTrigger
+                  value="ai-visibility"
+                  className="gap-1.5 border border-transparent text-muted-foreground transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-sm"
+                >
                   <Cpu className="h-3.5 w-3.5" />
                   AI Visibility
                 </TabsTrigger>
-                <TabsTrigger value="article-types" className="gap-1.5">
+                <TabsTrigger
+                  value="article-types"
+                  className="gap-1.5 border border-transparent text-muted-foreground transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-sm"
+                >
                   <FileText className="h-3.5 w-3.5" />
                   Article Types
                 </TabsTrigger>
-                <TabsTrigger value="backlinks" className="gap-1.5">
+                <TabsTrigger
+                  value="backlinks"
+                  className="gap-1.5 border border-transparent text-muted-foreground transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-sm"
+                >
                   <Link2 className="h-3.5 w-3.5" />
                   Backlinks
                 </TabsTrigger>
-                <TabsTrigger value="competitors" className="gap-1.5">
+                <TabsTrigger
+                  value="competitors"
+                  className="gap-1.5 border border-transparent text-muted-foreground transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-sm"
+                >
                   <Swords className="h-3.5 w-3.5" />
                   Competitors
                 </TabsTrigger>
