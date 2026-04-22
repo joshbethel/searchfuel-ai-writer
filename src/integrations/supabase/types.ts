@@ -65,6 +65,316 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_visibility_mentions: {
+        Row: {
+          answer_excerpt: string | null
+          blog_id: string
+          created_at: string
+          detected_brand: boolean
+          id: string
+          position: number | null
+          prompt_id: string | null
+          prompt_text: string
+          provider: string
+          question: string | null
+          run_id: string
+          source_domain: string | null
+          source_url: string | null
+        }
+        Insert: {
+          answer_excerpt?: string | null
+          blog_id: string
+          created_at?: string
+          detected_brand?: boolean
+          id?: string
+          position?: number | null
+          prompt_id?: string | null
+          prompt_text: string
+          provider: string
+          question?: string | null
+          run_id: string
+          source_domain?: string | null
+          source_url?: string | null
+        }
+        Update: {
+          answer_excerpt?: string | null
+          blog_id?: string
+          created_at?: string
+          detected_brand?: boolean
+          id?: string
+          position?: number | null
+          prompt_id?: string | null
+          prompt_text?: string
+          provider?: string
+          question?: string | null
+          run_id?: string
+          source_domain?: string | null
+          source_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_mentions_blog_id_fkey"
+            columns: ["blog_id"]
+            isOneToOne: false
+            referencedRelation: "blogs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_visibility_mentions_prompt_id_fkey"
+            columns: ["prompt_id"]
+            isOneToOne: false
+            referencedRelation: "ai_visibility_prompts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_visibility_mentions_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "ai_visibility_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_visibility_model_metrics: {
+        Row: {
+          avg_position: number | null
+          blog_id: string
+          created_at: string
+          id: string
+          our_mentions: number
+          prompts_total: number
+          prompts_with_brand_mention: number
+          provider: string
+          run_id: string
+          share_of_voice: number | null
+          total_mentions_across_tracked_brands: number
+          visibility_score: number | null
+        }
+        Insert: {
+          avg_position?: number | null
+          blog_id: string
+          created_at?: string
+          id?: string
+          our_mentions?: number
+          prompts_total?: number
+          prompts_with_brand_mention?: number
+          provider: string
+          run_id: string
+          share_of_voice?: number | null
+          total_mentions_across_tracked_brands?: number
+          visibility_score?: number | null
+        }
+        Update: {
+          avg_position?: number | null
+          blog_id?: string
+          created_at?: string
+          id?: string
+          our_mentions?: number
+          prompts_total?: number
+          prompts_with_brand_mention?: number
+          provider?: string
+          run_id?: string
+          share_of_voice?: number | null
+          total_mentions_across_tracked_brands?: number
+          visibility_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_model_metrics_blog_id_fkey"
+            columns: ["blog_id"]
+            isOneToOne: false
+            referencedRelation: "blogs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_visibility_model_metrics_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "ai_visibility_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_visibility_prompts: {
+        Row: {
+          blog_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          prompt_text: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          blog_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          prompt_text: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          blog_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          prompt_text?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_prompts_blog_id_fkey"
+            columns: ["blog_id"]
+            isOneToOne: false
+            referencedRelation: "blogs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_visibility_results_raw: {
+        Row: {
+          blog_id: string
+          cost_usd: number
+          created_at: string
+          endpoint_name: string
+          id: string
+          payload_json: Json
+          provider: string
+          run_id: string
+          status_code: number | null
+          task_id: string | null
+        }
+        Insert: {
+          blog_id: string
+          cost_usd?: number
+          created_at?: string
+          endpoint_name: string
+          id?: string
+          payload_json: Json
+          provider: string
+          run_id: string
+          status_code?: number | null
+          task_id?: string | null
+        }
+        Update: {
+          blog_id?: string
+          cost_usd?: number
+          created_at?: string
+          endpoint_name?: string
+          id?: string
+          payload_json?: Json
+          provider?: string
+          run_id?: string
+          status_code?: number | null
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_results_raw_blog_id_fkey"
+            columns: ["blog_id"]
+            isOneToOne: false
+            referencedRelation: "blogs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_visibility_results_raw_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "ai_visibility_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_visibility_runs: {
+        Row: {
+          blog_id: string
+          error_summary: string | null
+          finished_at: string | null
+          id: string
+          run_type: string
+          started_at: string
+          status: string
+          total_cost_usd: number
+        }
+        Insert: {
+          blog_id: string
+          error_summary?: string | null
+          finished_at?: string | null
+          id?: string
+          run_type?: string
+          started_at?: string
+          status?: string
+          total_cost_usd?: number
+        }
+        Update: {
+          blog_id?: string
+          error_summary?: string | null
+          finished_at?: string | null
+          id?: string
+          run_type?: string
+          started_at?: string
+          status?: string
+          total_cost_usd?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_runs_blog_id_fkey"
+            columns: ["blog_id"]
+            isOneToOne: false
+            referencedRelation: "blogs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_visibility_settings: {
+        Row: {
+          blog_id: string
+          created_at: string
+          enabled_models: Json
+          is_paused: boolean
+          language_code: string
+          location_code: number
+          main_ai_prompt: string | null
+          main_keyword: string | null
+          max_cost_usd: number
+          updated_at: string
+        }
+        Insert: {
+          blog_id: string
+          created_at?: string
+          enabled_models?: Json
+          is_paused?: boolean
+          language_code?: string
+          location_code?: number
+          main_ai_prompt?: string | null
+          main_keyword?: string | null
+          max_cost_usd?: number
+          updated_at?: string
+        }
+        Update: {
+          blog_id?: string
+          created_at?: string
+          enabled_models?: Json
+          is_paused?: boolean
+          language_code?: string
+          location_code?: number
+          main_ai_prompt?: string | null
+          main_keyword?: string | null
+          max_cost_usd?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_visibility_settings_blog_id_fkey"
+            columns: ["blog_id"]
+            isOneToOne: true
+            referencedRelation: "blogs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_keys: {
         Row: {
           created_at: string | null
