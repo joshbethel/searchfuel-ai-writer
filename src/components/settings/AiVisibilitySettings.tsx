@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Cpu, Loader2, Lock } from "lucide-react";
+import { CirclePause, Cpu, DollarSign, Globe, Loader2, Lock, MessageSquareText, Sparkles } from "lucide-react";
 
 interface AiVisibilitySettingsProps {
   blogId: string;
@@ -71,6 +71,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
         .filter(Boolean),
     [promptsText],
   );
+  const enabledModelCount = useMemo(() => Object.values(models).filter(Boolean).length, [models]);
 
   useEffect(() => {
     const load = async () => {
@@ -201,71 +202,126 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
   }
 
   return (
-    <Card>
+    <Card className="border-border/70 shadow-sm">
       <CardHeader>
-        <CardTitle>AI Visibility</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-indigo-500" />
+          AI Visibility
+        </CardTitle>
         <CardDescription>Configure prompts, targeting, model tracking, pause state, and run budget guardrails.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="main-ai-prompt">Main AI Prompt</Label>
-            <Input
-              id="main-ai-prompt"
-              value={mainPrompt}
-              onChange={(e) => setMainPrompt(e.target.value)}
-              placeholder="e.g. best project management tools"
-            />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Tracked Prompts</p>
+            <p className="mt-1 text-lg font-semibold">{prompts.length}</p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="main-keyword">Main Keyword (optional)</Label>
-            <Input
-              id="main-keyword"
-              value={mainKeyword}
-              onChange={(e) => setMainKeyword(e.target.value)}
-              placeholder="e.g. project management software"
-            />
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Enabled Models</p>
+            <p className="mt-1 text-lg font-semibold">{enabledModelCount}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Max Run Cost</p>
+            <p className="mt-1 text-lg font-semibold">${clampRunCost(maxCostUsd).toFixed(2)}</p>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="language-code">Language Code</Label>
-            <Input id="language-code" value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} placeholder="en" />
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
+              <MessageSquareText className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Core Prompt Setup</p>
+              <p className="text-xs text-muted-foreground">Set your primary prompt and keyword focus.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="main-ai-prompt">Main AI Prompt</Label>
+              <Input
+                id="main-ai-prompt"
+                value={mainPrompt}
+                onChange={(e) => setMainPrompt(e.target.value)}
+                placeholder="e.g. best project management tools"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="main-keyword">Main Keyword (optional)</Label>
+              <Input
+                id="main-keyword"
+                value={mainKeyword}
+                onChange={(e) => setMainKeyword(e.target.value)}
+                placeholder="e.g. project management software"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
+              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Targeting and Budget</p>
+              <p className="text-xs text-muted-foreground">Control geo/language scope and run spend limits.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="language-code">Language Code</Label>
+              <Input id="language-code" value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} placeholder="en" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="location-code">Location Code</Label>
+              <Input id="location-code" value={locationCode} onChange={(e) => setLocationCode(e.target.value)} placeholder="2840" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="max-cost-usd" className="flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                Max Cost Per Run (USD)
+              </Label>
+              <Input
+                id="max-cost-usd"
+                type="number"
+                min={String(MIN_RUN_COST_USD)}
+                max={String(ADMIN_MAX_COST_USD)}
+                step="0.5"
+                value={maxCostUsd}
+                onChange={(e) => setMaxCostUsd(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Allowed range: ${MIN_RUN_COST_USD} - ${ADMIN_MAX_COST_USD}. Your selected value is always capped by admin policy.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4 rounded-xl border bg-card p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">Tracked Prompts</p>
+              <p className="text-xs text-muted-foreground">One prompt per line for sync runs.</p>
+            </div>
+            <Badge variant="secondary">{prompts.length} active</Badge>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="location-code">Location Code</Label>
-            <Input id="location-code" value={locationCode} onChange={(e) => setLocationCode(e.target.value)} placeholder="2840" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="max-cost-usd">Max Cost Per Run (USD)</Label>
-            <Input
-              id="max-cost-usd"
-              type="number"
-              min={String(MIN_RUN_COST_USD)}
-              max={String(ADMIN_MAX_COST_USD)}
-              step="0.5"
-              value={maxCostUsd}
-              onChange={(e) => setMaxCostUsd(e.target.value)}
+            <Label htmlFor="prompts">Prompt List</Label>
+            <Textarea
+              id="prompts"
+              value={promptsText}
+              onChange={(e) => setPromptsText(e.target.value)}
+              rows={8}
+              className="resize-y"
+              placeholder={"Why should I use a VPN at home?\nBest tools for SEO teams"}
             />
-            <p className="text-xs text-muted-foreground">
-              Allowed range: ${MIN_RUN_COST_USD} - ${ADMIN_MAX_COST_USD}. Your selected value is always capped by admin policy.
-            </p>
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-2">
-          <Label htmlFor="prompts">Tracked Prompts (one per line)</Label>
-          <Textarea
-            id="prompts"
-            value={promptsText}
-            onChange={(e) => setPromptsText(e.target.value)}
-            rows={8}
-            placeholder={"Why should I use a VPN at home?\nBest tools for SEO teams"}
-          />
-        </div>
-
-        <div className="space-y-3 border rounded-lg p-4">
+        <section className="space-y-3 rounded-xl border bg-card p-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-gradient-to-br from-slate-100 to-slate-50 border-slate-200/60">
@@ -276,22 +332,22 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
             <p className="text-sm text-muted-foreground">Choose which models should be included in each sync.</p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {MODEL_CARDS.map((modelCard) => {
               const isEnabledModel = modelCard.availability === "enabled";
               const checked = isEnabledModel ? models[modelCard.id as ProviderKey] : false;
               return (
                 <div
                   key={modelCard.id}
-                  className={`rounded-lg border p-4 transition-colors ${
+                  className={`group rounded-xl border p-4 transition-all ${
                     isEnabledModel
-                      ? "bg-card hover:bg-accent/5 border-border"
-                      : "bg-muted/40 border-dashed border-muted-foreground/30"
+                      ? "bg-card hover:-translate-y-0.5 hover:bg-accent/5 hover:shadow-sm border-border"
+                      : "bg-muted/40 border-dashed border-muted-foreground/30 opacity-90"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-background/80">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-background/80 transition-colors group-hover:bg-background">
                         <img
                           src={modelCard.logoSrc}
                           alt={modelCard.label}
@@ -319,7 +375,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
                         onCheckedChange={(next) => toggleModel(modelCard.id as ProviderKey, next)}
                       />
                     ) : (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground rounded-full border px-2 py-1">
                         <Lock className="h-3.5 w-3.5" />
                         Locked
                       </div>
@@ -329,18 +385,21 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
               );
             })}
           </div>
-        </div>
+        </section>
 
-        <div className="flex items-center justify-between border rounded-lg p-4">
+        <section className="flex items-center justify-between rounded-xl border bg-card p-4">
           <div>
-            <p className="font-medium">Pause Domain</p>
+            <p className="font-medium flex items-center gap-1.5">
+              <CirclePause className="h-4 w-4 text-muted-foreground" />
+              Pause Domain
+            </p>
             <p className="text-sm text-muted-foreground">Pausing blocks manual and scheduled AI sync, but keeps historical data visible.</p>
           </div>
           <Switch id="pause-domain" checked={isPaused} onCheckedChange={setIsPaused} />
-        </div>
+        </section>
 
         <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving} className="min-w-[220px]">
             {saving ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
