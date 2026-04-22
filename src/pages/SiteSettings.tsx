@@ -10,10 +10,27 @@ import { AiVisibilitySettings } from "@/components/settings/AiVisibilitySettings
 import { useSiteContext } from "@/contexts/SiteContext";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 
 export default function SiteSettings() {
   const { selectedSite } = useSiteContext();
   const blogId = selectedSite?.id || null;
+  const [searchParams] = useSearchParams();
+
+  const defaultTab = useMemo(() => {
+    const tab = searchParams.get("tab");
+    const allowedTabs = new Set([
+      "general",
+      "cms",
+      "domain",
+      "ai-visibility",
+      "article-types",
+      "backlinks",
+      "competitors",
+    ]);
+    return tab && allowedTabs.has(tab) ? tab : "general";
+  }, [searchParams]);
 
   if (!blogId) {
     return (
@@ -39,7 +56,7 @@ export default function SiteSettings() {
           Configure settings for <strong>{selectedSite?.title || selectedSite?.subdomain}</strong>
         </p>
 
-        <Tabs defaultValue="general" className="w-full">
+        <Tabs defaultValue={defaultTab} className="w-full">
           <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="cms">CMS Connection</TabsTrigger>

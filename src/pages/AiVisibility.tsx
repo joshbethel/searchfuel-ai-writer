@@ -3,8 +3,9 @@ import { useSiteContext } from "@/contexts/SiteContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Settings } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import {
   Table,
   TableBody,
@@ -17,21 +18,24 @@ import {
 export default function AiVisibility() {
   const { selectedSite } = useSiteContext();
   const blogId = selectedSite?.id;
+  const navigate = useNavigate();
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [latestRun, setLatestRun] = useState<any | null>(null);
   const [mentions, setMentions] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any[]>([]);
+  const [activePromptCount, setActivePromptCount] = useState(0);
 
   const hasSite = useMemo(() => Boolean(blogId), [blogId]);
+  const hasActivePrompts = useMemo(() => activePromptCount > 0, [activePromptCount]);
 
   const fetchData = async () => {
     if (!blogId) return;
     setLoading(true);
     try {
       const sb = supabase as any;
-      const [{ data: runData }, { data: mentionData }, { data: metricsData }] = await Promise.all([
+      const [{ data: runData }, { data: mentionData }, { data: metricsData }, { count: promptCount }] = await Promise.all([
         sb.from("ai_visibility_runs").select("*").eq("blog_id", blogId).order("started_at", { ascending: false }).limit(1),
         sb
           .from("ai_visibility_mentions")
@@ -45,11 +49,17 @@ export default function AiVisibility() {
           .eq("blog_id", blogId)
           .order("created_at", { ascending: false })
           .limit(30),
+        sb
+          .from("ai_visibility_prompts")
+          .select("id", { head: true, count: "exact" })
+          .eq("blog_id", blogId)
+          .eq("is_active", true),
       ]);
 
       const run = runData?.[0] || null;
       setLatestRun(run);
       setMentions(mentionData || []);
+      setActivePromptCount(promptCount || 0);
 
       // Keep only latest metric row per provider for display.
       const latestByProvider = new Map<string, any>();
@@ -72,6 +82,11 @@ export default function AiVisibility() {
 
   const handleManualSync = async () => {
     if (!blogId) return;
+    if (!hasActivePrompts) {
+      toast.error("No active prompts found. Add prompts in Site Settings → AI Visibility first.");
+      return;
+    }
+
     setIsSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke("ai-visibility-sync", {
@@ -87,6 +102,10 @@ export default function AiVisibility() {
       await fetchData();
     } catch (error: any) {
       console.error("Error running AI visibility sync:", error);
+      if (String(error?.message || "").includes("No active prompts found")) {
+        toast.error("No active prompts found. Add prompts in Site Settings → AI Visibility first.");
+        return;
+      }
       toast.error(`Sync failed: ${error?.message ?? "Unknown error"}`);
     } finally {
       setIsSyncing(false);
@@ -120,12 +139,29 @@ export default function AiVisibility() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Refresh
           </Button>
-          <Button onClick={handleManualSync} disabled={isSyncing}>
+          <Button onClick={handleManualSync} disabled={isSyncing || !hasActivePrompts}>
             {isSyncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Run Manual Sync
           </Button>
         </div>
       </div>
+
+      {!hasActivePrompts && (
+        <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardHeader>
+            <CardTitle className="text-base">Add prompts before running sync</CardTitle>
+            <CardDescription>
+              You currently have no active prompts, so manual sync is disabled. Add at least one tracked prompt to start collecting AI visibility data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate("/site-settings?tab=ai-visibility")} className="gap-2">
+              <Settings className="h-4 w-4" />
+              Go to AI Visibility Settings
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
