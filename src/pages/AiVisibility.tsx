@@ -176,7 +176,7 @@ export default function AiVisibility() {
             AI Visibility
           </h1>
           <p className="text-muted-foreground">
-            MVP includes Your Mentions + AI Model Performance with manual sync.
+            Track your mentions and AI model performance, with manual sync support.
           </p>
         </div>
         <div className="flex items-center gap-2">
