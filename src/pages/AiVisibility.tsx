@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useSiteContext } from "@/contexts/SiteContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, RefreshCw, Settings } from "lucide-react";
+import { Bot, CircleCheck, CircleX, Cpu, DollarSign, Loader2, RefreshCw, Settings, Sparkles, Target } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,6 +15,29 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+const PROVIDER_META: Record<string, { label: string; logoSrc: string }> = {
+  chat_gpt: { label: "ChatGPT", logoSrc: "/images/openai.svg" },
+  perplexity: { label: "Perplexity", logoSrc: "/images/perplexity-color.svg" },
+  gemini: { label: "Gemini", logoSrc: "/images/gemini-color.svg" },
+  claude: { label: "Claude", logoSrc: "/images/claude.svg" },
+  grok: { label: "Grok", logoSrc: "/images/grok.svg" },
+  copilot: { label: "Copilot", logoSrc: "/images/copilot-color.svg" },
+  ai_overviews: { label: "AI Overviews", logoSrc: "/images/ai-overviews.svg" },
+  ai_mode: { label: "AI Mode", logoSrc: "/images/ai-mode.svg" },
+};
+
+const formatProvider = (provider: string | null | undefined) => {
+  if (!provider) return "Unknown";
+  const key = String(provider).toLowerCase();
+  return PROVIDER_META[key]?.label || provider.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const formatPercent = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "-";
+  return `${(parsed * 100).toFixed(1)}%`;
+};
 
 export default function AiVisibility() {
   const { selectedSite } = useSiteContext();
@@ -29,6 +53,24 @@ export default function AiVisibility() {
 
   const hasSite = useMemo(() => Boolean(blogId), [blogId]);
   const hasActivePrompts = useMemo(() => activePromptCount > 0, [activePromptCount]);
+  const mentionCount = useMemo(() => mentions.length, [mentions]);
+  const detectedMentions = useMemo(() => mentions.filter((m) => Boolean(m.detected_brand)).length, [mentions]);
+  const avgVisibility = useMemo(() => {
+    if (metrics.length === 0) return null;
+    const valid = metrics
+      .map((row) => Number(row.visibility_score))
+      .filter((score) => Number.isFinite(score));
+    if (valid.length === 0) return null;
+    return valid.reduce((acc, value) => acc + value, 0) / valid.length;
+  }, [metrics]);
+  const avgSov = useMemo(() => {
+    if (metrics.length === 0) return null;
+    const valid = metrics
+      .map((row) => Number(row.share_of_voice))
+      .filter((score) => Number.isFinite(score));
+    if (valid.length === 0) return null;
+    return valid.reduce((acc, value) => acc + value, 0) / valid.length;
+  }, [metrics]);
 
   const fetchData = async () => {
     if (!blogId) return;
@@ -129,7 +171,10 @@ export default function AiVisibility() {
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">AI Visibility</h1>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-indigo-500" />
+            AI Visibility
+          </h1>
           <p className="text-muted-foreground">
             MVP includes Your Mentions + AI Model Performance with manual sync.
           </p>
@@ -144,6 +189,34 @@ export default function AiVisibility() {
             Run Manual Sync
           </Button>
         </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="border-border/70 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Active Prompts</p>
+            <p className="mt-1 text-2xl font-semibold">{activePromptCount}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Mentions Detected</p>
+            <p className="mt-1 text-2xl font-semibold">{detectedMentions}</p>
+            <p className="text-xs text-muted-foreground mt-1">of {mentionCount} tracked results</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Avg Visibility</p>
+            <p className="mt-1 text-2xl font-semibold">{avgVisibility != null ? formatPercent(avgVisibility) : "-"}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Avg Share of Voice</p>
+            <p className="mt-1 text-2xl font-semibold">{avgSov != null ? formatPercent(avgSov) : "-"}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {!hasActivePrompts && (
@@ -171,7 +244,13 @@ export default function AiVisibility() {
         <CardContent className="grid md:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground">Status</p>
-            <p className="font-medium">{latestRun?.status || "No runs yet"}</p>
+            <div className="mt-1">
+              {latestRun?.status ? (
+                <Badge variant={latestRun.status === "completed" ? "default" : "secondary"}>{latestRun.status}</Badge>
+              ) : (
+                <span className="font-medium">No runs yet</span>
+              )}
+            </div>
           </div>
           <div>
             <p className="text-muted-foreground">Started</p>
@@ -183,14 +262,20 @@ export default function AiVisibility() {
           </div>
           <div>
             <p className="text-muted-foreground">Total Cost (USD)</p>
-            <p className="font-medium">{latestRun?.total_cost_usd ?? "-"}</p>
+            <p className="font-medium flex items-center gap-1.5">
+              <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+              {latestRun?.total_cost_usd ?? "-"}
+            </p>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-border/70 shadow-sm">
         <CardHeader>
-          <CardTitle>Your Mentions</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-4 w-4 text-indigo-500" />
+            Your Mentions
+          </CardTitle>
           <CardDescription>Prompt-level mention results from the latest sync runs.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -215,8 +300,34 @@ export default function AiVisibility() {
                 mentions.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="max-w-[420px] truncate">{row.prompt_text}</TableCell>
-                    <TableCell>{row.provider}</TableCell>
-                    <TableCell>{row.detected_brand ? "Yes" : "No"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {PROVIDER_META[String(row.provider || "").toLowerCase()]?.logoSrc ? (
+                          <img
+                            src={PROVIDER_META[String(row.provider || "").toLowerCase()].logoSrc}
+                            alt={formatProvider(row.provider)}
+                            className="h-4 w-4 object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <Bot className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span>{formatProvider(row.provider)}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {row.detected_brand ? (
+                        <Badge className="gap-1">
+                          <CircleCheck className="h-3.5 w-3.5" />
+                          Yes
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="gap-1">
+                          <CircleX className="h-3.5 w-3.5" />
+                          No
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>{row.position ?? "-"}</TableCell>
                     <TableCell>{new Date(row.created_at).toLocaleString()}</TableCell>
                   </TableRow>
@@ -227,9 +338,12 @@ export default function AiVisibility() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-border/70 shadow-sm">
         <CardHeader>
-          <CardTitle>AI Model Performance</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Cpu className="h-4 w-4 text-indigo-500" />
+            AI Model Performance
+          </CardTitle>
           <CardDescription>
             Visibility score = prompts with brand mention / total prompts. SOV = our mentions / total mentions across tracked brands.
           </CardDescription>
@@ -256,11 +370,25 @@ export default function AiVisibility() {
               ) : (
                 metrics.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell>{row.provider}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {PROVIDER_META[String(row.provider || "").toLowerCase()]?.logoSrc ? (
+                          <img
+                            src={PROVIDER_META[String(row.provider || "").toLowerCase()].logoSrc}
+                            alt={formatProvider(row.provider)}
+                            className="h-4 w-4 object-contain"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <Bot className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span>{formatProvider(row.provider)}</span>
+                      </div>
+                    </TableCell>
                     <TableCell>{row.prompts_total}</TableCell>
                     <TableCell>{row.prompts_with_brand_mention}</TableCell>
-                    <TableCell>{row.visibility_score != null ? `${(Number(row.visibility_score) * 100).toFixed(1)}%` : "-"}</TableCell>
-                    <TableCell>{row.share_of_voice != null ? `${(Number(row.share_of_voice) * 100).toFixed(1)}%` : "-"}</TableCell>
+                    <TableCell>{formatPercent(row.visibility_score)}</TableCell>
+                    <TableCell>{formatPercent(row.share_of_voice)}</TableCell>
                     <TableCell>{row.avg_position ?? "-"}</TableCell>
                   </TableRow>
                 ))
