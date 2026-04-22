@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
 
 interface AiVisibilitySettingsProps {
   blogId: string;
@@ -26,6 +27,22 @@ const DEFAULT_MODELS: Record<ProviderKey, boolean> = {
   gemini: true,
   perplexity: true,
 };
+
+const MODEL_CARDS: Array<{
+  id: ProviderKey | "ai_overviews" | "ai_mode" | "claude" | "grok" | "copilot";
+  label: string;
+  availability: "enabled" | "upgrade";
+  description: string;
+}> = [
+  { id: "chat_gpt", label: "ChatGPT", availability: "enabled", description: "Track direct LLM responses." },
+  { id: "perplexity", label: "Perplexity", availability: "enabled", description: "Track answer and source behavior." },
+  { id: "gemini", label: "Gemini", availability: "enabled", description: "Track Gemini-generated recommendations." },
+  { id: "ai_overviews", label: "AI Overviews", availability: "upgrade", description: "Coming in a later plan tier." },
+  { id: "ai_mode", label: "AI Mode", availability: "upgrade", description: "Coming in a later plan tier." },
+  { id: "claude", label: "Claude", availability: "upgrade", description: "Planned post-MVP provider." },
+  { id: "grok", label: "Grok", availability: "upgrade", description: "Planned post-MVP provider." },
+  { id: "copilot", label: "Copilot", availability: "upgrade", description: "Planned post-MVP provider." },
+];
 
 const clampRunCost = (input: unknown) => {
   const parsed = Number(input);
@@ -248,24 +265,53 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
         </div>
 
         <div className="space-y-3 border rounded-lg p-4">
-          <p className="font-medium">Enabled Models</p>
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="model-chatgpt">ChatGPT</Label>
-              <Switch id="model-chatgpt" checked={models.chat_gpt} onCheckedChange={(checked) => toggleModel("chat_gpt", checked)} />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="model-gemini">Gemini</Label>
-              <Switch id="model-gemini" checked={models.gemini} onCheckedChange={(checked) => toggleModel("gemini", checked)} />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="model-perplexity">Perplexity</Label>
-              <Switch
-                id="model-perplexity"
-                checked={models.perplexity}
-                onCheckedChange={(checked) => toggleModel("perplexity", checked)}
-              />
-            </div>
+          <div>
+            <p className="font-medium">Enabled Models</p>
+            <p className="text-sm text-muted-foreground">Choose which models should be included in each sync.</p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {MODEL_CARDS.map((modelCard) => {
+              const isEnabledModel = modelCard.availability === "enabled";
+              const checked = isEnabledModel ? models[modelCard.id as ProviderKey] : false;
+              return (
+                <div
+                  key={modelCard.id}
+                  className={`rounded-lg border p-4 transition-colors ${
+                    isEnabledModel
+                      ? "bg-card hover:bg-accent/5 border-border"
+                      : "bg-muted/40 border-dashed border-muted-foreground/30"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm font-medium">{modelCard.label}</Label>
+                        {!isEnabledModel ? (
+                          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+                            Upgrade
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{modelCard.description}</p>
+                    </div>
+
+                    {isEnabledModel ? (
+                      <Switch
+                        id={`model-${modelCard.id}`}
+                        checked={checked}
+                        onCheckedChange={(next) => toggleModel(modelCard.id as ProviderKey, next)}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Lock className="h-3.5 w-3.5" />
+                        Locked
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
