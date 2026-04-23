@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Bot, CircleCheck, CircleX, Cpu, DollarSign, Loader2, RefreshCw, Settings, Sparkles, Target } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import {
   Table,
   TableBody,
@@ -58,6 +60,12 @@ const normalizeEnabledModels = (input: unknown): Record<RunProvider, boolean> =>
   };
 };
 
+const TREND_SERIES_META: Record<RunProvider, { label: string; color: string }> = {
+  chat_gpt: { label: "ChatGPT", color: "hsl(var(--chart-1))" },
+  gemini: { label: "Gemini", color: "hsl(var(--chart-2))" },
+  perplexity: { label: "Perplexity", color: "hsl(var(--chart-3))" },
+};
+
 export default function AiVisibility() {
   const { selectedSite } = useSiteContext();
   const blogId = selectedSite?.id;
@@ -69,6 +77,7 @@ export default function AiVisibility() {
   const [latestRun, setLatestRun] = useState<any | null>(null);
   const [mentions, setMentions] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any[]>([]);
+  const [metricHistoryRows, setMetricHistoryRows] = useState<any[]>([]);
   const [activePrompts, setActivePrompts] = useState<string[]>([]);
   const [siteEnabledModels, setSiteEnabledModels] = useState<Record<RunProvider, boolean>>(DEFAULT_ENABLED_MODELS);
   const [adminEnabledModels, setAdminEnabledModels] = useState<Record<RunProvider, boolean>>(DEFAULT_ENABLED_MODELS);
@@ -96,6 +105,69 @@ export default function AiVisibility() {
     if (valid.length === 0) return null;
     return valid.reduce((acc, value) => acc + value, 0) / valid.length;
   }, [metrics]);
+  const trendData = useMemo(() => {
+    if (metricHistoryRows.length === 0) return [];
+
+    const pointsByRun = new Map<
+      string,
+      {
+        label: string;
+        sortValue: number;
+        chat_gpt_visibility?: number;
+        gemini_visibility?: number;
+        perplexity_visibility?: number;
+        chat_gpt_sov?: number;
+        gemini_sov?: number;
+        perplexity_sov?: number;
+      }
+    >();
+
+    for (const row of metricHistoryRows) {
+      const provider = String(row.provider || "").toLowerCase() as RunProvider;
+      if (!RUN_PROVIDER_KEYS.includes(provider)) continue;
+
+      const runId = String(row.run_id || row.id || "");
+      if (!runId) continue;
+      const startedAtRaw = row?.run?.started_at || row.created_at;
+      const startedAt = startedAtRaw ? new Date(startedAtRaw) : null;
+      if (!startedAt || Number.isNaN(startedAt.getTime())) continue;
+
+      const existingPoint = pointsByRun.get(runId) || {
+        label: startedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        sortValue: startedAt.getTime(),
+      };
+
+      const visibility = Number(row.visibility_score);
+      const sov = Number(row.share_of_voice);
+      if (Number.isFinite(visibility)) {
+        existingPoint[`${provider}_visibility` as keyof typeof existingPoint] = Number((visibility * 100).toFixed(2));
+      }
+      if (Number.isFinite(sov)) {
+        existingPoint[`${provider}_sov` as keyof typeof existingPoint] = Number((sov * 100).toFixed(2));
+      }
+      pointsByRun.set(runId, existingPoint);
+    }
+
+    return Array.from(pointsByRun.values())
+      .sort((a, b) => a.sortValue - b.sortValue)
+      .slice(-20);
+  }, [metricHistoryRows]);
+  const trendChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    for (const provider of RUN_PROVIDER_KEYS) {
+      if (!plannedProviders.includes(provider)) continue;
+      config[`${provider}_visibility`] = {
+        label: TREND_SERIES_META[provider].label,
+        color: TREND_SERIES_META[provider].color,
+      };
+      config[`${provider}_sov`] = {
+        label: TREND_SERIES_META[provider].label,
+        color: TREND_SERIES_META[provider].color,
+      };
+    }
+    return config;
+  }, [plannedProviders]);
+  const hasTrendData = useMemo(() => trendData.length > 0, [trendData]);
   const plannedProviders = useMemo(
     () =>
       RUN_PROVIDER_KEYS.filter(
@@ -119,6 +191,7 @@ export default function AiVisibility() {
         { data: runData },
         { data: mentionData },
         { data: metricsData },
+        { data: metricsHistoryData },
         { data: promptRows },
         { data: settings },
         { data: adminPolicy },
@@ -136,6 +209,12 @@ export default function AiVisibility() {
           .eq("blog_id", blogId)
           .order("created_at", { ascending: false })
           .limit(30),
+        sb
+          .from("ai_visibility_model_metrics")
+          .select("id, run_id, provider, visibility_score, share_of_voice, created_at, run:ai_visibility_runs(started_at)")
+          .eq("blog_id", blogId)
+          .order("created_at", { ascending: true })
+          .limit(200),
         sb
           .from("ai_visibility_prompts")
           .select("prompt_text, sort_order")
@@ -167,6 +246,7 @@ export default function AiVisibility() {
       setAdminEnabledModels(normalizeEnabledModels(adminPolicy?.enabled_models));
       setSiteMaxCostUsd(Number.isFinite(Number(settings?.max_cost_usd)) ? Number(settings.max_cost_usd) : null);
       setAdminMaxCostUsd(Number.isFinite(Number(adminPolicy?.max_cost_usd)) ? Number(adminPolicy.max_cost_usd) : null);
+      setMetricHistoryRows(metricsHistoryData || []);
 
       // Keep only latest metric row per provider for display.
       const latestByProvider = new Map<string, any>();
@@ -347,6 +427,96 @@ export default function AiVisibility() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader>
+            <CardTitle>Visibility Trend</CardTitle>
+            <CardDescription>Brand visibility score by run and model.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {hasTrendData ? (
+              <ChartContainer config={trendChartConfig} className="h-[260px] w-full">
+                <LineChart data={trendData} margin={{ left: 8, right: 8 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                  <YAxis tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value, name) => (
+                          <div className="flex w-full items-center justify-between gap-4">
+                            <span className="text-muted-foreground">{trendChartConfig[String(name)]?.label || String(name)}</span>
+                            <span className="font-medium">{Number(value).toFixed(1)}%</span>
+                          </div>
+                        )}
+                      />
+                    }
+                  />
+                  {plannedProviders.map((provider) => (
+                    <Line
+                      key={`${provider}-visibility`}
+                      type="monotone"
+                      dataKey={`${provider}_visibility`}
+                      stroke={TREND_SERIES_META[provider].color}
+                      strokeWidth={2}
+                      dot={false}
+                      connectNulls
+                    />
+                  ))}
+                  <ChartLegend content={<ChartLegendContent />} />
+                </LineChart>
+              </ChartContainer>
+            ) : (
+              <p className="text-sm text-muted-foreground">Run manual sync a few times to see visibility trends.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader>
+            <CardTitle>Share of Voice Trend</CardTitle>
+            <CardDescription>Share of voice percentage by run and model.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {hasTrendData ? (
+              <ChartContainer config={trendChartConfig} className="h-[260px] w-full">
+                <LineChart data={trendData} margin={{ left: 8, right: 8 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
+                  <YAxis tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value, name) => (
+                          <div className="flex w-full items-center justify-between gap-4">
+                            <span className="text-muted-foreground">{trendChartConfig[String(name)]?.label || String(name)}</span>
+                            <span className="font-medium">{Number(value).toFixed(1)}%</span>
+                          </div>
+                        )}
+                      />
+                    }
+                  />
+                  {plannedProviders.map((provider) => (
+                    <Line
+                      key={`${provider}-sov`}
+                      type="monotone"
+                      dataKey={`${provider}_sov`}
+                      stroke={TREND_SERIES_META[provider].color}
+                      strokeWidth={2}
+                      dot={false}
+                      connectNulls
+                    />
+                  ))}
+                  <ChartLegend content={<ChartLegendContent />} />
+                </LineChart>
+              </ChartContainer>
+            ) : (
+              <p className="text-sm text-muted-foreground">Run manual sync a few times to see SOV trends.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader>
