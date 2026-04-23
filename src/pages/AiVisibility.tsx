@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Bot, CircleCheck, CircleX, Cpu, DollarSign, Loader2, RefreshCw, Settings, Sparkles, Target } from "lucide-react";
+import { Bot, CalendarDays, ChevronDown, CircleCheck, CircleX, Cpu, DollarSign, Loader2, RefreshCw, Settings, Sparkles, Target } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
@@ -86,6 +87,7 @@ export default function AiVisibility() {
   const [siteMaxCostUsd, setSiteMaxCostUsd] = useState<number | null>(null);
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState<number | null>(null);
   const [trendRunWindow, setTrendRunWindow] = useState<TrendRunWindow>(14);
+  const [selectedTrendProviders, setSelectedTrendProviders] = useState<RunProvider[]>(RUN_PROVIDER_KEYS);
 
   const hasSite = useMemo(() => Boolean(blogId), [blogId]);
   const activePromptCount = useMemo(() => activePrompts.length, [activePrompts]);
@@ -161,10 +163,26 @@ export default function AiVisibility() {
       ),
     [adminEnabledModels, siteEnabledModels],
   );
+  const availableTrendProviders = useMemo(() => plannedProviders, [plannedProviders]);
+  const visibleTrendProviders = useMemo(
+    () => availableTrendProviders.filter((provider) => selectedTrendProviders.includes(provider)),
+    [availableTrendProviders, selectedTrendProviders],
+  );
+  const allAvailableTrendProvidersSelected = useMemo(
+    () =>
+      availableTrendProviders.length > 0 && availableTrendProviders.every((provider) => selectedTrendProviders.includes(provider)),
+    [availableTrendProviders, selectedTrendProviders],
+  );
+  const modelFilterLabel = useMemo(() => {
+    if (availableTrendProviders.length === 0) return "No Models Available";
+    if (allAvailableTrendProvidersSelected) return "All Models";
+    if (visibleTrendProviders.length === 0) return "No Models Selected";
+    if (visibleTrendProviders.length === 1) return TREND_SERIES_META[visibleTrendProviders[0]].label;
+    return `${visibleTrendProviders.length} Models`;
+  }, [allAvailableTrendProvidersSelected, availableTrendProviders.length, visibleTrendProviders]);
   const trendChartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    for (const provider of RUN_PROVIDER_KEYS) {
-      if (!plannedProviders.includes(provider)) continue;
+    for (const provider of visibleTrendProviders) {
       config[`${provider}_visibility`] = {
         label: TREND_SERIES_META[provider].label,
         color: TREND_SERIES_META[provider].color,
@@ -175,11 +193,11 @@ export default function AiVisibility() {
       };
     }
     return config;
-  }, [plannedProviders]);
+  }, [visibleTrendProviders]);
   const hasTrendData = useMemo(() => visibleTrendData.length > 0, [visibleTrendData]);
   const hasRenderableTrendSeries = useMemo(
-    () => plannedProviders.length > 0 && Object.keys(trendChartConfig).length > 0,
-    [plannedProviders, trendChartConfig],
+    () => visibleTrendProviders.length > 0 && Object.keys(trendChartConfig).length > 0,
+    [visibleTrendProviders, trendChartConfig],
   );
   const effectiveMaxCostUsd = useMemo(() => {
     if (siteMaxCostUsd == null && adminMaxCostUsd == null) return null;
@@ -314,6 +332,19 @@ export default function AiVisibility() {
     }
   };
 
+  const toggleTrendProvider = (provider: RunProvider, checked: boolean) => {
+    setSelectedTrendProviders((prev) => {
+      if (checked) {
+        return prev.includes(provider) ? prev : [...prev, provider];
+      }
+      return prev.filter((item) => item !== provider);
+    });
+  };
+
+  const toggleAllTrendProviders = (checked: boolean) => {
+    setSelectedTrendProviders(checked ? [...availableTrendProviders] : []);
+  };
+
   if (!hasSite) {
     return (
       <div className="p-8">
@@ -442,6 +473,56 @@ export default function AiVisibility() {
                 <CardTitle>Visibility Trend</CardTitle>
                 <CardDescription>Brand visibility score by run and model.</CardDescription>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {modelFilterLabel}
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-52">
+                  <DropdownMenuLabel>Models</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCheckboxItem
+                    checked={allAvailableTrendProvidersSelected}
+                    disabled={availableTrendProviders.length === 0}
+                    onCheckedChange={(checked) => toggleAllTrendProviders(Boolean(checked))}
+                  >
+                    All Models
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuSeparator />
+                  {RUN_PROVIDER_KEYS.map((provider) => {
+                    const isAvailable = availableTrendProviders.includes(provider);
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={`model-filter-${provider}`}
+                        checked={selectedTrendProviders.includes(provider)}
+                        disabled={!isAvailable}
+                        onCheckedChange={(checked) => toggleTrendProvider(provider, Boolean(checked))}
+                      >
+                        <span className="flex items-center gap-2">
+                          {PROVIDER_META[provider]?.logoSrc ? (
+                            <img
+                              src={PROVIDER_META[provider].logoSrc}
+                              alt={TREND_SERIES_META[provider].label}
+                              className="h-3.5 w-3.5 object-contain"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <Bot className="h-3.5 w-3.5" />
+                          )}
+                          {TREND_SERIES_META[provider].label}
+                        </span>
+                      </DropdownMenuCheckboxItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <div className="flex items-center gap-1 rounded-md border bg-muted/20 p-1">
                 {TREND_RUN_WINDOW_OPTIONS.map((option) => (
                   <Button
@@ -451,6 +532,7 @@ export default function AiVisibility() {
                     className="h-7 px-2 text-xs"
                     onClick={() => setTrendRunWindow(option)}
                   >
+                    <CalendarDays className="h-3.5 w-3.5 mr-1" />
                     {option}
                   </Button>
                 ))}
@@ -476,7 +558,7 @@ export default function AiVisibility() {
                       />
                     }
                   />
-                  {plannedProviders.map((provider) => (
+                  {visibleTrendProviders.map((provider) => (
                     <Line
                       key={`${provider}-visibility`}
                       type="monotone"
@@ -531,7 +613,7 @@ export default function AiVisibility() {
                       />
                     }
                   />
-                  {plannedProviders.map((provider) => (
+                  {visibleTrendProviders.map((provider) => (
                     <Line
                       key={`${provider}-sov`}
                       type="monotone"
