@@ -178,10 +178,15 @@ export default function AiVisibilityAdminControls() {
               Budget Policy
             </CardTitle>
             <CardDescription>
-              Set the global admin cap for `Max Cost Per Run (USD)` across all sites.
+              Set the global max spend allowed for each AI visibility sync run across all sites.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
+            <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
+              <p>Each site can choose its own run budget, but it cannot exceed this cap.</p>
+              <p>The cap is enforced server-side, so API calls cannot bypass it.</p>
+              <p>When a run reaches the cap, processing stops safely and partial results remain available.</p>
+            </div>
             <label className="text-sm font-medium" htmlFor="ai-visibility-admin-max-cost-usd">
               Max Cost Per Run Cap (USD)
             </label>
@@ -195,7 +200,7 @@ export default function AiVisibilityAdminControls() {
               disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
             />
             <p className="text-xs text-muted-foreground">
-              Enforced server-side and used to clamp site-level AI visibility budgets.
+              Recommended: keep this high enough for useful coverage, but low enough to avoid accidental spend spikes.
             </p>
           </CardContent>
         </Card>
