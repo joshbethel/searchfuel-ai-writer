@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Bot, CircleCheck, CircleX, Cpu, DollarSign, Loader2, RefreshCw, Settings, Sparkles, Target } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -39,19 +40,43 @@ const formatPercent = (value: unknown) => {
   return `${(parsed * 100).toFixed(1)}%`;
 };
 
+const DEFAULT_ENABLED_MODELS = {
+  chat_gpt: true,
+  gemini: true,
+  perplexity: true,
+} as const;
+
+type RunProvider = keyof typeof DEFAULT_ENABLED_MODELS;
+const RUN_PROVIDER_KEYS: RunProvider[] = ["chat_gpt", "gemini", "perplexity"];
+
+const normalizeEnabledModels = (input: unknown): Record<RunProvider, boolean> => {
+  const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  return {
+    chat_gpt: raw.chat_gpt !== false,
+    gemini: raw.gemini !== false,
+    perplexity: raw.perplexity !== false,
+  };
+};
+
 export default function AiVisibility() {
   const { selectedSite } = useSiteContext();
   const blogId = selectedSite?.id;
   const navigate = useNavigate();
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [latestRun, setLatestRun] = useState<any | null>(null);
   const [mentions, setMentions] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any[]>([]);
-  const [activePromptCount, setActivePromptCount] = useState(0);
+  const [activePrompts, setActivePrompts] = useState<string[]>([]);
+  const [siteEnabledModels, setSiteEnabledModels] = useState<Record<RunProvider, boolean>>(DEFAULT_ENABLED_MODELS);
+  const [adminEnabledModels, setAdminEnabledModels] = useState<Record<RunProvider, boolean>>(DEFAULT_ENABLED_MODELS);
+  const [siteMaxCostUsd, setSiteMaxCostUsd] = useState<number | null>(null);
+  const [adminMaxCostUsd, setAdminMaxCostUsd] = useState<number | null>(null);
 
   const hasSite = useMemo(() => Boolean(blogId), [blogId]);
+  const activePromptCount = useMemo(() => activePrompts.length, [activePrompts]);
   const hasActivePrompts = useMemo(() => activePromptCount > 0, [activePromptCount]);
   const mentionCount = useMemo(() => mentions.length, [mentions]);
   const detectedMentions = useMemo(() => mentions.filter((m) => Boolean(m.detected_brand)).length, [mentions]);
@@ -71,13 +96,33 @@ export default function AiVisibility() {
     if (valid.length === 0) return null;
     return valid.reduce((acc, value) => acc + value, 0) / valid.length;
   }, [metrics]);
+  const plannedProviders = useMemo(
+    () =>
+      RUN_PROVIDER_KEYS.filter(
+        (provider) => adminEnabledModels[provider] !== false && siteEnabledModels[provider] !== false,
+      ),
+    [adminEnabledModels, siteEnabledModels],
+  );
+  const effectiveMaxCostUsd = useMemo(() => {
+    if (siteMaxCostUsd == null && adminMaxCostUsd == null) return null;
+    if (siteMaxCostUsd == null) return adminMaxCostUsd;
+    if (adminMaxCostUsd == null) return siteMaxCostUsd;
+    return Math.min(siteMaxCostUsd, adminMaxCostUsd);
+  }, [siteMaxCostUsd, adminMaxCostUsd]);
 
   const fetchData = async () => {
     if (!blogId) return;
     setLoading(true);
     try {
       const sb = supabase as any;
-      const [{ data: runData }, { data: mentionData }, { data: metricsData }, { count: promptCount }] = await Promise.all([
+      const [
+        { data: runData },
+        { data: mentionData },
+        { data: metricsData },
+        { data: promptRows },
+        { data: settings },
+        { data: adminPolicy },
+      ] = await Promise.all([
         sb.from("ai_visibility_runs").select("*").eq("blog_id", blogId).order("started_at", { ascending: false }).limit(1),
         sb
           .from("ai_visibility_mentions")
@@ -93,15 +138,35 @@ export default function AiVisibility() {
           .limit(30),
         sb
           .from("ai_visibility_prompts")
-          .select("id", { head: true, count: "exact" })
+          .select("prompt_text, sort_order")
           .eq("blog_id", blogId)
-          .eq("is_active", true),
+          .eq("is_active", true)
+          .order("sort_order", { ascending: true }),
+        sb
+          .from("ai_visibility_settings")
+          .select("enabled_models, max_cost_usd")
+          .eq("blog_id", blogId)
+          .maybeSingle(),
+        sb
+          .from("ai_visibility_admin_policy")
+          .select("enabled_models, max_cost_usd")
+          .eq("id", true)
+          .maybeSingle(),
       ]);
 
       const run = runData?.[0] || null;
       setLatestRun(run);
       setMentions(mentionData || []);
-      setActivePromptCount(promptCount || 0);
+      const promptList = Array.isArray(promptRows)
+        ? promptRows
+            .map((row: { prompt_text?: string }) => String(row.prompt_text || "").trim())
+            .filter(Boolean)
+        : [];
+      setActivePrompts(promptList);
+      setSiteEnabledModels(normalizeEnabledModels(settings?.enabled_models));
+      setAdminEnabledModels(normalizeEnabledModels(adminPolicy?.enabled_models));
+      setSiteMaxCostUsd(Number.isFinite(Number(settings?.max_cost_usd)) ? Number(settings.max_cost_usd) : null);
+      setAdminMaxCostUsd(Number.isFinite(Number(adminPolicy?.max_cost_usd)) ? Number(adminPolicy.max_cost_usd) : null);
 
       // Keep only latest metric row per provider for display.
       const latestByProvider = new Map<string, any>();
@@ -122,13 +187,22 @@ export default function AiVisibility() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blogId]);
 
-  const handleManualSync = async () => {
+  const openManualSyncDialog = () => {
     if (!blogId) return;
     if (!hasActivePrompts) {
       toast.error("No active prompts found. Add prompts in Site Settings → AI Visibility first.");
       return;
     }
+    if (plannedProviders.length === 0) {
+      toast.error("No models are currently enabled. Update AI Visibility model settings first.");
+      return;
+    }
+    setSyncDialogOpen(true);
+  };
 
+  const handleManualSync = async () => {
+    if (!blogId) return;
+    setSyncDialogOpen(false);
     setIsSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke("ai-visibility-sync", {
@@ -188,7 +262,7 @@ export default function AiVisibility() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Refresh
           </Button>
-          <Button onClick={handleManualSync} disabled={isSyncing || !hasActivePrompts}>
+          <Button onClick={openManualSyncDialog} disabled={isSyncing || !hasActivePrompts}>
             {isSyncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Run Manual Sync
           </Button>
@@ -403,6 +477,77 @@ export default function AiVisibility() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Run Manual Sync</DialogTitle>
+            <DialogDescription>
+              Review what this run will track before continuing.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-sm font-medium">Models to Track ({plannedProviders.length})</p>
+              {plannedProviders.length === 0 ? (
+                <p className="mt-2 text-sm text-muted-foreground">No models are enabled for this site.</p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {plannedProviders.map((provider) => (
+                    <Badge key={provider} variant="secondary" className="flex items-center gap-2 py-1.5">
+                      {PROVIDER_META[provider]?.logoSrc ? (
+                        <img
+                          src={PROVIDER_META[provider].logoSrc}
+                          alt={formatProvider(provider)}
+                          className="h-3.5 w-3.5 object-contain"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <Bot className="h-3.5 w-3.5" />
+                      )}
+                      {formatProvider(provider)}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-sm font-medium">Prompts to Track ({activePromptCount})</p>
+              <div className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-background p-2">
+                {activePrompts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No active prompts found.</p>
+                ) : (
+                  <ol className="space-y-1 text-sm">
+                    {activePrompts.map((prompt, index) => (
+                      <li key={`${prompt}-${index}`} className="flex gap-2">
+                        <span className="w-5 shrink-0 text-muted-foreground">{index + 1}.</span>
+                        <span className="text-foreground">{prompt}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-md border border-amber-300/70 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              Estimated max run cost: {effectiveMaxCostUsd != null ? `$${effectiveMaxCostUsd.toFixed(2)}` : "Based on your settings"}.
+              Actual usage may be lower and sync can stop early if budget cap is reached.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncDialogOpen(false)} disabled={isSyncing}>
+              Cancel
+            </Button>
+            <Button onClick={handleManualSync} disabled={isSyncing || plannedProviders.length === 0}>
+              {isSyncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Start Manual Sync
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
