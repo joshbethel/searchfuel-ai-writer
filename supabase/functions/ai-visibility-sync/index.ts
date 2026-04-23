@@ -26,7 +26,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
 const MIN_RUN_COST_USD = 1;
 const DEFAULT_MAX_COST_USD = 5;
-const ADMIN_MAX_COST_USD = Math.max(
+const ADMIN_MAX_COST_USD_FALLBACK = Math.max(
   MIN_RUN_COST_USD,
   Number(Deno.env.get("AI_VISIBILITY_ADMIN_MAX_COST_USD") || DEFAULT_MAX_COST_USD),
 );
@@ -103,10 +103,29 @@ function countDetected(text: string, terms: string[]): number {
   return terms.reduce((acc, term) => (term && lower.includes(term) ? acc + 1 : acc), 0);
 }
 
-function clampRunCost(input: unknown): number {
+function clampRunCost(input: unknown, adminMaxCostUsd: number): number {
   const parsed = Number(input);
   if (Number.isNaN(parsed)) return DEFAULT_MAX_COST_USD;
-  return Math.min(Math.max(parsed, MIN_RUN_COST_USD), ADMIN_MAX_COST_USD);
+  return Math.min(Math.max(parsed, MIN_RUN_COST_USD), adminMaxCostUsd);
+}
+
+async function getAdminMaxCostUsd(service: any): Promise<number> {
+  const { data, error } = await service
+    .from("ai_visibility_admin_policy")
+    .select("max_cost_usd")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error || !data?.max_cost_usd) {
+    return ADMIN_MAX_COST_USD_FALLBACK;
+  }
+
+  const parsed = Number(data.max_cost_usd);
+  if (Number.isNaN(parsed)) {
+    return ADMIN_MAX_COST_USD_FALLBACK;
+  }
+
+  return Math.max(MIN_RUN_COST_USD, parsed);
 }
 
 serve(async (req) => {
@@ -149,6 +168,8 @@ serve(async (req) => {
 
     const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    const adminMaxCostUsd = await getAdminMaxCostUsd(service);
+
     const { data: blog, error: blogError } = await service
       .from("blogs")
       .select("id, user_id, title, company_name, custom_domain, website_homepage, cms_site_url, competitors")
@@ -174,7 +195,7 @@ serve(async (req) => {
         enabled_models: DEFAULT_ENABLED_MODELS,
         language_code: "en",
         location_code: 2840,
-        max_cost_usd: Math.min(DEFAULT_MAX_COST_USD, ADMIN_MAX_COST_USD),
+        max_cost_usd: Math.min(DEFAULT_MAX_COST_USD, adminMaxCostUsd),
       });
     }
 
@@ -247,7 +268,7 @@ serve(async (req) => {
     }
 
     const requestedMaxCost = body.max_cost_usd ?? settings?.max_cost_usd ?? DEFAULT_MAX_COST_USD;
-    const maxCostUsd = clampRunCost(requestedMaxCost);
+    const maxCostUsd = clampRunCost(requestedMaxCost, adminMaxCostUsd);
     const runType = "manual";
 
     const { data: run, error: runError } = await service
@@ -430,7 +451,7 @@ serve(async (req) => {
         status: finalStatus,
         total_cost_usd: Number(totalCost.toFixed(2)),
         max_cost_usd: maxCostUsd,
-        admin_max_cost_usd: ADMIN_MAX_COST_USD,
+        admin_max_cost_usd: adminMaxCostUsd,
         stopped_by_budget: stoppedByBudget,
         providers,
         prompts_processed: prompts.length,

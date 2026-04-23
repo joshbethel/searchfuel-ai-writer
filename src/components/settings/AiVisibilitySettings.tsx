@@ -18,7 +18,7 @@ interface AiVisibilitySettingsProps {
 type ProviderKey = "chat_gpt" | "gemini" | "perplexity";
 const MIN_RUN_COST_USD = 1;
 const DEFAULT_MAX_COST_USD = 5;
-const ADMIN_MAX_COST_USD = Math.max(
+const ADMIN_MAX_COST_USD_FALLBACK = Math.max(
   MIN_RUN_COST_USD,
   Number(import.meta.env.VITE_AI_VISIBILITY_ADMIN_MAX_COST_USD || DEFAULT_MAX_COST_USD),
 );
@@ -46,10 +46,10 @@ const MODEL_CARDS: Array<{
   { id: "copilot", label: "Copilot", availability: "upgrade", logoSrc: "/images/copilot-color.svg", description: "Coming in a later plan tier." },
 ];
 
-const clampRunCost = (input: unknown) => {
+const clampRunCost = (input: unknown, adminMaxCostUsd: number) => {
   const parsed = Number(input);
   if (Number.isNaN(parsed)) return DEFAULT_MAX_COST_USD;
-  return Math.min(Math.max(parsed, MIN_RUN_COST_USD), ADMIN_MAX_COST_USD);
+  return Math.min(Math.max(parsed, MIN_RUN_COST_USD), adminMaxCostUsd);
 };
 
 export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
@@ -62,6 +62,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
   const [locationCode, setLocationCode] = useState("2840");
   const [isPaused, setIsPaused] = useState(false);
   const [maxCostUsd, setMaxCostUsd] = useState("5");
+  const [adminMaxCostUsd, setAdminMaxCostUsd] = useState(ADMIN_MAX_COST_USD_FALLBACK);
   const [promptsText, setPromptsText] = useState("");
   const [models, setModels] = useState<Record<ProviderKey, boolean>>(DEFAULT_MODELS);
 
@@ -80,7 +81,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
       setLoading(true);
       try {
         const sb = supabase as any;
-        const [{ data: settings }, { data: promptsRows }] = await Promise.all([
+        const [{ data: settings }, { data: promptsRows }, { data: policy }] = await Promise.all([
           sb.from("ai_visibility_settings").select("*").eq("blog_id", blogId).maybeSingle(),
           sb
             .from("ai_visibility_prompts")
@@ -88,7 +89,14 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
             .eq("blog_id", blogId)
             .eq("is_active", true)
             .order("sort_order", { ascending: true }),
+          sb.from("ai_visibility_admin_policy").select("max_cost_usd").eq("id", true).maybeSingle(),
         ]);
+
+        const resolvedAdminMaxCost = Math.max(
+          MIN_RUN_COST_USD,
+          Number(policy?.max_cost_usd ?? ADMIN_MAX_COST_USD_FALLBACK),
+        );
+        setAdminMaxCostUsd(resolvedAdminMaxCost);
 
         if (settings) {
           setMainPrompt(settings.main_ai_prompt || "");
@@ -96,7 +104,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           setLanguageCode(settings.language_code || "en");
           setLocationCode(String(settings.location_code || 2840));
           setIsPaused(Boolean(settings.is_paused));
-          setMaxCostUsd(String(clampRunCost(settings.max_cost_usd ?? DEFAULT_MAX_COST_USD)));
+          setMaxCostUsd(String(clampRunCost(settings.max_cost_usd ?? DEFAULT_MAX_COST_USD, resolvedAdminMaxCost)));
           setModels({ ...DEFAULT_MODELS, ...(settings.enabled_models || {}) });
         }
 
@@ -137,7 +145,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
         return;
       }
 
-      const normalizedBudget = clampRunCost(parsedBudget);
+      const normalizedBudget = clampRunCost(parsedBudget, adminMaxCostUsd);
       if (normalizedBudget !== parsedBudget) {
         toast.info(`Max cost was adjusted to ${normalizedBudget} based on admin policy.`);
       }
@@ -237,7 +245,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           </div>
           <div className="rounded-lg border bg-muted/20 p-3">
             <p className="text-xs text-muted-foreground">Max Run Cost</p>
-            <p className="mt-1 text-lg font-semibold">${clampRunCost(maxCostUsd).toFixed(2)}</p>
+            <p className="mt-1 text-lg font-semibold">${clampRunCost(maxCostUsd, adminMaxCostUsd).toFixed(2)}</p>
           </div>
         </div>
 
@@ -303,13 +311,13 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
                 id="max-cost-usd"
                 type="number"
                 min={String(MIN_RUN_COST_USD)}
-                max={String(ADMIN_MAX_COST_USD)}
+                max={String(adminMaxCostUsd)}
                 step="0.5"
                 value={maxCostUsd}
                 onChange={(e) => setMaxCostUsd(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Allowed range: ${MIN_RUN_COST_USD} - ${ADMIN_MAX_COST_USD}. Your selected value is always capped by admin policy.
+                Allowed range: ${MIN_RUN_COST_USD} - ${adminMaxCostUsd}. Your selected value is always capped by admin policy.
               </p>
             </div>
           </div>

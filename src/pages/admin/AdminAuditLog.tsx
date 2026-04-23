@@ -20,7 +20,8 @@ import {
   Edit,
   Shield,
   ShieldOff,
-  Crown
+  Crown,
+  DollarSign,
 } from "lucide-react";
 import {
   Table,
@@ -140,6 +141,14 @@ const ACTION_TYPE_LABELS: Record<string, ActionTypeConfig> = {
     bgColor: "bg-rose-500/10",
     textColor: "text-rose-700 dark:text-rose-400",
     borderColor: "border-rose-500/30",
+  },
+  update_ai_visibility_budget_policy: {
+    label: "Update AI Visibility Budget Policy",
+    icon: DollarSign,
+    className: "border-emerald-500/20 bg-emerald-500/10",
+    bgColor: "bg-emerald-500/10",
+    textColor: "text-emerald-700 dark:text-emerald-400",
+    borderColor: "border-emerald-500/30",
   },
 };
 
@@ -305,6 +314,7 @@ export default function AdminAuditLog() {
                 <SelectItem value="edit_content">Edit Content</SelectItem>
                 <SelectItem value="grant_admin_role">Grant Admin Role</SelectItem>
                 <SelectItem value="revoke_admin_role">Revoke Admin Role</SelectItem>
+                <SelectItem value="update_ai_visibility_budget_policy">Update AI Visibility Budget Policy</SelectItem>
               </SelectContent>
             </Select>
             <Button

@@ -34,6 +34,7 @@ import {
   Sparkles,
   EyeOff,
   History,
+  DollarSign,
 } from "lucide-react";
 import {
   Table,
@@ -112,6 +113,8 @@ interface UserWithSubscription {
 }
 
 type SubscriptionFilter = "all" | "paid" | "manual" | "no_subscription";
+const MIN_RUN_COST_USD = 1;
+const DEFAULT_MAX_COST_USD = 5;
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -136,10 +139,14 @@ export default function Admin() {
   const [adminRoleDialogOpen, setAdminRoleDialogOpen] = useState(false);
   const [adminRoleAction, setAdminRoleAction] = useState<"grant" | "revoke">("grant");
   const [adminRoleUser, setAdminRoleUser] = useState<UserWithSubscription | null>(null);
+  const [aiVisibilityMaxCostUsd, setAiVisibilityMaxCostUsd] = useState<string>(String(DEFAULT_MAX_COST_USD));
+  const [loadingAiVisibilityPolicy, setLoadingAiVisibilityPolicy] = useState(true);
+  const [savingAiVisibilityPolicy, setSavingAiVisibilityPolicy] = useState(false);
 
   // Load all users on mount
   useEffect(() => {
     loadAllUsers();
+    loadAiVisibilityPolicy();
   }, []);
 
   // Helper function to check if a subscription is valid
@@ -216,6 +223,93 @@ export default function Admin() {
       setFilteredUsers([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAiVisibilityPolicy = async () => {
+    setLoadingAiVisibilityPolicy(true);
+    try {
+      const sb = supabase as any;
+      const { data, error } = await sb
+        .from("ai_visibility_admin_policy")
+        .select("max_cost_usd")
+        .eq("id", true)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const normalizedValue = Math.max(
+        MIN_RUN_COST_USD,
+        Number(data?.max_cost_usd ?? DEFAULT_MAX_COST_USD),
+      );
+      setAiVisibilityMaxCostUsd(String(normalizedValue));
+    } catch (error: any) {
+      console.error("Error loading AI visibility policy:", error);
+      toast.error(error?.message || "Failed to load AI visibility budget policy");
+      setAiVisibilityMaxCostUsd(String(DEFAULT_MAX_COST_USD));
+    } finally {
+      setLoadingAiVisibilityPolicy(false);
+    }
+  };
+
+  const saveAiVisibilityPolicy = async () => {
+    const parsedValue = Number(aiVisibilityMaxCostUsd);
+    if (Number.isNaN(parsedValue) || parsedValue < MIN_RUN_COST_USD) {
+      toast.error(`Max cost cap must be at least ${MIN_RUN_COST_USD} USD`);
+      return;
+    }
+
+    setSavingAiVisibilityPolicy(true);
+    try {
+      const sb = supabase as any;
+      const { data: authData, error: authError } = await sb.auth.getUser();
+      if (authError || !authData?.user?.id) {
+        throw new Error("Could not verify current admin user");
+      }
+
+      const normalizedValue = Number(parsedValue.toFixed(2));
+      const { data: existingPolicy, error: existingPolicyError } = await sb
+        .from("ai_visibility_admin_policy")
+        .select("max_cost_usd")
+        .eq("id", true)
+        .maybeSingle();
+      if (existingPolicyError) throw existingPolicyError;
+      const previousValue = Number(existingPolicy?.max_cost_usd ?? DEFAULT_MAX_COST_USD);
+
+      const { error } = await sb
+        .from("ai_visibility_admin_policy")
+        .upsert(
+          {
+            id: true,
+            max_cost_usd: normalizedValue,
+            updated_by: authData.user.id,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" },
+        );
+
+      if (error) throw error;
+
+      const { error: auditError } = await sb.from("admin_actions").insert({
+        admin_user_id: authData.user.id,
+        action_type: "update_ai_visibility_budget_policy",
+        target_user_id: authData.user.id,
+        details: {
+          previous_max_cost_usd: Number(previousValue.toFixed(2)),
+          new_max_cost_usd: normalizedValue,
+        },
+      });
+      if (auditError) {
+        console.error("Failed to write audit log for AI visibility policy update:", auditError);
+      }
+
+      setAiVisibilityMaxCostUsd(String(normalizedValue));
+      toast.success("AI visibility max cost cap updated");
+    } catch (error: any) {
+      console.error("Error saving AI visibility policy:", error);
+      toast.error(error?.message || "Failed to save AI visibility budget policy");
+    } finally {
+      setSavingAiVisibilityPolicy(false);
     }
   };
 
@@ -432,6 +526,55 @@ export default function Admin() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            AI Visibility Budget Policy
+          </CardTitle>
+          <CardDescription>
+            Set the global admin cap for `Max Cost Per Run (USD)` across all sites.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="w-full max-w-xs space-y-2">
+              <label className="text-sm font-medium" htmlFor="ai-visibility-admin-max-cost-usd">
+                Max Cost Per Run Cap (USD)
+              </label>
+              <Input
+                id="ai-visibility-admin-max-cost-usd"
+                type="number"
+                min={String(MIN_RUN_COST_USD)}
+                step="0.5"
+                value={aiVisibilityMaxCostUsd}
+                onChange={(e) => setAiVisibilityMaxCostUsd(e.target.value)}
+                disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
+              />
+              <p className="text-xs text-muted-foreground">
+                This cap is enforced server-side and clamps site-level AI Visibility settings.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={loadAiVisibilityPolicy}
+                disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
+              >
+                {loadingAiVisibilityPolicy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reload"}
+              </Button>
+              <Button
+                onClick={saveAiVisibilityPolicy}
+                disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
+              >
+                {savingAiVisibilityPolicy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Cap
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Information Section - Collapsible */}
       <Collapsible open={isInfoOpen} onOpenChange={setIsInfoOpen} className="mb-6">
