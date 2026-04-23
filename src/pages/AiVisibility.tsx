@@ -15,11 +15,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Bot, CalendarDays, ChevronDown, CircleCheck, CircleX, Cpu, DollarSign, Loader2, RefreshCw, Settings, Sparkles, Target } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import type { DateRange } from "react-day-picker";
 import {
   Table,
   TableBody,
@@ -60,14 +63,17 @@ const DEFAULT_ENABLED_MODELS = {
 
 type RunProvider = keyof typeof DEFAULT_ENABLED_MODELS;
 const RUN_PROVIDER_KEYS: RunProvider[] = ["chat_gpt", "gemini", "perplexity"];
-type TrendDateRange = "7d" | "30d" | "3m" | "6m" | "12m";
+type TrendDateRange = "24h" | "7d" | "30d" | "3m" | "6m" | "9m" | "12m" | "custom";
 type TrendGranularity = "daily" | "weekly" | "monthly";
 const TREND_DATE_RANGE_OPTIONS: Array<{ value: TrendDateRange; label: string }> = [
+  { value: "24h", label: "24 hours" },
   { value: "7d", label: "7 days" },
   { value: "30d", label: "30 days" },
   { value: "3m", label: "3 months" },
   { value: "6m", label: "6 months" },
+  { value: "9m", label: "9 months" },
   { value: "12m", label: "12 months" },
+  { value: "custom", label: "Custom" },
 ];
 const TREND_GRANULARITY_OPTIONS: Array<{ value: TrendGranularity; label: string }> = [
   { value: "daily", label: "Daily" },
@@ -90,6 +96,18 @@ const TREND_SERIES_META: Record<RunProvider, { label: string; color: string }> =
   perplexity: { label: "Perplexity", color: "hsl(var(--chart-3))" },
 };
 
+const startOfDay = (date: Date) => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+const endOfDay = (date: Date) => {
+  const next = new Date(date);
+  next.setHours(23, 59, 59, 999);
+  return next;
+};
+
 export default function AiVisibility() {
   const { selectedSite } = useSiteContext();
   const blogId = selectedSite?.id;
@@ -108,7 +126,11 @@ export default function AiVisibility() {
   const [siteMaxCostUsd, setSiteMaxCostUsd] = useState<number | null>(null);
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState<number | null>(null);
   const [trendDateRange, setTrendDateRange] = useState<TrendDateRange>("7d");
+  const [trendCustomDateRange, setTrendCustomDateRange] = useState<DateRange | undefined>(undefined);
   const [trendGranularity, setTrendGranularity] = useState<TrendGranularity>("daily");
+  const [trendDatePopoverOpen, setTrendDatePopoverOpen] = useState(false);
+  const [draftTrendDateRange, setDraftTrendDateRange] = useState<TrendDateRange>("7d");
+  const [draftTrendCustomDateRange, setDraftTrendCustomDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedTrendProviders, setSelectedTrendProviders] = useState<RunProvider[]>(RUN_PROVIDER_KEYS);
 
   const hasSite = useMemo(() => Boolean(blogId), [blogId]);
@@ -138,6 +160,8 @@ export default function AiVisibility() {
     const now = Date.now();
     const rangeStartMs = (() => {
       switch (trendDateRange) {
+        case "24h":
+          return now - 24 * 60 * 60 * 1000;
         case "7d":
           return now - 7 * 24 * 60 * 60 * 1000;
         case "30d":
@@ -146,12 +170,20 @@ export default function AiVisibility() {
           return now - 90 * 24 * 60 * 60 * 1000;
         case "6m":
           return now - 180 * 24 * 60 * 60 * 1000;
+        case "9m":
+          return now - 270 * 24 * 60 * 60 * 1000;
         case "12m":
           return now - 365 * 24 * 60 * 60 * 1000;
+        case "custom":
+          return trendCustomDateRange?.from ? startOfDay(trendCustomDateRange.from).getTime() : now - 7 * 24 * 60 * 60 * 1000;
         default:
           return now - 7 * 24 * 60 * 60 * 1000;
       }
     })();
+    const rangeEndMs =
+      trendDateRange === "custom" && trendCustomDateRange?.to
+        ? endOfDay(trendCustomDateRange.to).getTime()
+        : now;
 
     const getBucketStart = (date: Date) => {
       const d = new Date(date);
@@ -190,7 +222,7 @@ export default function AiVisibility() {
       const startedAtRaw = row?.run?.started_at || row.created_at;
       const startedAt = startedAtRaw ? new Date(startedAtRaw) : null;
       if (!startedAt || Number.isNaN(startedAt.getTime())) continue;
-      if (startedAt.getTime() < rangeStartMs) continue;
+      if (startedAt.getTime() < rangeStartMs || startedAt.getTime() > rangeEndMs) continue;
 
       const bucketStart = getBucketStart(startedAt);
       const bucketKey = String(bucketStart.getTime());
@@ -238,7 +270,7 @@ export default function AiVisibility() {
         }
         return point;
       });
-  }, [metricHistoryRows, trendDateRange, trendGranularity]);
+  }, [metricHistoryRows, trendDateRange, trendGranularity, trendCustomDateRange]);
   const plannedProviders = useMemo(
     () =>
       RUN_PROVIDER_KEYS.filter(
@@ -283,8 +315,15 @@ export default function AiVisibility() {
     [visibleTrendProviders, trendChartConfig],
   );
   const trendDateRangeLabel = useMemo(
-    () => TREND_DATE_RANGE_OPTIONS.find((option) => option.value === trendDateRange)?.label || "7 days",
-    [trendDateRange],
+    () => {
+      if (trendDateRange === "custom" && trendCustomDateRange?.from && trendCustomDateRange?.to) {
+        const from = trendCustomDateRange.from.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const to = trendCustomDateRange.to.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return `${from} - ${to}`;
+      }
+      return TREND_DATE_RANGE_OPTIONS.find((option) => option.value === trendDateRange)?.label || "7 days";
+    },
+    [trendDateRange, trendCustomDateRange],
   );
   const trendGranularityLabel = useMemo(
     () => TREND_GRANULARITY_OPTIONS.find((option) => option.value === trendGranularity)?.label || "Daily",
@@ -390,6 +429,12 @@ export default function AiVisibility() {
     });
   }, [availableTrendProviders]);
 
+  useEffect(() => {
+    if (!trendDatePopoverOpen) return;
+    setDraftTrendDateRange(trendDateRange);
+    setDraftTrendCustomDateRange(trendCustomDateRange);
+  }, [trendDatePopoverOpen, trendDateRange, trendCustomDateRange]);
+
   const openManualSyncDialog = () => {
     if (!blogId) return;
     if (!hasActivePrompts) {
@@ -442,6 +487,20 @@ export default function AiVisibility() {
 
   const toggleAllTrendProviders = (checked: boolean) => {
     setSelectedTrendProviders(checked ? [...availableTrendProviders] : []);
+  };
+
+  const applyTrendDateFilters = () => {
+    setTrendDateRange(draftTrendDateRange);
+    if (draftTrendDateRange === "custom") {
+      setTrendCustomDateRange(draftTrendCustomDateRange);
+    }
+    setTrendDatePopoverOpen(false);
+  };
+
+  const setTodayDraftDateRange = () => {
+    const today = new Date();
+    setDraftTrendDateRange("custom");
+    setDraftTrendCustomDateRange({ from: startOfDay(today), to: endOfDay(today) });
   };
 
   if (!hasSite) {
@@ -570,7 +629,9 @@ export default function AiVisibility() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle>Visibility Trend</CardTitle>
-                <CardDescription>Brand visibility score by run and model.</CardDescription>
+                <CardDescription>
+                  See how often your brand is mentioned over time, broken down by model.
+                </CardDescription>
               </div>
             </div>
 
@@ -622,26 +683,70 @@ export default function AiVisibility() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              <Popover open={trendDatePopoverOpen} onOpenChange={setTrendDatePopoverOpen}>
+                <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8 gap-1.5">
                     <CalendarDays className="h-3.5 w-3.5" />
                     {trendDateRangeLabel}
                     <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-44">
-                  <DropdownMenuLabel>Date Range</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioGroup value={trendDateRange} onValueChange={(value) => setTrendDateRange(value as TrendDateRange)}>
-                    {TREND_DATE_RANGE_OPTIONS.map((option) => (
-                      <DropdownMenuRadioItem key={`range-option-${option.value}`} value={option.value}>
-                        {option.label}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-auto p-0">
+                  <div className="flex min-w-[520px]">
+                    <div className="w-44 border-r bg-muted/20 p-2">
+                      {TREND_DATE_RANGE_OPTIONS.map((option) => (
+                        <Button
+                          key={`trend-preset-${option.value}`}
+                          variant={draftTrendDateRange === option.value ? "secondary" : "ghost"}
+                          size="sm"
+                          className="mb-1 h-8 w-full justify-start text-sm"
+                          onClick={() => setDraftTrendDateRange(option.value)}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex-1 p-3">
+                      <Calendar
+                        mode="range"
+                        selected={draftTrendCustomDateRange}
+                        defaultMonth={draftTrendCustomDateRange?.from}
+                        onSelect={(range) => {
+                          setDraftTrendDateRange("custom");
+                          setDraftTrendCustomDateRange(range);
+                        }}
+                        numberOfMonths={1}
+                      />
+                      <div className="mt-2 space-y-1 rounded-md border bg-muted/20 p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">From:</span>
+                          <span className="font-medium">
+                            {draftTrendCustomDateRange?.from
+                              ? draftTrendCustomDateRange.from.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                              : "-"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">To:</span>
+                          <span className="font-medium">
+                            {draftTrendCustomDateRange?.to
+                              ? draftTrendCustomDateRange.to.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                              : "-"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={setTodayDraftDateRange}>
+                          Today
+                        </Button>
+                        <Button size="sm" className="flex-1" onClick={applyTrendDateFilters}>
+                          Apply
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -717,7 +822,9 @@ export default function AiVisibility() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle>Share of Voice Trend</CardTitle>
-                <CardDescription>Share of voice percentage by run and model.</CardDescription>
+                <CardDescription>
+                  Compare your share of voice over time, segmented by model.
+                </CardDescription>
               </div>
               <div className="text-xs text-muted-foreground pt-2">
                 {visibleTrendData.length} points, {trendGranularityLabel.toLowerCase()} view
