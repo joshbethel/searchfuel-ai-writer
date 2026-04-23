@@ -808,7 +808,33 @@ export default function AiVisibility() {
                 </PopoverContent>
               </Popover>
 
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                    {trendGranularityLabel}
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-44">
+                  <DropdownMenuLabel>Granularity</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup
+                    value={trendGranularity}
+                    onValueChange={(value) => setTrendGranularity(value as TrendGranularity)}
+                  >
+                    {TREND_GRANULARITY_OPTIONS.map((option) => (
+                      <DropdownMenuRadioItem key={`granularity-${option.value}`} value={option.value}>
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
             </div>
+            <p className="text-xs text-muted-foreground">
+              Date range selects runs; granularity groups selected runs into chart buckets.
+            </p>
           </CardHeader>
           <CardContent>
             {hasTrendData && hasRenderableTrendSeries ? (
@@ -865,7 +891,7 @@ export default function AiVisibility() {
                 </CardDescription>
               </div>
               <div className="text-xs text-muted-foreground pt-2">
-                {filteredTrendRunCount} runs, {visibleTrendData.length} points
+                {filteredTrendRunCount} runs, {visibleTrendData.length} points, {trendGranularityLabel.toLowerCase()} buckets
               </div>
             </div>
           </CardHeader>
