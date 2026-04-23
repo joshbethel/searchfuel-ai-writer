@@ -50,6 +50,8 @@ const DEFAULT_ENABLED_MODELS = {
 
 type RunProvider = keyof typeof DEFAULT_ENABLED_MODELS;
 const RUN_PROVIDER_KEYS: RunProvider[] = ["chat_gpt", "gemini", "perplexity"];
+type TrendRunWindow = 7 | 14 | 30;
+const TREND_RUN_WINDOW_OPTIONS: TrendRunWindow[] = [7, 14, 30];
 
 const normalizeEnabledModels = (input: unknown): Record<RunProvider, boolean> => {
   const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
@@ -83,6 +85,7 @@ export default function AiVisibility() {
   const [adminEnabledModels, setAdminEnabledModels] = useState<Record<RunProvider, boolean>>(DEFAULT_ENABLED_MODELS);
   const [siteMaxCostUsd, setSiteMaxCostUsd] = useState<number | null>(null);
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState<number | null>(null);
+  const [trendRunWindow, setTrendRunWindow] = useState<TrendRunWindow>(14);
 
   const hasSite = useMemo(() => Boolean(blogId), [blogId]);
   const activePromptCount = useMemo(() => activePrompts.length, [activePrompts]);
@@ -148,10 +151,16 @@ export default function AiVisibility() {
       pointsByRun.set(runId, existingPoint);
     }
 
-    return Array.from(pointsByRun.values())
-      .sort((a, b) => a.sortValue - b.sortValue)
-      .slice(-20);
+    return Array.from(pointsByRun.values()).sort((a, b) => a.sortValue - b.sortValue);
   }, [metricHistoryRows]);
+  const visibleTrendData = useMemo(() => trendData.slice(-trendRunWindow), [trendData, trendRunWindow]);
+  const plannedProviders = useMemo(
+    () =>
+      RUN_PROVIDER_KEYS.filter(
+        (provider) => adminEnabledModels[provider] !== false && siteEnabledModels[provider] !== false,
+      ),
+    [adminEnabledModels, siteEnabledModels],
+  );
   const trendChartConfig = useMemo(() => {
     const config: ChartConfig = {};
     for (const provider of RUN_PROVIDER_KEYS) {
@@ -167,13 +176,10 @@ export default function AiVisibility() {
     }
     return config;
   }, [plannedProviders]);
-  const hasTrendData = useMemo(() => trendData.length > 0, [trendData]);
-  const plannedProviders = useMemo(
-    () =>
-      RUN_PROVIDER_KEYS.filter(
-        (provider) => adminEnabledModels[provider] !== false && siteEnabledModels[provider] !== false,
-      ),
-    [adminEnabledModels, siteEnabledModels],
+  const hasTrendData = useMemo(() => visibleTrendData.length > 0, [visibleTrendData]);
+  const hasRenderableTrendSeries = useMemo(
+    () => plannedProviders.length > 0 && Object.keys(trendChartConfig).length > 0,
+    [plannedProviders, trendChartConfig],
   );
   const effectiveMaxCostUsd = useMemo(() => {
     if (siteMaxCostUsd == null && adminMaxCostUsd == null) return null;
@@ -431,13 +437,30 @@ export default function AiVisibility() {
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="border-border/70 shadow-sm">
           <CardHeader>
-            <CardTitle>Visibility Trend</CardTitle>
-            <CardDescription>Brand visibility score by run and model.</CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Visibility Trend</CardTitle>
+                <CardDescription>Brand visibility score by run and model.</CardDescription>
+              </div>
+              <div className="flex items-center gap-1 rounded-md border bg-muted/20 p-1">
+                {TREND_RUN_WINDOW_OPTIONS.map((option) => (
+                  <Button
+                    key={`visibility-range-${option}`}
+                    size="sm"
+                    variant={trendRunWindow === option ? "default" : "ghost"}
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setTrendRunWindow(option)}
+                  >
+                    {option}
+                  </Button>
+                ))}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {hasTrendData ? (
+            {hasTrendData && hasRenderableTrendSeries ? (
               <ChartContainer config={trendChartConfig} className="h-[260px] w-full">
-                <LineChart data={trendData} margin={{ left: 8, right: 8 }}>
+                <LineChart data={visibleTrendData} margin={{ left: 8, right: 8 }}>
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                   <YAxis tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
@@ -467,6 +490,10 @@ export default function AiVisibility() {
                   <ChartLegend content={<ChartLegendContent />} />
                 </LineChart>
               </ChartContainer>
+            ) : hasTrendData ? (
+              <p className="text-sm text-muted-foreground">
+                Trend history is available, but no enabled model series can be rendered. Re-enable at least one model in settings.
+              </p>
             ) : (
               <p className="text-sm text-muted-foreground">Run manual sync a few times to see visibility trends.</p>
             )}
@@ -475,13 +502,20 @@ export default function AiVisibility() {
 
         <Card className="border-border/70 shadow-sm">
           <CardHeader>
-            <CardTitle>Share of Voice Trend</CardTitle>
-            <CardDescription>Share of voice percentage by run and model.</CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Share of Voice Trend</CardTitle>
+                <CardDescription>Share of voice percentage by run and model.</CardDescription>
+              </div>
+              <div className="text-xs text-muted-foreground pt-2">
+                Showing last {visibleTrendData.length} runs
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {hasTrendData ? (
+            {hasTrendData && hasRenderableTrendSeries ? (
               <ChartContainer config={trendChartConfig} className="h-[260px] w-full">
-                <LineChart data={trendData} margin={{ left: 8, right: 8 }}>
+                <LineChart data={visibleTrendData} margin={{ left: 8, right: 8 }}>
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                   <YAxis tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
@@ -511,6 +545,10 @@ export default function AiVisibility() {
                   <ChartLegend content={<ChartLegendContent />} />
                 </LineChart>
               </ChartContainer>
+            ) : hasTrendData ? (
+              <p className="text-sm text-muted-foreground">
+                Trend history is available, but no enabled model series can be rendered. Re-enable at least one model in settings.
+              </p>
             ) : (
               <p className="text-sm text-muted-foreground">Run manual sync a few times to see SOV trends.</p>
             )}
