@@ -2031,7 +2031,7 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Targeting and model defaults can be updated later in Site Settings -> AI Visibility.
+              Targeting and model defaults can be updated later in Site Settings -&gt; AI Visibility.
             </p>
           </section>
 
