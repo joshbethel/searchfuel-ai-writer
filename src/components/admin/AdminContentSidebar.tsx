@@ -51,7 +51,7 @@ export function AdminContentSidebar() {
           </div>
         </div>
 
-        {/* Back to Admin Dashboard */}
+        {/* Back to User Management */}
         <div className="p-4 border-b border-border">
           <Button
             variant="outline"
@@ -59,7 +59,7 @@ export function AdminContentSidebar() {
             onClick={() => window.location.href = "/admin"}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Admin
+            Back to User Management
           </Button>
         </div>
 
