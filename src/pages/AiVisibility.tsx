@@ -456,6 +456,13 @@ export default function AiVisibility() {
     setDraftTrendCustomDateRange({ from: startOfDay(today), to: endOfDay(today) });
   };
 
+  const handleSelectTrendPreset = (value: TrendDateRange) => {
+    setDraftTrendDateRange(value);
+    if (value === "custom") return;
+    setTrendDateRange(value);
+    setTrendDatePopoverOpen(false);
+  };
+
   if (!hasSite) {
     return (
       <div className="p-8">
@@ -653,7 +660,7 @@ export default function AiVisibility() {
                           variant={draftTrendDateRange === option.value ? "secondary" : "ghost"}
                           size="sm"
                           className="mb-1 h-8 w-full justify-start text-sm"
-                          onClick={() => setDraftTrendDateRange(option.value)}
+                          onClick={() => handleSelectTrendPreset(option.value)}
                         >
                           {option.label}
                         </Button>
