@@ -5,7 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Bot, CalendarDays, ChevronDown, CircleCheck, CircleX, Cpu, DollarSign, Loader2, RefreshCw, Settings, Sparkles, Target } from "lucide-react";
 import { toast } from "sonner";
@@ -51,8 +60,20 @@ const DEFAULT_ENABLED_MODELS = {
 
 type RunProvider = keyof typeof DEFAULT_ENABLED_MODELS;
 const RUN_PROVIDER_KEYS: RunProvider[] = ["chat_gpt", "gemini", "perplexity"];
-type TrendRunWindow = 7 | 14 | 30;
-const TREND_RUN_WINDOW_OPTIONS: TrendRunWindow[] = [7, 14, 30];
+type TrendDateRange = "7d" | "30d" | "3m" | "6m" | "12m";
+type TrendGranularity = "daily" | "weekly" | "monthly";
+const TREND_DATE_RANGE_OPTIONS: Array<{ value: TrendDateRange; label: string }> = [
+  { value: "7d", label: "7 days" },
+  { value: "30d", label: "30 days" },
+  { value: "3m", label: "3 months" },
+  { value: "6m", label: "6 months" },
+  { value: "12m", label: "12 months" },
+];
+const TREND_GRANULARITY_OPTIONS: Array<{ value: TrendGranularity; label: string }> = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
 
 const normalizeEnabledModels = (input: unknown): Record<RunProvider, boolean> => {
   const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
@@ -86,7 +107,8 @@ export default function AiVisibility() {
   const [adminEnabledModels, setAdminEnabledModels] = useState<Record<RunProvider, boolean>>(DEFAULT_ENABLED_MODELS);
   const [siteMaxCostUsd, setSiteMaxCostUsd] = useState<number | null>(null);
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState<number | null>(null);
-  const [trendRunWindow, setTrendRunWindow] = useState<TrendRunWindow>(14);
+  const [trendDateRange, setTrendDateRange] = useState<TrendDateRange>("7d");
+  const [trendGranularity, setTrendGranularity] = useState<TrendGranularity>("daily");
   const [selectedTrendProviders, setSelectedTrendProviders] = useState<RunProvider[]>(RUN_PROVIDER_KEYS);
 
   const hasSite = useMemo(() => Boolean(blogId), [blogId]);
@@ -110,52 +132,113 @@ export default function AiVisibility() {
     if (valid.length === 0) return null;
     return valid.reduce((acc, value) => acc + value, 0) / valid.length;
   }, [metrics]);
-  const trendData = useMemo(() => {
+  const visibleTrendData = useMemo(() => {
     if (metricHistoryRows.length === 0) return [];
 
-    const pointsByRun = new Map<
-      string,
-      {
-        label: string;
-        sortValue: number;
-        chat_gpt_visibility?: number;
-        gemini_visibility?: number;
-        perplexity_visibility?: number;
-        chat_gpt_sov?: number;
-        gemini_sov?: number;
-        perplexity_sov?: number;
+    const now = Date.now();
+    const rangeStartMs = (() => {
+      switch (trendDateRange) {
+        case "7d":
+          return now - 7 * 24 * 60 * 60 * 1000;
+        case "30d":
+          return now - 30 * 24 * 60 * 60 * 1000;
+        case "3m":
+          return now - 90 * 24 * 60 * 60 * 1000;
+        case "6m":
+          return now - 180 * 24 * 60 * 60 * 1000;
+        case "12m":
+          return now - 365 * 24 * 60 * 60 * 1000;
+        default:
+          return now - 7 * 24 * 60 * 60 * 1000;
       }
-    >();
+    })();
+
+    const getBucketStart = (date: Date) => {
+      const d = new Date(date);
+      if (trendGranularity === "daily") {
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
+      if (trendGranularity === "weekly") {
+        const day = d.getDay();
+        const diffToMonday = day === 0 ? 6 : day - 1;
+        d.setDate(d.getDate() - diffToMonday);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
+      d.setDate(1);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+
+    const formatBucketLabel = (date: Date) => {
+      if (trendGranularity === "daily") {
+        return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      }
+      if (trendGranularity === "weekly") {
+        return `Week of ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+      }
+      return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    };
+
+    const bucketMap = new Map<string, Record<string, number | string>>();
 
     for (const row of metricHistoryRows) {
       const provider = String(row.provider || "").toLowerCase() as RunProvider;
       if (!RUN_PROVIDER_KEYS.includes(provider)) continue;
 
-      const runId = String(row.run_id || row.id || "");
-      if (!runId) continue;
       const startedAtRaw = row?.run?.started_at || row.created_at;
       const startedAt = startedAtRaw ? new Date(startedAtRaw) : null;
       if (!startedAt || Number.isNaN(startedAt.getTime())) continue;
+      if (startedAt.getTime() < rangeStartMs) continue;
 
-      const existingPoint = pointsByRun.get(runId) || {
-        label: startedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        sortValue: startedAt.getTime(),
+      const bucketStart = getBucketStart(startedAt);
+      const bucketKey = String(bucketStart.getTime());
+      const existing = bucketMap.get(bucketKey) || {
+        label: formatBucketLabel(bucketStart),
+        sortValue: bucketStart.getTime(),
       };
 
       const visibility = Number(row.visibility_score);
       const sov = Number(row.share_of_voice);
       if (Number.isFinite(visibility)) {
-        existingPoint[`${provider}_visibility` as keyof typeof existingPoint] = Number((visibility * 100).toFixed(2));
+        const sumKey = `${provider}_visibility_sum`;
+        const countKey = `${provider}_visibility_count`;
+        existing[sumKey] = Number(existing[sumKey] || 0) + visibility * 100;
+        existing[countKey] = Number(existing[countKey] || 0) + 1;
       }
       if (Number.isFinite(sov)) {
-        existingPoint[`${provider}_sov` as keyof typeof existingPoint] = Number((sov * 100).toFixed(2));
+        const sumKey = `${provider}_sov_sum`;
+        const countKey = `${provider}_sov_count`;
+        existing[sumKey] = Number(existing[sumKey] || 0) + sov * 100;
+        existing[countKey] = Number(existing[countKey] || 0) + 1;
       }
-      pointsByRun.set(runId, existingPoint);
+
+      bucketMap.set(bucketKey, existing);
     }
 
-    return Array.from(pointsByRun.values()).sort((a, b) => a.sortValue - b.sortValue);
-  }, [metricHistoryRows]);
-  const visibleTrendData = useMemo(() => trendData.slice(-trendRunWindow), [trendData, trendRunWindow]);
+    return Array.from(bucketMap.values())
+      .sort((a, b) => Number(a.sortValue) - Number(b.sortValue))
+      .map((row) => {
+        const point: Record<string, number | string> = {
+          label: String(row.label || ""),
+          sortValue: Number(row.sortValue || 0),
+        };
+        for (const provider of RUN_PROVIDER_KEYS) {
+          const visibilityCount = Number(row[`${provider}_visibility_count`] || 0);
+          const visibilitySum = Number(row[`${provider}_visibility_sum`] || 0);
+          if (visibilityCount > 0) {
+            point[`${provider}_visibility`] = Number((visibilitySum / visibilityCount).toFixed(2));
+          }
+          const sovCount = Number(row[`${provider}_sov_count`] || 0);
+          const sovSum = Number(row[`${provider}_sov_sum`] || 0);
+          if (sovCount > 0) {
+            point[`${provider}_sov`] = Number((sovSum / sovCount).toFixed(2));
+          }
+        }
+        return point;
+      });
+  }, [metricHistoryRows, trendDateRange, trendGranularity]);
   const plannedProviders = useMemo(
     () =>
       RUN_PROVIDER_KEYS.filter(
@@ -198,6 +281,14 @@ export default function AiVisibility() {
   const hasRenderableTrendSeries = useMemo(
     () => visibleTrendProviders.length > 0 && Object.keys(trendChartConfig).length > 0,
     [visibleTrendProviders, trendChartConfig],
+  );
+  const trendDateRangeLabel = useMemo(
+    () => TREND_DATE_RANGE_OPTIONS.find((option) => option.value === trendDateRange)?.label || "7 days",
+    [trendDateRange],
+  );
+  const trendGranularityLabel = useMemo(
+    () => TREND_GRANULARITY_OPTIONS.find((option) => option.value === trendGranularity)?.label || "Daily",
+    [trendGranularity],
   );
   const effectiveMaxCostUsd = useMemo(() => {
     if (siteMaxCostUsd == null && adminMaxCostUsd == null) return null;
@@ -290,6 +381,14 @@ export default function AiVisibility() {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blogId]);
+
+  useEffect(() => {
+    setSelectedTrendProviders((prev) => {
+      const allowed = prev.filter((provider) => availableTrendProviders.includes(provider));
+      if (allowed.length > 0) return allowed;
+      return availableTrendProviders.length > 0 ? [...availableTrendProviders] : [];
+    });
+  }, [availableTrendProviders]);
 
   const openManualSyncDialog = () => {
     if (!blogId) return;
@@ -523,20 +622,49 @@ export default function AiVisibility() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <div className="flex items-center gap-1 rounded-md border bg-muted/20 p-1">
-                {TREND_RUN_WINDOW_OPTIONS.map((option) => (
-                  <Button
-                    key={`visibility-range-${option}`}
-                    size="sm"
-                    variant={trendRunWindow === option ? "default" : "ghost"}
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setTrendRunWindow(option)}
-                  >
-                    <CalendarDays className="h-3.5 w-3.5 mr-1" />
-                    {option}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {trendDateRangeLabel}
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
-                ))}
-              </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-44">
+                  <DropdownMenuLabel>Date Range</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup value={trendDateRange} onValueChange={(value) => setTrendDateRange(value as TrendDateRange)}>
+                    {TREND_DATE_RANGE_OPTIONS.map((option) => (
+                      <DropdownMenuRadioItem key={`range-option-${option.value}`} value={option.value}>
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                    {trendGranularityLabel}
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-40">
+                  <DropdownMenuLabel>Granularity</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup
+                    value={trendGranularity}
+                    onValueChange={(value) => setTrendGranularity(value as TrendGranularity)}
+                  >
+                    {TREND_GRANULARITY_OPTIONS.map((option) => (
+                      <DropdownMenuRadioItem key={`granularity-option-${option.value}`} value={option.value}>
+                        {option.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </CardHeader>
           <CardContent>
@@ -577,7 +705,9 @@ export default function AiVisibility() {
                 Trend history is available, but no enabled model series can be rendered. Re-enable at least one model in settings.
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground">Run manual sync a few times to see visibility trends.</p>
+              <p className="text-sm text-muted-foreground">
+                Run manual sync during the selected range to see visibility trends.
+              </p>
             )}
           </CardContent>
         </Card>
@@ -590,7 +720,7 @@ export default function AiVisibility() {
                 <CardDescription>Share of voice percentage by run and model.</CardDescription>
               </div>
               <div className="text-xs text-muted-foreground pt-2">
-                Showing last {visibleTrendData.length} runs
+                {visibleTrendData.length} points, {trendGranularityLabel.toLowerCase()} view
               </div>
             </div>
           </CardHeader>
@@ -632,7 +762,9 @@ export default function AiVisibility() {
                 Trend history is available, but no enabled model series can be rendered. Re-enable at least one model in settings.
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground">Run manual sync a few times to see SOV trends.</p>
+              <p className="text-sm text-muted-foreground">
+                Run manual sync during the selected range to see SOV trends.
+              </p>
             )}
           </CardContent>
         </Card>
