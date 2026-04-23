@@ -65,6 +65,27 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_visibility_admin_policy: {
+        Row: {
+          id: boolean
+          max_cost_usd: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: boolean
+          max_cost_usd?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: boolean
+          max_cost_usd?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       ai_visibility_mentions: {
         Row: {
           answer_excerpt: string | null
