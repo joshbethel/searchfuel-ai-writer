@@ -11,6 +11,7 @@ import {
   Shield,
   History,
   Cog,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -141,14 +142,25 @@ export function Sidebar() {
                 to="/admin"
                 className={cn(
                     "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all border",
-                  location.pathname === "/admin" || 
-                  (location.pathname.startsWith("/admin/") && !location.pathname.startsWith("/admin/audit-log") && !location.pathname.startsWith("/admin/users"))
+                  location.pathname === "/admin"
                       ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-sm"
                       : "border-amber-500/10 bg-amber-500/5 text-muted-foreground hover:bg-amber-500/10 hover:border-amber-500/20 hover:text-amber-600 dark:hover:text-amber-400"
                 )}
               >
                 <Shield className="w-5 h-5" />
-                Admin
+                User Management
+              </Link>
+              <Link
+                to="/admin/ai-visibility-controls"
+                className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all border",
+                  location.pathname === "/admin/ai-visibility-controls"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-sm"
+                      : "border-amber-500/10 bg-amber-500/5 text-muted-foreground hover:bg-amber-500/10 hover:border-amber-500/20 hover:text-amber-600 dark:hover:text-amber-400"
+                )}
+              >
+                <Sparkles className="w-5 h-5" />
+                AI Visibility Controls
               </Link>
               <Link
                 to="/admin/audit-log"
