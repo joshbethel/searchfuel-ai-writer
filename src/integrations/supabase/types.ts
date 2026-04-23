@@ -314,6 +314,8 @@ export type Database = {
       ai_visibility_runs: {
         Row: {
           blog_id: string
+          effective_language_code: string | null
+          effective_location_code: number | null
           error_summary: string | null
           finished_at: string | null
           id: string
@@ -324,6 +326,8 @@ export type Database = {
         }
         Insert: {
           blog_id: string
+          effective_language_code?: string | null
+          effective_location_code?: number | null
           error_summary?: string | null
           finished_at?: string | null
           id?: string
@@ -334,6 +338,8 @@ export type Database = {
         }
         Update: {
           blog_id?: string
+          effective_language_code?: string | null
+          effective_location_code?: number | null
           error_summary?: string | null
           finished_at?: string | null
           id?: string
