@@ -46,6 +46,8 @@ const DEFAULT_MODEL_BY_PROVIDER: Record<Provider, string> = {
   gemini: "gemini-2.5-flash",
   perplexity: "sonar",
 };
+const DEFAULT_LANGUAGE_CODE = "en";
+const DEFAULT_LOCATION_CODE = 2840;
 
 function jsonResponse(body: unknown, status: number, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify(body), {
@@ -120,6 +122,18 @@ function normalizePolicyEnabledModels(input: unknown): Record<Provider, boolean>
     gemini: raw.gemini !== false,
     perplexity: raw.perplexity !== false,
   };
+}
+
+function normalizeLanguageCode(input: unknown): string {
+  const normalized = String(input || DEFAULT_LANGUAGE_CODE).trim().toLowerCase();
+  if (/^[a-z]{2}$/.test(normalized)) return normalized;
+  return DEFAULT_LANGUAGE_CODE;
+}
+
+function normalizeLocationCode(input: unknown): number {
+  const parsed = Number(input);
+  if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  return DEFAULT_LOCATION_CODE;
 }
 
 async function getAdminPolicy(service: any): Promise<AdminPolicy> {
@@ -288,6 +302,8 @@ serve(async (req) => {
 
     const requestedMaxCost = body.max_cost_usd ?? settings?.max_cost_usd ?? DEFAULT_MAX_COST_USD;
     const maxCostUsd = clampRunCost(requestedMaxCost, adminMaxCostUsd);
+    const effectiveLanguageCode = normalizeLanguageCode(settings?.language_code);
+    const effectiveLocationCode = normalizeLocationCode(settings?.location_code);
     const runType = "manual";
 
     const { data: run, error: runError } = await service
@@ -297,6 +313,8 @@ serve(async (req) => {
         run_type: runType,
         status: "running",
         total_cost_usd: 0,
+        effective_language_code: effectiveLanguageCode,
+        effective_location_code: effectiveLocationCode,
       })
       .select("*")
       .single();
@@ -332,6 +350,8 @@ serve(async (req) => {
           {
             model_name: DEFAULT_MODEL_BY_PROVIDER[provider],
             user_prompt: prompt.prompt_text,
+            language_code: effectiveLanguageCode,
+            location_code: effectiveLocationCode,
           },
         ];
 
@@ -471,6 +491,8 @@ serve(async (req) => {
         total_cost_usd: Number(totalCost.toFixed(2)),
         max_cost_usd: maxCostUsd,
         admin_max_cost_usd: adminMaxCostUsd,
+        language_code: effectiveLanguageCode,
+        location_code: effectiveLocationCode,
         stopped_by_budget: stoppedByBudget,
         providers,
         prompts_processed: prompts.length,

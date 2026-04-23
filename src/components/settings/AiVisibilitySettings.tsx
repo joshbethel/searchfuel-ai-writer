@@ -10,6 +10,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ArrowUpRight, CirclePause, Cpu, DollarSign, Globe, Loader2, Lock, MessageSquareText, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { TargetingCombobox } from "@/components/ai-visibility/TargetingCombobox";
+import {
+  AI_VISIBILITY_COUNTRY_OPTIONS,
+  AI_VISIBILITY_LANGUAGE_OPTIONS,
+  getCountryByLocationCode,
+  getFlagFromIso2,
+  getLanguageByCode,
+} from "@/lib/aiVisibilityTargeting";
 
 interface AiVisibilitySettingsProps {
   blogId: string;
@@ -85,6 +93,50 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
     [promptsText],
   );
   const enabledModelCount = useMemo(() => Object.values(models).filter(Boolean).length, [models]);
+  const selectedCountry = useMemo(() => getCountryByLocationCode(Number(locationCode)), [locationCode]);
+  const selectedLanguage = useMemo(() => getLanguageByCode(languageCode), [languageCode]);
+
+  const countryOptions = useMemo(() => {
+    const baseOptions = AI_VISIBILITY_COUNTRY_OPTIONS.map((country) => ({
+      value: String(country.locationCode),
+      label: `${getFlagFromIso2(country.iso2)} ${country.name}`,
+      hint: `${country.iso2} • code ${country.locationCode}`,
+    }));
+
+    const hasCurrent = baseOptions.some((option) => option.value === String(locationCode));
+    if (!hasCurrent && String(locationCode).trim()) {
+      return [
+        {
+          value: String(locationCode),
+          label: `Custom location code (${locationCode})`,
+          hint: "Legacy/custom value",
+        },
+        ...baseOptions,
+      ];
+    }
+    return baseOptions;
+  }, [locationCode]);
+
+  const languageOptions = useMemo(() => {
+    const baseOptions = AI_VISIBILITY_LANGUAGE_OPTIONS.map((language) => ({
+      value: language.code,
+      label: language.name,
+      hint: `Code: ${language.code}`,
+    }));
+
+    const hasCurrent = baseOptions.some((option) => option.value === languageCode);
+    if (!hasCurrent && languageCode.trim()) {
+      return [
+        {
+          value: languageCode,
+          label: `Custom language code (${languageCode})`,
+          hint: "Legacy/custom value",
+        },
+        ...baseOptions,
+      ];
+    }
+    return baseOptions;
+  }, [languageCode]);
 
   useEffect(() => {
     const load = async () => {
@@ -113,7 +165,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
         if (settings) {
           setMainPrompt(settings.main_ai_prompt || "");
           setMainKeyword(settings.main_keyword || "");
-          setLanguageCode(settings.language_code || "en");
+          setLanguageCode(String(settings.language_code || "en").toLowerCase());
           setLocationCode(String(settings.location_code || 2840));
           setIsPaused(Boolean(settings.is_paused));
           setMaxCostUsd(String(clampRunCost(settings.max_cost_usd ?? DEFAULT_MAX_COST_USD, resolvedAdminMaxCost)));
@@ -152,9 +204,16 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
       const sb = supabase as any;
       const parsedLocation = Number(locationCode || "2840");
       const parsedBudget = Number(maxCostUsd || String(DEFAULT_MAX_COST_USD));
+      const normalizedLanguageCode = (languageCode || "en").trim().toLowerCase();
 
       if (Number.isNaN(parsedLocation) || parsedLocation <= 0) {
         toast.error("Location code must be a positive number");
+        return;
+      }
+      setLanguageCode(normalizedLanguageCode);
+
+      if (!/^[a-z]{2}$/.test(normalizedLanguageCode)) {
+        toast.error("Language code must be a two-letter code");
         return;
       }
 
@@ -180,7 +239,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           blog_id: blogId,
           main_ai_prompt: mainPrompt || null,
           main_keyword: mainKeyword || null,
-          language_code: languageCode || "en",
+          language_code: normalizedLanguageCode,
           location_code: parsedLocation,
           enabled_models: normalizedModels,
           is_paused: isPaused,
@@ -319,12 +378,32 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="language-code">Language Code</Label>
-              <Input id="language-code" value={languageCode} onChange={(e) => setLanguageCode(e.target.value)} placeholder="en" />
+              <Label htmlFor="language-code">Language</Label>
+              <TargetingCombobox
+                value={languageCode}
+                onValueChange={setLanguageCode}
+                options={languageOptions}
+                searchPlaceholder="Search languages..."
+                emptyText="No language found."
+                closedPlaceholder="Select language"
+              />
+              <p className="text-xs text-muted-foreground">
+                Effective code: <span className="font-medium">{selectedLanguage?.code || languageCode}</span>
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="location-code">Location Code</Label>
-              <Input id="location-code" value={locationCode} onChange={(e) => setLocationCode(e.target.value)} placeholder="2840" />
+              <Label htmlFor="location-code">Country</Label>
+              <TargetingCombobox
+                value={locationCode}
+                onValueChange={setLocationCode}
+                options={countryOptions}
+                searchPlaceholder="Search countries..."
+                emptyText="No country found."
+                closedPlaceholder="Select country"
+              />
+              <p className="text-xs text-muted-foreground">
+                Effective code: <span className="font-medium">{selectedCountry?.locationCode ?? locationCode}</span>
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="max-cost-usd" className="flex items-center gap-1.5">

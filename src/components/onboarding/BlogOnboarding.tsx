@@ -15,6 +15,14 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, ExternalLink, Check } from "lucide-react";
 import { useSiteContext } from "@/contexts/SiteContext";
 import { cn } from "@/lib/utils";
+import { TargetingCombobox } from "@/components/ai-visibility/TargetingCombobox";
+import {
+  AI_VISIBILITY_COUNTRY_OPTIONS,
+  AI_VISIBILITY_LANGUAGE_OPTIONS,
+  getCountryByLocationCode,
+  getFlagFromIso2,
+  getLanguageByCode,
+} from "@/lib/aiVisibilityTargeting";
 
 type CMSPlatform =
   | "wordpress"
@@ -126,6 +134,44 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       perplexity: true,
     },
   });
+  const selectedAiCountry = getCountryByLocationCode(Number(aiVisibilitySetup.locationCode));
+  const selectedAiLanguage = getLanguageByCode(aiVisibilitySetup.languageCode);
+  const aiCountryOptions = [
+    ...(!AI_VISIBILITY_COUNTRY_OPTIONS.some(
+      (country) => String(country.locationCode) === aiVisibilitySetup.locationCode,
+    ) && aiVisibilitySetup.locationCode.trim()
+      ? [
+          {
+            value: aiVisibilitySetup.locationCode,
+            label: `Custom location code (${aiVisibilitySetup.locationCode})`,
+            hint: "Legacy/custom value",
+          },
+        ]
+      : []),
+    ...AI_VISIBILITY_COUNTRY_OPTIONS.map((country) => ({
+      value: String(country.locationCode),
+      label: `${getFlagFromIso2(country.iso2)} ${country.name}`,
+      hint: `${country.iso2} • code ${country.locationCode}`,
+    })),
+  ];
+  const aiLanguageOptions = [
+    ...(!AI_VISIBILITY_LANGUAGE_OPTIONS.some(
+      (language) => language.code === aiVisibilitySetup.languageCode,
+    ) && aiVisibilitySetup.languageCode.trim()
+      ? [
+          {
+            value: aiVisibilitySetup.languageCode,
+            label: `Custom language code (${aiVisibilitySetup.languageCode})`,
+            hint: "Legacy/custom value",
+          },
+        ]
+      : []),
+    ...AI_VISIBILITY_LANGUAGE_OPTIONS.map((language) => ({
+      value: language.code,
+      label: language.name,
+      hint: `Code: ${language.code}`,
+    })),
+  ];
 
   const ensureAiVisibilityDefaults = async (targetBlogId: string) => {
     try {
@@ -1092,6 +1138,17 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       aiVisibilitySetup.mainPrompt.trim() ||
       `What are the best ${businessInfo.industry?.trim() || "solutions"} for ${businessInfo.company_name.trim()}?`;
     const parsedLocationCode = Number(aiVisibilitySetup.locationCode || "2840");
+    const normalizedLanguageCode = (aiVisibilitySetup.languageCode || "en").trim().toLowerCase();
+
+    if (!/^[a-z]{2}$/.test(normalizedLanguageCode)) {
+      toast.error("Please choose a valid language.");
+      return;
+    }
+
+    if (Number.isNaN(parsedLocationCode) || parsedLocationCode <= 0) {
+      toast.error("Please choose a valid country.");
+      return;
+    }
 
     try {
       const { error: settingsError } = await sb.from("ai_visibility_settings").upsert(
@@ -1099,8 +1156,8 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
           blog_id: blogId,
           main_ai_prompt: normalizedMainPrompt,
           main_keyword: businessInfo.company_name?.trim() || null,
-          language_code: aiVisibilitySetup.languageCode || "en",
-          location_code: Number.isNaN(parsedLocationCode) ? 2840 : parsedLocationCode,
+          language_code: normalizedLanguageCode,
+          location_code: parsedLocationCode,
           enabled_models: aiVisibilitySetup.enabledModels,
           is_paused: false,
           max_cost_usd: 5,
@@ -1858,28 +1915,43 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
             <p className="text-xs text-muted-foreground mt-1">Used as the default tracked prompt for first sync.</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <Label htmlFor="ai-language-code">Language Code</Label>
-              <Input
-                id="ai-language-code"
-                value={aiVisibilitySetup.languageCode}
-                onChange={(e) => setAiVisibilitySetup({ ...aiVisibilitySetup, languageCode: e.target.value })}
-                placeholder="en"
-                className="mt-1"
-              />
+              <Label htmlFor="ai-language-code">Language</Label>
+              <div className="mt-1">
+                <TargetingCombobox
+                  value={aiVisibilitySetup.languageCode}
+                  onValueChange={(value) => setAiVisibilitySetup({ ...aiVisibilitySetup, languageCode: value })}
+                  options={aiLanguageOptions}
+                  searchPlaceholder="Search languages..."
+                  emptyText="No language found."
+                  closedPlaceholder="Select language"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Effective code: <span className="font-medium">{selectedAiLanguage?.code || aiVisibilitySetup.languageCode}</span>
+              </p>
             </div>
             <div>
-              <Label htmlFor="ai-location-code">Location Code</Label>
-              <Input
-                id="ai-location-code"
-                value={aiVisibilitySetup.locationCode}
-                onChange={(e) => setAiVisibilitySetup({ ...aiVisibilitySetup, locationCode: e.target.value })}
-                placeholder="2840"
-                className="mt-1"
-              />
+              <Label htmlFor="ai-location-code">Country</Label>
+              <div className="mt-1">
+                <TargetingCombobox
+                  value={aiVisibilitySetup.locationCode}
+                  onValueChange={(value) => setAiVisibilitySetup({ ...aiVisibilitySetup, locationCode: value })}
+                  options={aiCountryOptions}
+                  searchPlaceholder="Search countries..."
+                  emptyText="No country found."
+                  closedPlaceholder="Select country"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Effective code: <span className="font-medium">{selectedAiCountry?.locationCode ?? aiVisibilitySetup.locationCode}</span>
+              </p>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Targeting defaults are used for AI visibility sync requests and can be changed later in Site Settings.
+          </p>
 
           <div className="space-y-3 border rounded-lg p-4">
             <h4 className="text-sm font-medium">Enabled Models (default)</h4>

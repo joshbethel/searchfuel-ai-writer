@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { DateRange } from "react-day-picker";
+import { getCountryByLocationCode, getLanguageByCode } from "@/lib/aiVisibilityTargeting";
 import {
   Table,
   TableBody,
@@ -139,6 +140,18 @@ export default function AiVisibility() {
   const hasActivePrompts = useMemo(() => activePromptCount > 0, [activePromptCount]);
   const mentionCount = useMemo(() => mentions.length, [mentions]);
   const detectedMentions = useMemo(() => mentions.filter((m) => Boolean(m.detected_brand)).length, [mentions]);
+  const latestRunLanguage = useMemo(() => {
+    const code = String(latestRun?.effective_language_code || "").toLowerCase();
+    if (!code) return null;
+    const known = getLanguageByCode(code);
+    return known ? `${known.name} (${known.code})` : code;
+  }, [latestRun]);
+  const latestRunCountry = useMemo(() => {
+    const code = Number(latestRun?.effective_location_code);
+    if (!Number.isFinite(code) || code <= 0) return null;
+    const known = getCountryByLocationCode(code);
+    return known ? `${known.name} (${known.iso2})` : String(code);
+  }, [latestRun]);
   const avgVisibility = useMemo(() => {
     if (metrics.length === 0) return null;
     const valid = metrics
@@ -654,7 +667,7 @@ export default function AiVisibility() {
           <CardTitle>Last Run</CardTitle>
           <CardDescription>Most recent manual sync status and cost.</CardDescription>
         </CardHeader>
-        <CardContent className="grid md:grid-cols-4 gap-4 text-sm">
+        <CardContent className="grid md:grid-cols-5 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground">Status</p>
             <div className="mt-1">
@@ -678,6 +691,14 @@ export default function AiVisibility() {
             <p className="font-medium flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
               {latestRun?.total_cost_usd ?? "-"}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Targeting</p>
+            <p className="font-medium">
+              {latestRunLanguage || latestRunCountry
+                ? `${latestRunLanguage || "-"} • ${latestRunCountry || "-"}`
+                : "-"}
             </p>
           </div>
         </CardContent>
