@@ -10,8 +10,6 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -64,7 +62,6 @@ const DEFAULT_ENABLED_MODELS = {
 type RunProvider = keyof typeof DEFAULT_ENABLED_MODELS;
 const RUN_PROVIDER_KEYS: RunProvider[] = ["chat_gpt", "gemini", "perplexity"];
 type TrendDateRange = "24h" | "7d" | "30d" | "3m" | "6m" | "9m" | "12m" | "custom";
-type TrendGranularity = "daily" | "weekly" | "monthly";
 const TREND_DATE_RANGE_OPTIONS: Array<{ value: TrendDateRange; label: string }> = [
   { value: "24h", label: "24 hours" },
   { value: "7d", label: "7 days" },
@@ -74,11 +71,6 @@ const TREND_DATE_RANGE_OPTIONS: Array<{ value: TrendDateRange; label: string }> 
   { value: "9m", label: "9 months" },
   { value: "12m", label: "12 months" },
   { value: "custom", label: "Custom" },
-];
-const TREND_GRANULARITY_OPTIONS: Array<{ value: TrendGranularity; label: string }> = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
 ];
 
 const normalizeEnabledModels = (input: unknown): Record<RunProvider, boolean> => {
@@ -127,7 +119,6 @@ export default function AiVisibility() {
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState<number | null>(null);
   const [trendDateRange, setTrendDateRange] = useState<TrendDateRange>("7d");
   const [trendCustomDateRange, setTrendCustomDateRange] = useState<DateRange | undefined>(undefined);
-  const [trendGranularity, setTrendGranularity] = useState<TrendGranularity>("daily");
   const [trendDatePopoverOpen, setTrendDatePopoverOpen] = useState(false);
   const [draftTrendDateRange, setDraftTrendDateRange] = useState<TrendDateRange>("7d");
   const [draftTrendCustomDateRange, setDraftTrendCustomDateRange] = useState<DateRange | undefined>(undefined);
@@ -154,11 +145,9 @@ export default function AiVisibility() {
     if (valid.length === 0) return null;
     return valid.reduce((acc, value) => acc + value, 0) / valid.length;
   }, [metrics]);
-  const visibleTrendData = useMemo(() => {
-    if (metricHistoryRows.length === 0) return [];
-
+  const trendDateBounds = useMemo(() => {
     const now = Date.now();
-    const rangeStartMs = (() => {
+    const startMs = (() => {
       switch (trendDateRange) {
         case "24h":
           return now - 24 * 60 * 60 * 1000;
@@ -175,45 +164,37 @@ export default function AiVisibility() {
         case "12m":
           return now - 365 * 24 * 60 * 60 * 1000;
         case "custom":
-          return trendCustomDateRange?.from ? startOfDay(trendCustomDateRange.from).getTime() : now - 7 * 24 * 60 * 60 * 1000;
+          return trendCustomDateRange?.from
+            ? startOfDay(trendCustomDateRange.from).getTime()
+            : now - 7 * 24 * 60 * 60 * 1000;
         default:
           return now - 7 * 24 * 60 * 60 * 1000;
       }
     })();
-    const rangeEndMs =
+    const endMs =
       trendDateRange === "custom" && trendCustomDateRange?.to
         ? endOfDay(trendCustomDateRange.to).getTime()
         : now;
+    return { startMs, endMs };
+  }, [trendDateRange, trendCustomDateRange]);
 
-    const getBucketStart = (date: Date) => {
-      const d = new Date(date);
-      if (trendGranularity === "daily") {
-        d.setHours(0, 0, 0, 0);
-        return d;
-      }
-      if (trendGranularity === "weekly") {
-        const day = d.getDay();
-        const diffToMonday = day === 0 ? 6 : day - 1;
-        d.setDate(d.getDate() - diffToMonday);
-        d.setHours(0, 0, 0, 0);
-        return d;
-      }
-      d.setDate(1);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    };
+  const filteredTrendRunCount = useMemo(() => {
+    const runIds = new Set<string>();
+    for (const row of metricHistoryRows) {
+      const startedAtRaw = row?.run?.started_at || row.created_at;
+      const startedAt = startedAtRaw ? new Date(startedAtRaw) : null;
+      if (!startedAt || Number.isNaN(startedAt.getTime())) continue;
+      const ts = startedAt.getTime();
+      if (ts < trendDateBounds.startMs || ts > trendDateBounds.endMs) continue;
+      const runId = String(row.run_id || "");
+      if (runId) runIds.add(runId);
+    }
+    return runIds.size;
+  }, [metricHistoryRows, trendDateBounds]);
 
-    const formatBucketLabel = (date: Date) => {
-      if (trendGranularity === "daily") {
-        return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      }
-      if (trendGranularity === "weekly") {
-        return `Week of ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-      }
-      return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-    };
-
-    const bucketMap = new Map<string, Record<string, number | string>>();
+  const visibleTrendData = useMemo(() => {
+    if (metricHistoryRows.length === 0) return [];
+    const pointsByRun = new Map<string, Record<string, number | string>>();
 
     for (const row of metricHistoryRows) {
       const provider = String(row.provider || "").toLowerCase() as RunProvider;
@@ -222,55 +203,31 @@ export default function AiVisibility() {
       const startedAtRaw = row?.run?.started_at || row.created_at;
       const startedAt = startedAtRaw ? new Date(startedAtRaw) : null;
       if (!startedAt || Number.isNaN(startedAt.getTime())) continue;
-      if (startedAt.getTime() < rangeStartMs || startedAt.getTime() > rangeEndMs) continue;
+      if (startedAt.getTime() < trendDateBounds.startMs || startedAt.getTime() > trendDateBounds.endMs) continue;
 
-      const bucketStart = getBucketStart(startedAt);
-      const bucketKey = String(bucketStart.getTime());
-      const existing = bucketMap.get(bucketKey) || {
-        label: formatBucketLabel(bucketStart),
-        sortValue: bucketStart.getTime(),
+      const runId = String(row.run_id || row.id || "");
+      if (!runId) continue;
+
+      const existing = pointsByRun.get(runId) || {
+        label: startedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        timestampLabel: startedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        sortValue: startedAt.getTime(),
       };
 
       const visibility = Number(row.visibility_score);
       const sov = Number(row.share_of_voice);
       if (Number.isFinite(visibility)) {
-        const sumKey = `${provider}_visibility_sum`;
-        const countKey = `${provider}_visibility_count`;
-        existing[sumKey] = Number(existing[sumKey] || 0) + visibility * 100;
-        existing[countKey] = Number(existing[countKey] || 0) + 1;
+        existing[`${provider}_visibility`] = Number((visibility * 100).toFixed(2));
       }
       if (Number.isFinite(sov)) {
-        const sumKey = `${provider}_sov_sum`;
-        const countKey = `${provider}_sov_count`;
-        existing[sumKey] = Number(existing[sumKey] || 0) + sov * 100;
-        existing[countKey] = Number(existing[countKey] || 0) + 1;
+        existing[`${provider}_sov`] = Number((sov * 100).toFixed(2));
       }
 
-      bucketMap.set(bucketKey, existing);
+      pointsByRun.set(runId, existing);
     }
 
-    return Array.from(bucketMap.values())
-      .sort((a, b) => Number(a.sortValue) - Number(b.sortValue))
-      .map((row) => {
-        const point: Record<string, number | string> = {
-          label: String(row.label || ""),
-          sortValue: Number(row.sortValue || 0),
-        };
-        for (const provider of RUN_PROVIDER_KEYS) {
-          const visibilityCount = Number(row[`${provider}_visibility_count`] || 0);
-          const visibilitySum = Number(row[`${provider}_visibility_sum`] || 0);
-          if (visibilityCount > 0) {
-            point[`${provider}_visibility`] = Number((visibilitySum / visibilityCount).toFixed(2));
-          }
-          const sovCount = Number(row[`${provider}_sov_count`] || 0);
-          const sovSum = Number(row[`${provider}_sov_sum`] || 0);
-          if (sovCount > 0) {
-            point[`${provider}_sov`] = Number((sovSum / sovCount).toFixed(2));
-          }
-        }
-        return point;
-      });
-  }, [metricHistoryRows, trendDateRange, trendGranularity, trendCustomDateRange]);
+    return Array.from(pointsByRun.values()).sort((a, b) => Number(a.sortValue) - Number(b.sortValue));
+  }, [metricHistoryRows, trendDateBounds]);
   const plannedProviders = useMemo(
     () =>
       RUN_PROVIDER_KEYS.filter(
@@ -324,10 +281,6 @@ export default function AiVisibility() {
       return TREND_DATE_RANGE_OPTIONS.find((option) => option.value === trendDateRange)?.label || "7 days";
     },
     [trendDateRange, trendCustomDateRange],
-  );
-  const trendGranularityLabel = useMemo(
-    () => TREND_GRANULARITY_OPTIONS.find((option) => option.value === trendGranularity)?.label || "Daily",
-    [trendGranularity],
   );
   const effectiveMaxCostUsd = useMemo(() => {
     if (siteMaxCostUsd == null && adminMaxCostUsd == null) return null;
@@ -748,28 +701,6 @@ export default function AiVisibility() {
                 </PopoverContent>
               </Popover>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5">
-                    {trendGranularityLabel}
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40">
-                  <DropdownMenuLabel>Granularity</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioGroup
-                    value={trendGranularity}
-                    onValueChange={(value) => setTrendGranularity(value as TrendGranularity)}
-                  >
-                    {TREND_GRANULARITY_OPTIONS.map((option) => (
-                      <DropdownMenuRadioItem key={`granularity-option-${option.value}`} value={option.value}>
-                        {option.label}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </CardHeader>
           <CardContent>
@@ -827,7 +758,7 @@ export default function AiVisibility() {
                 </CardDescription>
               </div>
               <div className="text-xs text-muted-foreground pt-2">
-                {visibleTrendData.length} points, {trendGranularityLabel.toLowerCase()} view
+                {filteredTrendRunCount} runs, {visibleTrendData.length} points
               </div>
             </div>
           </CardHeader>
