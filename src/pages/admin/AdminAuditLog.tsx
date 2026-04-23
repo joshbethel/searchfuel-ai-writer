@@ -278,8 +278,8 @@ export default function AdminAuditLog() {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="mb-6">
+    <div className="container mx-auto py-8 px-4 space-y-6">
+      <div>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold mb-2">Audit Log</h1>
@@ -292,14 +292,21 @@ export default function AdminAuditLog() {
             Export CSV
           </Button>
         </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{total} total actions</Badge>
+          <Badge variant="outline">{filteredLogs.length} visible</Badge>
+        </div>
       </div>
 
-      <Card className="mb-6">
+      <Card className="border-border/70 shadow-sm">
         <CardHeader>
-          <CardTitle>Filters</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            Filters
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-3 md:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
@@ -310,7 +317,7 @@ export default function AdminAuditLog() {
               />
             </div>
             <Select value={actionTypeFilter} onValueChange={setActionTypeFilter}>
-              <SelectTrigger className="w-[250px]">
+              <SelectTrigger className="w-full md:w-[250px]">
                 <SelectValue placeholder="Filter by action type" />
               </SelectTrigger>
               <SelectContent>
@@ -331,6 +338,7 @@ export default function AdminAuditLog() {
               variant="outline"
               onClick={loadAuditLogs}
               disabled={loading}
+              className="md:w-auto"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
             </Button>
@@ -351,9 +359,9 @@ export default function AdminAuditLog() {
         </Card>
       ) : (
         <>
-          <Card>
+          <Card className="border-border/70 shadow-sm">
             <CardHeader>
-              <CardTitle>
+              <CardTitle className="text-xl">
                 Audit Logs ({total} total)
               </CardTitle>
             </CardHeader>
@@ -365,22 +373,23 @@ export default function AdminAuditLog() {
                     <TableHead>Action</TableHead>
                     <TableHead>Admin</TableHead>
                     <TableHead>Target User</TableHead>
-                    <TableHead>Details</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredLogs.map((log) => (
-                    <TableRow key={log.id}>
+                    <TableRow key={log.id} className="hover:bg-muted/20">
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">
+                        <div className="flex items-start gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">
                             {format(new Date(log.created_at), "MMM d, yyyy")}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(log.created_at), "HH:mm:ss")}
-                          </span>
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(log.created_at), "HH:mm:ss")}
+                            </span>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -400,11 +409,6 @@ export default function AdminAuditLog() {
                           {log.target_name && (
                             <span className="text-xs text-muted-foreground">{log.target_name}</span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="max-w-xs truncate text-sm text-muted-foreground">
-                          {log.details?.reason || "—"}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
