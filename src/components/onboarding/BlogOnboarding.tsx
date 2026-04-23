@@ -85,6 +85,33 @@ interface BusinessInfo {
   target_audience: string;
 }
 
+type OnboardingProviderKey = "chat_gpt" | "gemini" | "perplexity";
+const ONBOARDING_MODEL_CARDS: Array<{
+  id: OnboardingProviderKey;
+  label: string;
+  logoSrc: string;
+  description: string;
+}> = [
+  {
+    id: "chat_gpt",
+    label: "ChatGPT",
+    logoSrc: "/images/openai.svg",
+    description: "Track direct LLM answers and mention behavior.",
+  },
+  {
+    id: "gemini",
+    label: "Gemini",
+    logoSrc: "/images/gemini-color.svg",
+    description: "Track Gemini recommendation visibility.",
+  },
+  {
+    id: "perplexity",
+    label: "Perplexity",
+    logoSrc: "/images/perplexity-color.svg",
+    description: "Track Perplexity responses and source behavior.",
+  },
+];
+
 export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId }: BlogOnboardingProps) {
   const navigate = useNavigate();
   const { refreshSites } = useSiteContext();
@@ -172,6 +199,12 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
       hint: `Code: ${language.code}`,
     })),
   ];
+  const toggleAiModel = (model: OnboardingProviderKey, checked: boolean) => {
+    setAiVisibilitySetup({
+      ...aiVisibilitySetup,
+      enabledModels: { ...aiVisibilitySetup.enabledModels, [model]: checked },
+    });
+  };
 
   const ensureAiVisibilityDefaults = async (targetBlogId: string) => {
     try {
@@ -1903,100 +1936,104 @@ export function BlogOnboarding({ open, onComplete, onCancel, blogId: propBlogId 
         </div>
 
         <div className="space-y-6">
-          <div>
-            <Label htmlFor="ai-main-prompt">Main AI Prompt</Label>
-            <Input
-              id="ai-main-prompt"
-              value={aiVisibilitySetup.mainPrompt}
-              onChange={(e) => setAiVisibilitySetup({ ...aiVisibilitySetup, mainPrompt: e.target.value })}
-              placeholder={`What are the best ${businessInfo.industry?.trim() || "solutions"} for ${businessInfo.company_name.trim()}?`}
-              className="mt-1"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Used as the default tracked prompt for first sync.</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <section className="space-y-4 rounded-xl border bg-card p-4">
             <div>
-              <Label htmlFor="ai-language-code">Language</Label>
-              <div className="mt-1">
-                <TargetingCombobox
-                  value={aiVisibilitySetup.languageCode}
-                  onValueChange={(value) => setAiVisibilitySetup({ ...aiVisibilitySetup, languageCode: value })}
-                  options={aiLanguageOptions}
-                  searchPlaceholder="Search languages..."
-                  emptyText="No language found."
-                  closedPlaceholder="Select language"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Effective code: <span className="font-medium">{selectedAiLanguage?.code || aiVisibilitySetup.languageCode}</span>
-              </p>
+              <p className="text-sm font-medium">Core Prompt Setup</p>
+              <p className="text-xs text-muted-foreground">Set your primary tracked prompt for first sync.</p>
             </div>
             <div>
-              <Label htmlFor="ai-location-code">Country</Label>
-              <div className="mt-1">
-                <TargetingCombobox
-                  value={aiVisibilitySetup.locationCode}
-                  onValueChange={(value) => setAiVisibilitySetup({ ...aiVisibilitySetup, locationCode: value })}
-                  options={aiCountryOptions}
-                  searchPlaceholder="Search countries..."
-                  emptyText="No country found."
-                  closedPlaceholder="Select country"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Effective code: <span className="font-medium">{selectedAiCountry?.locationCode ?? aiVisibilitySetup.locationCode}</span>
-              </p>
+              <Label htmlFor="ai-main-prompt">Main AI Prompt</Label>
+              <Input
+                id="ai-main-prompt"
+                value={aiVisibilitySetup.mainPrompt}
+                onChange={(e) => setAiVisibilitySetup({ ...aiVisibilitySetup, mainPrompt: e.target.value })}
+                placeholder={`What are the best ${businessInfo.industry?.trim() || "solutions"} for ${businessInfo.company_name.trim()}?`}
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Used as the default tracked prompt for first sync.</p>
             </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Targeting defaults are used for AI visibility sync requests and can be changed later in Site Settings.
-          </p>
+          </section>
 
-          <div className="space-y-3 border rounded-lg p-4">
-            <h4 className="text-sm font-medium">Enabled Models (default)</h4>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="ob-model-chatgpt">ChatGPT</Label>
-                <Switch
-                  id="ob-model-chatgpt"
-                  checked={aiVisibilitySetup.enabledModels.chat_gpt}
-                  onCheckedChange={(checked) =>
-                    setAiVisibilitySetup({
-                      ...aiVisibilitySetup,
-                      enabledModels: { ...aiVisibilitySetup.enabledModels, chat_gpt: checked },
-                    })
-                  }
-                />
+          <section className="space-y-4 rounded-xl border bg-card p-4">
+            <div>
+              <p className="text-sm font-medium">Targeting Defaults</p>
+              <p className="text-xs text-muted-foreground">Choose market and language scope for AI visibility runs.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <Label htmlFor="ai-language-code">Language</Label>
+                <div className="mt-1">
+                  <TargetingCombobox
+                    value={aiVisibilitySetup.languageCode}
+                    onValueChange={(value) => setAiVisibilitySetup({ ...aiVisibilitySetup, languageCode: value })}
+                    options={aiLanguageOptions}
+                    searchPlaceholder="Search languages..."
+                    emptyText="No language found."
+                    closedPlaceholder="Select language"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Effective code: <span className="font-medium">{selectedAiLanguage?.code || aiVisibilitySetup.languageCode}</span>
+                </p>
               </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="ob-model-gemini">Gemini</Label>
-                <Switch
-                  id="ob-model-gemini"
-                  checked={aiVisibilitySetup.enabledModels.gemini}
-                  onCheckedChange={(checked) =>
-                    setAiVisibilitySetup({
-                      ...aiVisibilitySetup,
-                      enabledModels: { ...aiVisibilitySetup.enabledModels, gemini: checked },
-                    })
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="ob-model-perplexity">Perplexity</Label>
-                <Switch
-                  id="ob-model-perplexity"
-                  checked={aiVisibilitySetup.enabledModels.perplexity}
-                  onCheckedChange={(checked) =>
-                    setAiVisibilitySetup({
-                      ...aiVisibilitySetup,
-                      enabledModels: { ...aiVisibilitySetup.enabledModels, perplexity: checked },
-                    })
-                  }
-                />
+              <div>
+                <Label htmlFor="ai-location-code">Country</Label>
+                <div className="mt-1">
+                  <TargetingCombobox
+                    value={aiVisibilitySetup.locationCode}
+                    onValueChange={(value) => setAiVisibilitySetup({ ...aiVisibilitySetup, locationCode: value })}
+                    options={aiCountryOptions}
+                    searchPlaceholder="Search countries..."
+                    emptyText="No country found."
+                    closedPlaceholder="Select country"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Effective code: <span className="font-medium">{selectedAiCountry?.locationCode ?? aiVisibilitySetup.locationCode}</span>
+                </p>
               </div>
             </div>
-          </div>
+          </section>
+
+          <section className="space-y-4 rounded-xl border bg-card p-4">
+            <div>
+              <p className="text-sm font-medium">Enabled Models (default)</p>
+              <p className="text-xs text-muted-foreground">Pick which models to include in each visibility run.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {ONBOARDING_MODEL_CARDS.map((modelCard) => (
+                <div
+                  key={modelCard.id}
+                  className="rounded-xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:bg-accent/5 hover:shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-background/80">
+                        <img
+                          src={modelCard.logoSrc}
+                          alt={modelCard.label}
+                          className="h-5 w-5 object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <Label className="text-sm font-medium">{modelCard.label}</Label>
+                        <p className="text-xs text-muted-foreground mt-1">{modelCard.description}</p>
+                      </div>
+                    </div>
+                    <Switch
+                      id={`ob-model-${modelCard.id}`}
+                      checked={aiVisibilitySetup.enabledModels[modelCard.id]}
+                      onCheckedChange={(checked) => toggleAiModel(modelCard.id, checked)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Targeting and model defaults can be updated later in Site Settings -> AI Visibility.
+            </p>
+          </section>
 
           <div className="flex gap-2 pt-4">
             <Button variant="outline" onClick={() => setCurrentStep("cms-connection")} className="flex-1">
