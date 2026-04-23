@@ -209,7 +209,10 @@ export default function AiVisibility() {
       if (!runId) continue;
 
       const existing = pointsByRun.get(runId) || {
-        label: startedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        label:
+          trendDateRange === "24h"
+            ? startedAt.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric" })
+            : startedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         timestampLabel: startedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         sortValue: startedAt.getTime(),
       };
@@ -227,7 +230,7 @@ export default function AiVisibility() {
     }
 
     return Array.from(pointsByRun.values()).sort((a, b) => Number(a.sortValue) - Number(b.sortValue));
-  }, [metricHistoryRows, trendDateBounds]);
+  }, [metricHistoryRows, trendDateBounds, trendDateRange]);
   const plannedProviders = useMemo(
     () =>
       RUN_PROVIDER_KEYS.filter(
@@ -459,6 +462,8 @@ export default function AiVisibility() {
   const handleSelectTrendPreset = (value: TrendDateRange) => {
     setDraftTrendDateRange(value);
     if (value === "custom") return;
+    setDraftTrendCustomDateRange(undefined);
+    setTrendCustomDateRange(undefined);
     setTrendDateRange(value);
     setTrendDatePopoverOpen(false);
   };
