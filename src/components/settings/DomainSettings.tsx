@@ -5,12 +5,17 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Globe, House, Loader2, Lock } from "lucide-react";
+import { Globe, House, Loader2 } from "lucide-react";
 import { useSiteContext } from "@/contexts/SiteContext";
 
 interface DomainSettingsProps {
   blogId: string;
 }
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  return "Unknown error";
+};
 
 export function DomainSettings({ blogId }: DomainSettingsProps) {
   const { refreshSites } = useSiteContext();
@@ -40,7 +45,7 @@ export function DomainSettings({ blogId }: DomainSettingsProps) {
             website_homepage: data.website_homepage || "",
           });
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Error fetching domain data:", error);
         toast.error("Failed to load domain settings");
       } finally {
@@ -70,9 +75,9 @@ export function DomainSettings({ blogId }: DomainSettingsProps) {
       toast.success("Domain settings saved successfully");
       // Refresh site context to update UI
       await refreshSites();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error saving domain settings:", error);
-      toast.error("Failed to save domain settings: " + error.message);
+      toast.error("Failed to save domain settings: " + getErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -96,65 +101,10 @@ export function DomainSettings({ blogId }: DomainSettingsProps) {
           Domain Settings
         </CardTitle>
         <CardDescription>
-          Configure your site's domain and homepage URL
+          Configure your site's homepage URL
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <p className="text-xs text-muted-foreground">Subdomain</p>
-            <p className="mt-1 font-semibold truncate">{formData.subdomain || "-"}.searchfuel.app</p>
-          </div>
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <p className="text-xs text-muted-foreground">Custom Domain</p>
-            <p className="mt-1 font-semibold truncate">{formData.custom_domain || "Not set"}</p>
-          </div>
-        </div>
-
-        <section className="space-y-4 rounded-xl border bg-card p-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
-              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">Domain Mapping</p>
-              <p className="text-xs text-muted-foreground">Connect your branded domain to this site.</p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="subdomain">Subdomain</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="subdomain"
-                value={formData.subdomain}
-                disabled
-                className="bg-muted"
-              />
-              <span className="text-sm text-muted-foreground whitespace-nowrap">
-                .searchfuel.app
-              </span>
-              <Lock className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Subdomain cannot be changed after creation
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="custom_domain">Custom Domain</Label>
-            <Input
-              id="custom_domain"
-              value={formData.custom_domain}
-              onChange={(e) => setFormData({ ...formData, custom_domain: e.target.value })}
-              placeholder="example.com"
-            />
-            <p className="text-xs text-muted-foreground">
-              Your custom domain (without http:// or https://)
-            </p>
-          </div>
-        </section>
-
         <section className="space-y-4 rounded-xl border bg-card p-4">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg border bg-muted/50">
