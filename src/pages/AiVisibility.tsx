@@ -941,37 +941,109 @@ export default function AiVisibility() {
         </Card>
       </div>
 
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-indigo-500" />
-            Your Mentions
-          </CardTitle>
-          <CardDescription>Prompt-level mention results from the latest sync runs.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="max-h-[360px] overflow-y-auto rounded-md border">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-indigo-500" />
+              Your Mentions
+            </CardTitle>
+            <CardDescription>Prompt-level mention results from the latest sync runs.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[360px] overflow-y-auto rounded-md border">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead>Prompt</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Detected</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {mentions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        No mention data yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    mentions.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell className="max-w-[420px] truncate">{row.prompt_text}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {PROVIDER_META[String(row.provider || "").toLowerCase()]?.logoSrc ? (
+                              <img
+                                src={PROVIDER_META[String(row.provider || "").toLowerCase()].logoSrc}
+                                alt={formatProvider(row.provider)}
+                                className="h-4 w-4 object-contain"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <Bot className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <span>{formatProvider(row.provider)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {row.detected_brand ? (
+                            <Badge className="gap-1">
+                              <CircleCheck className="h-3.5 w-3.5" />
+                              Yes
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="gap-1">
+                              <CircleX className="h-3.5 w-3.5" />
+                              No
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>{row.position ?? "-"}</TableCell>
+                        <TableCell>{new Date(row.created_at).toLocaleString()}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Cpu className="h-4 w-4 text-indigo-500" />
+              AI Model Performance
+            </CardTitle>
+            <CardDescription>
+              Visibility score = prompts with brand mention / total prompts. SOV = our mentions / total mentions across tracked brands.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableHeader>
                 <TableRow>
-                  <TableHead>Prompt</TableHead>
                   <TableHead>Model</TableHead>
-                  <TableHead>Detected</TableHead>
-                  <TableHead>Position</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Prompts</TableHead>
+                  <TableHead>Prompts with Mention</TableHead>
+                  <TableHead>Visibility</TableHead>
+                  <TableHead>SOV</TableHead>
+                  <TableHead>Avg Position</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mentions.length === 0 ? (
+                {metrics.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      No mention data yet.
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      No model metrics yet.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  mentions.map((row) => (
+                  metrics.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="max-w-[420px] truncate">{row.prompt_text}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {PROVIDER_META[String(row.provider || "").toLowerCase()]?.logoSrc ? (
@@ -987,89 +1059,19 @@ export default function AiVisibility() {
                           <span>{formatProvider(row.provider)}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {row.detected_brand ? (
-                          <Badge className="gap-1">
-                            <CircleCheck className="h-3.5 w-3.5" />
-                            Yes
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="gap-1">
-                            <CircleX className="h-3.5 w-3.5" />
-                            No
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{row.position ?? "-"}</TableCell>
-                      <TableCell>{new Date(row.created_at).toLocaleString()}</TableCell>
+                      <TableCell>{row.prompts_total}</TableCell>
+                      <TableCell>{row.prompts_with_brand_mention}</TableCell>
+                      <TableCell>{formatPercent(row.visibility_score)}</TableCell>
+                      <TableCell>{formatPercent(row.share_of_voice)}</TableCell>
+                      <TableCell>{row.avg_position ?? "-"}</TableCell>
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Cpu className="h-4 w-4 text-indigo-500" />
-            AI Model Performance
-          </CardTitle>
-          <CardDescription>
-            Visibility score = prompts with brand mention / total prompts. SOV = our mentions / total mentions across tracked brands.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Model</TableHead>
-                <TableHead>Prompts</TableHead>
-                <TableHead>Prompts with Mention</TableHead>
-                <TableHead>Visibility</TableHead>
-                <TableHead>SOV</TableHead>
-                <TableHead>Avg Position</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {metrics.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    No model metrics yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                metrics.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {PROVIDER_META[String(row.provider || "").toLowerCase()]?.logoSrc ? (
-                          <img
-                            src={PROVIDER_META[String(row.provider || "").toLowerCase()].logoSrc}
-                            alt={formatProvider(row.provider)}
-                            className="h-4 w-4 object-contain"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <Bot className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span>{formatProvider(row.provider)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{row.prompts_total}</TableCell>
-                    <TableCell>{row.prompts_with_brand_mention}</TableCell>
-                    <TableCell>{formatPercent(row.visibility_score)}</TableCell>
-                    <TableCell>{formatPercent(row.share_of_voice)}</TableCell>
-                    <TableCell>{row.avg_position ?? "-"}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
