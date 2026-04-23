@@ -67,18 +67,21 @@ export type Database = {
       }
       ai_visibility_admin_policy: {
         Row: {
+          enabled_models: Json
           id: boolean
           max_cost_usd: number
           updated_at: string
           updated_by: string | null
         }
         Insert: {
+          enabled_models?: Json
           id?: boolean
           max_cost_usd?: number
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
+          enabled_models?: Json
           id?: boolean
           max_cost_usd?: number
           updated_at?: string
