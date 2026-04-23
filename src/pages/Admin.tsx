@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -113,8 +114,14 @@ interface UserWithSubscription {
 }
 
 type SubscriptionFilter = "all" | "paid" | "manual" | "no_subscription";
+type ProviderKey = "chat_gpt" | "gemini" | "perplexity";
 const MIN_RUN_COST_USD = 1;
 const DEFAULT_MAX_COST_USD = 5;
+const DEFAULT_ADMIN_ENABLED_MODELS: Record<ProviderKey, boolean> = {
+  chat_gpt: true,
+  gemini: true,
+  perplexity: true,
+};
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -140,6 +147,7 @@ export default function Admin() {
   const [adminRoleAction, setAdminRoleAction] = useState<"grant" | "revoke">("grant");
   const [adminRoleUser, setAdminRoleUser] = useState<UserWithSubscription | null>(null);
   const [aiVisibilityMaxCostUsd, setAiVisibilityMaxCostUsd] = useState<string>(String(DEFAULT_MAX_COST_USD));
+  const [aiVisibilityEnabledModels, setAiVisibilityEnabledModels] = useState<Record<ProviderKey, boolean>>(DEFAULT_ADMIN_ENABLED_MODELS);
   const [loadingAiVisibilityPolicy, setLoadingAiVisibilityPolicy] = useState(true);
   const [savingAiVisibilityPolicy, setSavingAiVisibilityPolicy] = useState(false);
 
@@ -232,7 +240,7 @@ export default function Admin() {
       const sb = supabase as any;
       const { data, error } = await sb
         .from("ai_visibility_admin_policy")
-        .select("max_cost_usd")
+        .select("max_cost_usd, enabled_models")
         .eq("id", true)
         .maybeSingle();
 
@@ -242,14 +250,29 @@ export default function Admin() {
         MIN_RUN_COST_USD,
         Number(data?.max_cost_usd ?? DEFAULT_MAX_COST_USD),
       );
+      const rawEnabledModels =
+        data?.enabled_models && typeof data.enabled_models === "object"
+          ? (data.enabled_models as Record<string, unknown>)
+          : {};
+      const normalizedModels: Record<ProviderKey, boolean> = {
+        chat_gpt: rawEnabledModels.chat_gpt !== false,
+        gemini: rawEnabledModels.gemini !== false,
+        perplexity: rawEnabledModels.perplexity !== false,
+      };
       setAiVisibilityMaxCostUsd(String(normalizedValue));
+      setAiVisibilityEnabledModels(normalizedModels);
     } catch (error: any) {
       console.error("Error loading AI visibility policy:", error);
       toast.error(error?.message || "Failed to load AI visibility budget policy");
       setAiVisibilityMaxCostUsd(String(DEFAULT_MAX_COST_USD));
+      setAiVisibilityEnabledModels(DEFAULT_ADMIN_ENABLED_MODELS);
     } finally {
       setLoadingAiVisibilityPolicy(false);
     }
+  };
+
+  const toggleAiVisibilityModel = (provider: ProviderKey, enabled: boolean) => {
+    setAiVisibilityEnabledModels((prev) => ({ ...prev, [provider]: enabled }));
   };
 
   const saveAiVisibilityPolicy = async () => {
@@ -270,11 +293,20 @@ export default function Admin() {
       const normalizedValue = Number(parsedValue.toFixed(2));
       const { data: existingPolicy, error: existingPolicyError } = await sb
         .from("ai_visibility_admin_policy")
-        .select("max_cost_usd")
+        .select("max_cost_usd, enabled_models")
         .eq("id", true)
         .maybeSingle();
       if (existingPolicyError) throw existingPolicyError;
       const previousValue = Number(existingPolicy?.max_cost_usd ?? DEFAULT_MAX_COST_USD);
+      const previousRawEnabledModels =
+        existingPolicy?.enabled_models && typeof existingPolicy.enabled_models === "object"
+          ? (existingPolicy.enabled_models as Record<string, unknown>)
+          : {};
+      const previousModels = {
+        chat_gpt: previousRawEnabledModels.chat_gpt !== false,
+        gemini: previousRawEnabledModels.gemini !== false,
+        perplexity: previousRawEnabledModels.perplexity !== false,
+      };
 
       const { error } = await sb
         .from("ai_visibility_admin_policy")
@@ -282,6 +314,7 @@ export default function Admin() {
           {
             id: true,
             max_cost_usd: normalizedValue,
+            enabled_models: aiVisibilityEnabledModels,
             updated_by: authData.user.id,
             updated_at: new Date().toISOString(),
           },
@@ -290,21 +323,43 @@ export default function Admin() {
 
       if (error) throw error;
 
-      const { error: auditError } = await sb.from("admin_actions").insert({
-        admin_user_id: authData.user.id,
-        action_type: "update_ai_visibility_budget_policy",
-        target_user_id: authData.user.id,
-        details: {
-          previous_max_cost_usd: Number(previousValue.toFixed(2)),
-          new_max_cost_usd: normalizedValue,
-        },
-      });
-      if (auditError) {
-        console.error("Failed to write audit log for AI visibility policy update:", auditError);
+      const budgetChanged = Number(previousValue.toFixed(2)) !== normalizedValue;
+      const modelsChanged = JSON.stringify(previousModels) !== JSON.stringify(aiVisibilityEnabledModels);
+      const auditRows = [];
+
+      if (budgetChanged) {
+        auditRows.push({
+          admin_user_id: authData.user.id,
+          action_type: "update_ai_visibility_budget_policy",
+          target_user_id: authData.user.id,
+          details: {
+            previous_max_cost_usd: Number(previousValue.toFixed(2)),
+            new_max_cost_usd: normalizedValue,
+          },
+        });
+      }
+
+      if (modelsChanged) {
+        auditRows.push({
+          admin_user_id: authData.user.id,
+          action_type: "update_ai_visibility_model_policy",
+          target_user_id: authData.user.id,
+          details: {
+            previous_enabled_models: previousModels,
+            new_enabled_models: aiVisibilityEnabledModels,
+          },
+        });
+      }
+
+      if (auditRows.length > 0) {
+        const { error: auditError } = await sb.from("admin_actions").insert(auditRows);
+        if (auditError) {
+          console.error("Failed to write audit log for AI visibility policy update:", auditError);
+        }
       }
 
       setAiVisibilityMaxCostUsd(String(normalizedValue));
-      toast.success("AI visibility max cost cap updated");
+      toast.success("AI visibility policy updated");
     } catch (error: any) {
       console.error("Error saving AI visibility policy:", error);
       toast.error(error?.message || "Failed to save AI visibility budget policy");
@@ -527,19 +582,25 @@ export default function Admin() {
         </Card>
       </div>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4" />
-            AI Visibility Budget Policy
-          </CardTitle>
-          <CardDescription>
-            Set the global admin cap for `Max Cost Per Run (USD)` across all sites.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="w-full max-w-xs space-y-2">
+      <section className="mb-6 space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">AI Visibility Admin Controls</h2>
+          <p className="text-sm text-muted-foreground">
+            Global policies applied across all sites for AI visibility runs.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Budget Policy
+              </CardTitle>
+              <CardDescription>
+                Set the global admin cap for `Max Cost Per Run (USD)` across all sites.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
               <label className="text-sm font-medium" htmlFor="ai-visibility-admin-max-cost-usd">
                 Max Cost Per Run Cap (USD)
               </label>
@@ -553,28 +614,75 @@ export default function Admin() {
                 disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
               />
               <p className="text-xs text-muted-foreground">
-                This cap is enforced server-side and clamps site-level AI Visibility settings.
+                Enforced server-side and used to clamp site-level AI visibility budgets.
               </p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={loadAiVisibilityPolicy}
-                disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
-              >
-                {loadingAiVisibilityPolicy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reload"}
-              </Button>
-              <Button
-                onClick={saveAiVisibilityPolicy}
-                disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
-              >
-                {savingAiVisibilityPolicy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Cap
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Enabled Models Policy
+              </CardTitle>
+              <CardDescription>
+                Control which providers are globally available in AI visibility sync.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">ChatGPT</p>
+                  <p className="text-xs text-muted-foreground">OpenAI model tracking</p>
+                </div>
+                <Switch
+                  checked={aiVisibilityEnabledModels.chat_gpt}
+                  onCheckedChange={(checked) => toggleAiVisibilityModel("chat_gpt", checked)}
+                  disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">Perplexity</p>
+                  <p className="text-xs text-muted-foreground">Perplexity answer and sources</p>
+                </div>
+                <Switch
+                  checked={aiVisibilityEnabledModels.perplexity}
+                  onCheckedChange={(checked) => toggleAiVisibilityModel("perplexity", checked)}
+                  disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">Gemini</p>
+                  <p className="text-xs text-muted-foreground">Google Gemini responses</p>
+                </div>
+                <Switch
+                  checked={aiVisibilityEnabledModels.gemini}
+                  onCheckedChange={(checked) => toggleAiVisibilityModel("gemini", checked)}
+                  disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={loadAiVisibilityPolicy}
+            disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
+          >
+            {loadingAiVisibilityPolicy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Reload Policy"}
+          </Button>
+          <Button
+            onClick={saveAiVisibilityPolicy}
+            disabled={loadingAiVisibilityPolicy || savingAiVisibilityPolicy}
+          >
+            {savingAiVisibilityPolicy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save AI Visibility Policy
+          </Button>
+        </div>
+      </section>
 
       {/* Information Section - Collapsible */}
       <Collapsible open={isInfoOpen} onOpenChange={setIsInfoOpen} className="mb-6">

@@ -22,6 +22,7 @@ import {
   ShieldOff,
   Crown,
   DollarSign,
+  Sparkles,
 } from "lucide-react";
 import {
   Table,
@@ -149,6 +150,14 @@ const ACTION_TYPE_LABELS: Record<string, ActionTypeConfig> = {
     bgColor: "bg-emerald-500/10",
     textColor: "text-emerald-700 dark:text-emerald-400",
     borderColor: "border-emerald-500/30",
+  },
+  update_ai_visibility_model_policy: {
+    label: "Update AI Visibility Model Policy",
+    icon: Sparkles,
+    className: "border-indigo-500/20 bg-indigo-500/10",
+    bgColor: "bg-indigo-500/10",
+    textColor: "text-indigo-700 dark:text-indigo-400",
+    borderColor: "border-indigo-500/30",
   },
 };
 
@@ -315,6 +324,7 @@ export default function AdminAuditLog() {
                 <SelectItem value="grant_admin_role">Grant Admin Role</SelectItem>
                 <SelectItem value="revoke_admin_role">Revoke Admin Role</SelectItem>
                 <SelectItem value="update_ai_visibility_budget_policy">Update AI Visibility Budget Policy</SelectItem>
+                <SelectItem value="update_ai_visibility_model_policy">Update AI Visibility Model Policy</SelectItem>
               </SelectContent>
             </Select>
             <Button

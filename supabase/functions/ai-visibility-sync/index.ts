@@ -18,6 +18,10 @@ interface ProviderMetricAccumulator {
   totalMentionsAcrossTrackedBrands: number;
   positions: number[];
 }
+interface AdminPolicy {
+  maxCostUsd: number;
+  enabledModels: Record<Provider, boolean>;
+}
 
 const DATAFORSEO_LOGIN = Deno.env.get("DATAFORSEO_LOGIN");
 const DATAFORSEO_PASSWORD = Deno.env.get("DATAFORSEO_PASSWORD");
@@ -109,23 +113,36 @@ function clampRunCost(input: unknown, adminMaxCostUsd: number): number {
   return Math.min(Math.max(parsed, MIN_RUN_COST_USD), adminMaxCostUsd);
 }
 
-async function getAdminMaxCostUsd(service: any): Promise<number> {
+function normalizePolicyEnabledModels(input: unknown): Record<Provider, boolean> {
+  const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  return {
+    chat_gpt: raw.chat_gpt !== false,
+    gemini: raw.gemini !== false,
+    perplexity: raw.perplexity !== false,
+  };
+}
+
+async function getAdminPolicy(service: any): Promise<AdminPolicy> {
   const { data, error } = await service
     .from("ai_visibility_admin_policy")
-    .select("max_cost_usd")
+    .select("max_cost_usd, enabled_models")
     .eq("id", true)
     .maybeSingle();
 
-  if (error || !data?.max_cost_usd) {
-    return ADMIN_MAX_COST_USD_FALLBACK;
+  const maxCostUsd = Number(data?.max_cost_usd);
+  const normalizedMaxCostUsd = Number.isNaN(maxCostUsd) ? ADMIN_MAX_COST_USD_FALLBACK : Math.max(MIN_RUN_COST_USD, maxCostUsd);
+
+  if (error || !data) {
+    return {
+      maxCostUsd: normalizedMaxCostUsd,
+      enabledModels: { ...DEFAULT_ENABLED_MODELS },
+    };
   }
 
-  const parsed = Number(data.max_cost_usd);
-  if (Number.isNaN(parsed)) {
-    return ADMIN_MAX_COST_USD_FALLBACK;
-  }
-
-  return Math.max(MIN_RUN_COST_USD, parsed);
+  return {
+    maxCostUsd: normalizedMaxCostUsd,
+    enabledModels: normalizePolicyEnabledModels(data.enabled_models),
+  };
 }
 
 serve(async (req) => {
@@ -168,7 +185,8 @@ serve(async (req) => {
 
     const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const adminMaxCostUsd = await getAdminMaxCostUsd(service);
+    const adminPolicy = await getAdminPolicy(service);
+    const adminMaxCostUsd = adminPolicy.maxCostUsd;
 
     const { data: blog, error: blogError } = await service
       .from("blogs")
@@ -192,7 +210,7 @@ serve(async (req) => {
     if (!existingSettings) {
       await service.from("ai_visibility_settings").upsert({
         blog_id: blogId,
-        enabled_models: DEFAULT_ENABLED_MODELS,
+        enabled_models: adminPolicy.enabledModels,
         language_code: "en",
         location_code: 2840,
         max_cost_usd: Math.min(DEFAULT_MAX_COST_USD, adminMaxCostUsd),
@@ -222,6 +240,7 @@ serve(async (req) => {
     const providerCandidates: Provider[] = ["chat_gpt", "gemini", "perplexity"];
     const providers = providerCandidates.filter((p) => {
       if (requestedProviders && !requestedProviders.includes(p)) return false;
+      if (adminPolicy.enabledModels[p] === false) return false;
       return enabledModels[p] !== false;
     });
 

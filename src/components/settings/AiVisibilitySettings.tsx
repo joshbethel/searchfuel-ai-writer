@@ -52,6 +52,15 @@ const clampRunCost = (input: unknown, adminMaxCostUsd: number) => {
   return Math.min(Math.max(parsed, MIN_RUN_COST_USD), adminMaxCostUsd);
 };
 
+const normalizeEnabledModels = (input: unknown): Record<ProviderKey, boolean> => {
+  const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  return {
+    chat_gpt: raw.chat_gpt !== false,
+    gemini: raw.gemini !== false,
+    perplexity: raw.perplexity !== false,
+  };
+};
+
 export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -63,6 +72,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
   const [isPaused, setIsPaused] = useState(false);
   const [maxCostUsd, setMaxCostUsd] = useState("5");
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState(ADMIN_MAX_COST_USD_FALLBACK);
+  const [adminEnabledModels, setAdminEnabledModels] = useState<Record<ProviderKey, boolean>>(DEFAULT_MODELS);
   const [promptsText, setPromptsText] = useState("");
   const [models, setModels] = useState<Record<ProviderKey, boolean>>(DEFAULT_MODELS);
 
@@ -89,14 +99,16 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
             .eq("blog_id", blogId)
             .eq("is_active", true)
             .order("sort_order", { ascending: true }),
-          sb.from("ai_visibility_admin_policy").select("max_cost_usd").eq("id", true).maybeSingle(),
+          sb.from("ai_visibility_admin_policy").select("max_cost_usd, enabled_models").eq("id", true).maybeSingle(),
         ]);
 
         const resolvedAdminMaxCost = Math.max(
           MIN_RUN_COST_USD,
           Number(policy?.max_cost_usd ?? ADMIN_MAX_COST_USD_FALLBACK),
         );
+        const resolvedAdminEnabledModels = normalizeEnabledModels(policy?.enabled_models);
         setAdminMaxCostUsd(resolvedAdminMaxCost);
+        setAdminEnabledModels(resolvedAdminEnabledModels);
 
         if (settings) {
           setMainPrompt(settings.main_ai_prompt || "");
@@ -105,7 +117,12 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           setLocationCode(String(settings.location_code || 2840));
           setIsPaused(Boolean(settings.is_paused));
           setMaxCostUsd(String(clampRunCost(settings.max_cost_usd ?? DEFAULT_MAX_COST_USD, resolvedAdminMaxCost)));
-          setModels({ ...DEFAULT_MODELS, ...(settings.enabled_models || {}) });
+          const mergedSiteModels = { ...DEFAULT_MODELS, ...(settings.enabled_models || {}) };
+          setModels({
+            chat_gpt: resolvedAdminEnabledModels.chat_gpt ? mergedSiteModels.chat_gpt : false,
+            gemini: resolvedAdminEnabledModels.gemini ? mergedSiteModels.gemini : false,
+            perplexity: resolvedAdminEnabledModels.perplexity ? mergedSiteModels.perplexity : false,
+          });
         }
 
         if (Array.isArray(promptsRows) && promptsRows.length > 0) {
@@ -125,6 +142,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
   }, [blogId]);
 
   const toggleModel = (model: ProviderKey, checked: boolean) => {
+    if (!adminEnabledModels[model]) return;
     setModels((prev) => ({ ...prev, [model]: checked }));
   };
 
@@ -151,6 +169,12 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
       }
       setMaxCostUsd(String(normalizedBudget));
 
+      const normalizedModels = {
+        chat_gpt: adminEnabledModels.chat_gpt ? models.chat_gpt : false,
+        gemini: adminEnabledModels.gemini ? models.gemini : false,
+        perplexity: adminEnabledModels.perplexity ? models.perplexity : false,
+      };
+
       const { error: settingsError } = await sb.from("ai_visibility_settings").upsert(
         {
           blog_id: blogId,
@@ -158,7 +182,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           main_keyword: mainKeyword || null,
           language_code: languageCode || "en",
           location_code: parsedLocation,
-          enabled_models: models,
+          enabled_models: normalizedModels,
           is_paused: isPaused,
           max_cost_usd: normalizedBudget,
           updated_at: new Date().toISOString(),
@@ -358,6 +382,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {MODEL_CARDS.map((modelCard) => {
               const isEnabledModel = modelCard.availability === "enabled";
+              const isAdminAllowed = isEnabledModel ? adminEnabledModels[modelCard.id as ProviderKey] : false;
               const checked = isEnabledModel ? models[modelCard.id as ProviderKey] : false;
               return (
                 <div
@@ -391,7 +416,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
                       </div>
                     </div>
 
-                    {isEnabledModel ? (
+                    {isEnabledModel && isAdminAllowed ? (
                       <Switch
                         id={`model-${modelCard.id}`}
                         checked={checked}
@@ -400,7 +425,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
                     ) : (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground rounded-full border px-2 py-1">
                         <Lock className="h-3.5 w-3.5" />
-                        Locked
+                        {isEnabledModel ? "Admin Locked" : "Locked"}
                       </div>
                     )}
                   </div>
