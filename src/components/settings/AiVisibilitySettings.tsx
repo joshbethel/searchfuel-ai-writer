@@ -25,7 +25,7 @@ interface AiVisibilitySettingsProps {
 
 type ProviderKey = "chat_gpt" | "gemini" | "perplexity";
 const MIN_RUN_COST_USD = 1;
-const DEFAULT_MAX_COST_USD = 5;
+const DEFAULT_MAX_COST_USD = 1;
 const ADMIN_MAX_COST_USD_FALLBACK = Math.max(
   MIN_RUN_COST_USD,
   Number(import.meta.env.VITE_AI_VISIBILITY_ADMIN_MAX_COST_USD || DEFAULT_MAX_COST_USD),
@@ -78,7 +78,7 @@ export function AiVisibilitySettings({ blogId }: AiVisibilitySettingsProps) {
   const [languageCode, setLanguageCode] = useState("en");
   const [locationCode, setLocationCode] = useState("2840");
   const [isPaused, setIsPaused] = useState(false);
-  const [maxCostUsd, setMaxCostUsd] = useState("5");
+  const [maxCostUsd, setMaxCostUsd] = useState(String(DEFAULT_MAX_COST_USD));
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState(ADMIN_MAX_COST_USD_FALLBACK);
   const [adminEnabledModels, setAdminEnabledModels] = useState<Record<ProviderKey, boolean>>(DEFAULT_MODELS);
   const [promptsText, setPromptsText] = useState("");

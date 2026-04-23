@@ -11,7 +11,7 @@ import { DollarSign, Info, Loader2, ShieldCheck, Sparkles } from "lucide-react";
 type ProviderKey = "chat_gpt" | "gemini" | "perplexity";
 
 const MIN_RUN_COST_USD = 1;
-const DEFAULT_MAX_COST_USD = 5;
+const DEFAULT_MAX_COST_USD = 1;
 const DEFAULT_ADMIN_ENABLED_MODELS: Record<ProviderKey, boolean> = {
   chat_gpt: true,
   gemini: true,
