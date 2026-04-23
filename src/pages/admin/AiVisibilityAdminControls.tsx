@@ -212,9 +212,14 @@ export default function AiVisibilityAdminControls() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <div>
-                <p className="text-sm font-medium">ChatGPT</p>
-                <p className="text-xs text-muted-foreground">OpenAI model tracking</p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-background/80">
+                  <img src="/images/openai.svg" alt="ChatGPT" className="h-4 w-4 object-contain" loading="lazy" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">ChatGPT</p>
+                  <p className="text-xs text-muted-foreground">OpenAI model tracking</p>
+                </div>
               </div>
               <Switch
                 checked={aiVisibilityEnabledModels.chat_gpt}
@@ -223,9 +228,14 @@ export default function AiVisibilityAdminControls() {
               />
             </div>
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <div>
-                <p className="text-sm font-medium">Perplexity</p>
-                <p className="text-xs text-muted-foreground">Perplexity answer and sources</p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-background/80">
+                  <img src="/images/perplexity-color.svg" alt="Perplexity" className="h-4 w-4 object-contain" loading="lazy" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Perplexity</p>
+                  <p className="text-xs text-muted-foreground">Perplexity answer and sources</p>
+                </div>
               </div>
               <Switch
                 checked={aiVisibilityEnabledModels.perplexity}
@@ -234,9 +244,14 @@ export default function AiVisibilityAdminControls() {
               />
             </div>
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
-              <div>
-                <p className="text-sm font-medium">Gemini</p>
-                <p className="text-xs text-muted-foreground">Google Gemini responses</p>
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-background/80">
+                  <img src="/images/gemini-color.svg" alt="Gemini" className="h-4 w-4 object-contain" loading="lazy" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Gemini</p>
+                  <p className="text-xs text-muted-foreground">Google Gemini responses</p>
+                </div>
               </div>
               <Switch
                 checked={aiVisibilityEnabledModels.gemini}
