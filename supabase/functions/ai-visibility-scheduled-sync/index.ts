@@ -443,11 +443,13 @@ serve(async (_req) => {
 
     const authString = btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`);
 
-    // Find all blogs that have ai_visibility_settings and are not paused
+    // Find all blogs that have ai_visibility_settings, are not paused,
+    // and have weekly sync enabled (weekly_sync_enabled defaults to true).
     const { data: eligibleSettings, error: settingsError } = await service
       .from("ai_visibility_settings")
       .select("blog_id")
-      .eq("is_paused", false);
+      .eq("is_paused", false)
+      .eq("weekly_sync_enabled", true);
 
     if (settingsError) {
       console.error("[ai-visibility-scheduled-sync] Failed to fetch eligible settings:", settingsError);

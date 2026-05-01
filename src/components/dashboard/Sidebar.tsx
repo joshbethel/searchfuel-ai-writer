@@ -12,6 +12,7 @@ import {
   History,
   Cog,
   Sparkles,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -161,6 +162,18 @@ export function Sidebar() {
               >
                 <Sparkles className="w-5 h-5" />
                 AI Visibility Controls
+              </Link>
+              <Link
+                to="/admin/ai-visibility-schedule"
+                className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all border",
+                  location.pathname === "/admin/ai-visibility-schedule"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-sm"
+                      : "border-amber-500/10 bg-amber-500/5 text-muted-foreground hover:bg-amber-500/10 hover:border-amber-500/20 hover:text-amber-600 dark:hover:text-amber-400"
+                )}
+              >
+                <CalendarClock className="w-5 h-5" />
+                Weekly Sync Schedule
               </Link>
               <Link
                 to="/admin/audit-log"

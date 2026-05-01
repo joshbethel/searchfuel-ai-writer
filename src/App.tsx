@@ -37,6 +37,7 @@ import AdminUserArticleDetail from "./pages/admin/AdminUserArticleDetail";
 import AdminUserKeywordDetail from "./pages/admin/AdminUserKeywordDetail";
 import AdminAuditLog from "./pages/admin/AdminAuditLog";
 import AiVisibilityAdminControls from "./pages/admin/AiVisibilityAdminControls";
+import AdminAiVisibilitySchedule from "./pages/admin/AdminAiVisibilitySchedule";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,7 @@ const App = () => (
             <Route element={<AdminProtectedRoute><DashboardLayout /></AdminProtectedRoute>}>
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/ai-visibility-controls" element={<AiVisibilityAdminControls />} />
+              <Route path="/admin/ai-visibility-schedule" element={<AdminAiVisibilitySchedule />} />
               <Route path="/admin/audit-log" element={<AdminAuditLog />} />
             </Route>
             <Route element={<AdminProtectedRoute><AdminContentLayout /></AdminProtectedRoute>}>
