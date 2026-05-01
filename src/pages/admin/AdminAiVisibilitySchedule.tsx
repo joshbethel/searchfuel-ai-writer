@@ -362,6 +362,23 @@ export default function AdminAiVisibilitySchedule() {
         </CardContent>
       </Card>
 
+      {/* ── Callout: only configured sites appear ── */}
+      <div className="flex items-start gap-4 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-900/50 dark:bg-blue-950/30">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/40">
+          <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+            Only AI Visibility–configured sites are listed below
+          </p>
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            A site appears here once a user sets up AI Visibility under{" "}
+            <span className="font-medium">Site Settings → AI Visibility</span>.
+            Sites that haven't done this are automatically excluded from the weekly run and won't show in this list.
+          </p>
+        </div>
+      </div>
+
       {/* ── Per-site control ── */}
       <Card className="border-border/70 shadow-sm">
         <CardHeader>
@@ -374,7 +391,6 @@ export default function AdminAiVisibilitySchedule() {
           <CardDescription>
               Choose which sites participate in the weekly run. Toggling a site off here only
               affects the automated schedule — manual syncs still work normally.
-              Only sites that have AI Visibility configured in their settings appear below.
             </CardDescription>
             </div>
             {!loadingSites && sites.length > 0 && (
@@ -388,12 +404,6 @@ export default function AdminAiVisibilitySchedule() {
             )}
           </div>
         </CardHeader>
-        <div className="border-t px-6 py-3 flex items-start gap-2 text-xs text-muted-foreground bg-muted/20">
-          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-          Only sites that have AI Visibility set up (via Site Settings → AI Visibility) appear here.
-          Sites not yet configured are excluded from the weekly run automatically and won't show in this list.
-        </div>
-
         <CardContent className="p-0">
           {loadingSites ? (
             <div className="flex items-center justify-center py-16 gap-2 text-sm text-muted-foreground">
