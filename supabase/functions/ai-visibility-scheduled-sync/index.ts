@@ -14,6 +14,7 @@ interface ProviderMetricAccumulator {
 interface AdminPolicy {
   maxCostUsd: number;
   enabledModels: Record<Provider, boolean>;
+  weeklyEnabled: boolean;
 }
 
 interface BlogSyncResult {
@@ -130,7 +131,7 @@ function normalizeLocationCode(input: unknown): number {
 async function getAdminPolicy(service: any): Promise<AdminPolicy> {
   const { data, error } = await service
     .from("ai_visibility_admin_policy")
-    .select("max_cost_usd, enabled_models")
+    .select("max_cost_usd, enabled_models, weekly_sync_enabled")
     .eq("id", true)
     .maybeSingle();
 
@@ -138,9 +139,13 @@ async function getAdminPolicy(service: any): Promise<AdminPolicy> {
   const normalizedMaxCostUsd = Number.isNaN(maxCostUsd) ? ADMIN_MAX_COST_USD_FALLBACK : Math.max(MIN_RUN_COST_USD, maxCostUsd);
 
   if (error || !data) {
-    return { maxCostUsd: normalizedMaxCostUsd, enabledModels: { ...DEFAULT_ENABLED_MODELS } };
+    return { maxCostUsd: normalizedMaxCostUsd, enabledModels: { ...DEFAULT_ENABLED_MODELS }, weeklyEnabled: true };
   }
-  return { maxCostUsd: normalizedMaxCostUsd, enabledModels: normalizePolicyEnabledModels(data.enabled_models) };
+  return {
+    maxCostUsd: normalizedMaxCostUsd,
+    enabledModels: normalizePolicyEnabledModels(data.enabled_models),
+    weeklyEnabled: data.weekly_sync_enabled !== false,
+  };
 }
 
 async function syncBlog(
@@ -427,6 +432,15 @@ serve(async (_req) => {
   try {
     const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const adminPolicy = await getAdminPolicy(service);
+
+    if (!adminPolicy.weeklyEnabled) {
+      console.log("[ai-visibility-scheduled-sync] Weekly sync is globally disabled by admin — skipping run");
+      return new Response(
+        JSON.stringify({ success: true, status: "globally_paused", message: "Weekly sync is disabled globally by admin." }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     const authString = btoa(`${DATAFORSEO_LOGIN}:${DATAFORSEO_PASSWORD}`);
 
     // Find all blogs that have ai_visibility_settings and are not paused
