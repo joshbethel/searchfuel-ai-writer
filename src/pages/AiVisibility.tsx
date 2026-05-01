@@ -128,6 +128,7 @@ export default function AiVisibility() {
   const [siteMaxCostUsd, setSiteMaxCostUsd] = useState<number | null>(null);
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState<number | null>(null);
   const [lastScheduledSyncAt, setLastScheduledSyncAt] = useState<string | null>(null);
+  const [siteWeeklySyncEnabled, setSiteWeeklySyncEnabled] = useState<boolean | null>(null);
   const [trendDateRange, setTrendDateRange] = useState<TrendDateRange>("7d");
   const [trendCustomDateRange, setTrendCustomDateRange] = useState<DateRange | undefined>(undefined);
   const [trendGranularity, setTrendGranularity] = useState<TrendGranularity>("weekly");
@@ -442,7 +443,7 @@ export default function AiVisibility() {
           .order("sort_order", { ascending: true }),
         sb
           .from("ai_visibility_settings")
-          .select("enabled_models, max_cost_usd, last_scheduled_sync_at")
+          .select("enabled_models, max_cost_usd, last_scheduled_sync_at, weekly_sync_enabled")
           .eq("blog_id", blogId)
           .maybeSingle(),
         sb
@@ -466,6 +467,7 @@ export default function AiVisibility() {
       setSiteMaxCostUsd(Number.isFinite(Number(settings?.max_cost_usd)) ? Number(settings.max_cost_usd) : null);
       setAdminMaxCostUsd(Number.isFinite(Number(adminPolicy?.max_cost_usd)) ? Number(adminPolicy.max_cost_usd) : null);
       setLastScheduledSyncAt(settings?.last_scheduled_sync_at ?? null);
+      setSiteWeeklySyncEnabled(settings ? (settings.weekly_sync_enabled !== false) : null);
       setMetricHistoryRows(metricsHistoryData || []);
 
       // Keep only latest metric row per provider for display.
@@ -600,7 +602,14 @@ export default function AiVisibility() {
             AI Visibility
           </h1>
           <p className="text-muted-foreground">
-            Track your mentions and AI model performance. Syncs automatically every Monday.
+            Track your mentions and AI model performance.{" "}
+            {siteWeeklySyncEnabled === false ? (
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                Weekly auto-sync is disabled for this site.
+              </span>
+            ) : (
+              <span>Syncs automatically every Monday.</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -671,10 +680,18 @@ export default function AiVisibility() {
               <CardTitle>Last Run</CardTitle>
               <CardDescription>Most recent sync status and cost.</CardDescription>
             </div>
-            <div className="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-400">
-              <CalendarDays className="h-3.5 w-3.5" />
-              Weekly auto-sync · Mondays 3 AM UTC
-            </div>
+            {latestRun?.run_type === "scheduled" && (
+              <div className="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-400">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Auto-sync run
+              </div>
+            )}
+            {latestRun?.run_type === "manual" && (
+              <div className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Manual run
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="grid md:grid-cols-6 gap-4 text-sm">
@@ -716,11 +733,13 @@ export default function AiVisibility() {
             </p>
           </div>
         </CardContent>
-        {lastScheduledSyncAt && (
-          <div className="border-t px-6 py-3 text-xs text-muted-foreground">
-            Last scheduled sync: {new Date(lastScheduledSyncAt).toLocaleString()}
-          </div>
-        )}
+        <div className="border-t px-6 py-3 text-xs text-muted-foreground">
+          {lastScheduledSyncAt
+            ? <>Last auto-sync: {new Date(lastScheduledSyncAt).toLocaleString()}</>
+            : siteWeeklySyncEnabled === false
+            ? <>Auto-sync is disabled for this site — contact your admin to re-enable it.</>
+            : <>Auto-sync hasn't run yet — it will run on the next Monday at 03:00 UTC.</>}
+        </div>
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">

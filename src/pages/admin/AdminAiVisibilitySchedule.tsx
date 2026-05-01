@@ -42,6 +42,7 @@ interface ScheduledRun {
   finished_at: string | null;
   status: string;
   total_cost_usd: number;
+  error_summary: string | null;
   blog: { title: string | null; website_homepage: string | null } | null;
 }
 
@@ -50,7 +51,11 @@ interface ScheduledRun {
 function getNextMonday3amUtc(): Date {
   const now = new Date();
   const day = now.getUTCDay(); // 0=Sun … 6=Sat
-  const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7 || 7;
+  // If today IS Monday and we're still before 03:00 UTC, the next run is today
+  if (day === 1 && now.getUTCHours() < 3) {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 3, 0, 0, 0));
+  }
+  const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysUntilMonday, 3, 0, 0, 0),
   );
@@ -98,7 +103,11 @@ export default function AdminAiVisibilitySchedule() {
   const [scheduledRuns, setScheduledRuns] = useState<ScheduledRun[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
 
-  const nextRunDate = useMemo(() => getNextMonday3amUtc(), []);
+  const [nextRunDate, setNextRunDate] = useState(() => getNextMonday3amUtc());
+  useEffect(() => {
+    const id = setInterval(() => setNextRunDate(getNextMonday3amUtc()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const includedCount = useMemo(
     () => sites.filter((s) => s.weekly_sync_enabled && !s.is_paused).length,
@@ -218,11 +227,24 @@ export default function AdminAiVisibilitySchedule() {
       prev.map((s) => (s.blog_id === blogId ? { ...s, weekly_sync_enabled: enabled } : s)),
     );
     try {
-      const { error } = await (supabase as any)
+      const sb = supabase as any;
+      const { error } = await sb
         .from("ai_visibility_settings")
         .update({ weekly_sync_enabled: enabled })
         .eq("blog_id", blogId);
       if (error) throw error;
+
+      // Audit log
+      const { data: authData } = await sb.auth.getUser();
+      if (authData?.user?.id) {
+        await sb.from("admin_actions").insert({
+          admin_user_id: authData.user.id,
+          action_type: "update_ai_visibility_site_weekly_sync",
+          target_user_id: authData.user.id,
+          details: { blog_id: blogId, weekly_sync_enabled: enabled },
+        });
+      }
+
       toast.success(enabled ? "Site included in weekly sync" : "Site excluded from weekly sync");
     } catch (err) {
       console.error("Error toggling site weekly sync:", err);
@@ -242,7 +264,7 @@ export default function AdminAiVisibilitySchedule() {
     try {
       const { data, error } = await (supabase as any)
         .from("ai_visibility_runs")
-        .select("id, started_at, finished_at, status, total_cost_usd, blog:blogs(title, website_homepage)")
+        .select("id, started_at, finished_at, status, total_cost_usd, error_summary, blog:blogs(title, website_homepage)")
         .eq("run_type", "scheduled")
         .order("started_at", { ascending: false })
         .limit(100);
@@ -549,6 +571,7 @@ export default function AdminAiVisibilitySchedule() {
                     <TableHead>Finished</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Notes</TableHead>
                     <TableHead className="text-right">Cost (USD)</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -558,7 +581,7 @@ export default function AdminAiVisibilitySchedule() {
                     const name = run.blog?.title || run.blog?.website_homepage || run.id.slice(0, 8);
                     return (
                       <TableRow key={run.id}>
-                        <TableCell className="font-medium max-w-[180px] truncate" title={name}>
+                        <TableCell className="font-medium max-w-[160px] truncate" title={name}>
                           {name}
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-sm">
@@ -572,6 +595,9 @@ export default function AdminAiVisibilitySchedule() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={meta.variant} className="text-xs">{meta.label}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground" title={run.error_summary ?? undefined}>
+                          {run.error_summary || "—"}
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           ${Number(run.total_cost_usd ?? 0).toFixed(2)}

@@ -156,6 +156,11 @@ async function syncBlog(
 ): Promise<BlogSyncResult> {
   const blogId = blog.id;
 
+  // Track these outside the try so the catch can finalize the run row
+  // if something throws after it has been created.
+  let runId: string | null = null;
+  let totalCostSoFar = 0;
+
   try {
     const { data: existingSettings } = await service
       .from("ai_visibility_settings")
@@ -240,6 +245,8 @@ async function syncBlog(
       return { blog_id: blogId, status: "error", error: "Failed to create run record" };
     }
 
+    runId = run.id; // now tracked so catch can finalize it
+
     const brandTerms = buildBrandTerms(blog);
     const competitorDomains = extractCompetitorDomains(blog.competitors);
 
@@ -250,6 +257,7 @@ async function syncBlog(
     };
 
     let totalCost = 0;
+    totalCostSoFar = totalCost; // keep outer ref in sync
     let errorsCount = 0;
     let stoppedByBudget = false;
 
@@ -287,6 +295,7 @@ async function syncBlog(
           providerData = await providerResponse.json();
           responseCost = Number(providerData?.cost || 0);
           totalCost += responseCost;
+          totalCostSoFar = totalCost;
 
           const task = providerData?.tasks?.[0];
           const result = task?.result?.[0];
@@ -405,11 +414,32 @@ async function syncBlog(
       total_cost_usd: Number(totalCost.toFixed(2)),
     };
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : "Unknown error";
     console.error(`[ai-visibility-scheduled-sync] blog ${blogId} error:`, err);
+
+    // If a run row was created before the exception, mark it failed so it
+    // doesn't stay stuck in "running" indefinitely.
+    if (runId) {
+      try {
+        await service
+          .from("ai_visibility_runs")
+          .update({
+            status: "failed",
+            finished_at: new Date().toISOString(),
+            total_cost_usd: Number(totalCostSoFar.toFixed(2)),
+            error_summary: errMsg,
+          })
+          .eq("id", runId);
+      } catch (finalizeErr) {
+        console.error(`[ai-visibility-scheduled-sync] blog ${blogId} failed to finalize run ${runId}:`, finalizeErr);
+      }
+    }
+
     return {
       blog_id: blogId,
+      run_id: runId ?? undefined,
       status: "error",
-      error: err instanceof Error ? err.message : "Unknown error",
+      error: errMsg,
     };
   }
 }
