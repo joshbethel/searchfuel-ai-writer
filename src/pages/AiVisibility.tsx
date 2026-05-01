@@ -127,6 +127,7 @@ export default function AiVisibility() {
   const [adminEnabledModels, setAdminEnabledModels] = useState<Record<RunProvider, boolean>>(DEFAULT_ENABLED_MODELS);
   const [siteMaxCostUsd, setSiteMaxCostUsd] = useState<number | null>(null);
   const [adminMaxCostUsd, setAdminMaxCostUsd] = useState<number | null>(null);
+  const [lastScheduledSyncAt, setLastScheduledSyncAt] = useState<string | null>(null);
   const [trendDateRange, setTrendDateRange] = useState<TrendDateRange>("7d");
   const [trendCustomDateRange, setTrendCustomDateRange] = useState<DateRange | undefined>(undefined);
   const [trendGranularity, setTrendGranularity] = useState<TrendGranularity>("weekly");
@@ -441,7 +442,7 @@ export default function AiVisibility() {
           .order("sort_order", { ascending: true }),
         sb
           .from("ai_visibility_settings")
-          .select("enabled_models, max_cost_usd")
+          .select("enabled_models, max_cost_usd, last_scheduled_sync_at")
           .eq("blog_id", blogId)
           .maybeSingle(),
         sb
@@ -464,6 +465,7 @@ export default function AiVisibility() {
       setAdminEnabledModels(normalizeEnabledModels(adminPolicy?.enabled_models));
       setSiteMaxCostUsd(Number.isFinite(Number(settings?.max_cost_usd)) ? Number(settings.max_cost_usd) : null);
       setAdminMaxCostUsd(Number.isFinite(Number(adminPolicy?.max_cost_usd)) ? Number(adminPolicy.max_cost_usd) : null);
+      setLastScheduledSyncAt(settings?.last_scheduled_sync_at ?? null);
       setMetricHistoryRows(metricsHistoryData || []);
 
       // Keep only latest metric row per provider for display.
@@ -598,7 +600,7 @@ export default function AiVisibility() {
             AI Visibility
           </h1>
           <p className="text-muted-foreground">
-            Track your mentions and AI model performance, with manual sync support.
+            Track your mentions and AI model performance. Syncs automatically every Monday.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -664,10 +666,18 @@ export default function AiVisibility() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Last Run</CardTitle>
-          <CardDescription>Most recent manual sync status and cost.</CardDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Last Run</CardTitle>
+              <CardDescription>Most recent sync status and cost.</CardDescription>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-400">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Weekly auto-sync · Mondays 3 AM UTC
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="grid md:grid-cols-5 gap-4 text-sm">
+        <CardContent className="grid md:grid-cols-6 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground">Status</p>
             <div className="mt-1">
@@ -677,6 +687,10 @@ export default function AiVisibility() {
                 <span className="font-medium">No runs yet</span>
               )}
             </div>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Type</p>
+            <p className="mt-1 font-medium capitalize">{latestRun?.run_type ?? "-"}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Started</p>
@@ -702,6 +716,11 @@ export default function AiVisibility() {
             </p>
           </div>
         </CardContent>
+        {lastScheduledSyncAt && (
+          <div className="border-t px-6 py-3 text-xs text-muted-foreground">
+            Last scheduled sync: {new Date(lastScheduledSyncAt).toLocaleString()}
+          </div>
+        )}
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">

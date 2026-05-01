@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.ai-visibility-sync]
 verify_jwt = true
+
+[functions.ai-visibility-scheduled-sync]
+verify_jwt = false
