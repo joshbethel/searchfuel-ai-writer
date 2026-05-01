@@ -365,6 +365,7 @@ export type Database = {
           enabled_models: Json
           is_paused: boolean
           language_code: string
+          last_scheduled_sync_at: string | null
           location_code: number
           main_ai_prompt: string | null
           main_keyword: string | null
@@ -377,6 +378,7 @@ export type Database = {
           enabled_models?: Json
           is_paused?: boolean
           language_code?: string
+          last_scheduled_sync_at?: string | null
           location_code?: number
           main_ai_prompt?: string | null
           main_keyword?: string | null
@@ -389,6 +391,7 @@ export type Database = {
           enabled_models?: Json
           is_paused?: boolean
           language_code?: string
+          last_scheduled_sync_at?: string | null
           location_code?: number
           main_ai_prompt?: string | null
           main_keyword?: string | null
