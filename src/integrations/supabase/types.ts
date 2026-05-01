@@ -374,6 +374,7 @@ export type Database = {
           main_keyword: string | null
           max_cost_usd: number
           updated_at: string
+          weekly_sync_enabled: boolean
         }
         Insert: {
           blog_id: string
@@ -387,6 +388,7 @@ export type Database = {
           main_keyword?: string | null
           max_cost_usd?: number
           updated_at?: string
+          weekly_sync_enabled?: boolean
         }
         Update: {
           blog_id?: string
@@ -400,6 +402,7 @@ export type Database = {
           main_keyword?: string | null
           max_cost_usd?: number
           updated_at?: string
+          weekly_sync_enabled?: boolean
         }
         Relationships: [
           {
