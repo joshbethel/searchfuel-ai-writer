@@ -72,6 +72,7 @@ export type Database = {
           max_cost_usd: number
           updated_at: string
           updated_by: string | null
+          weekly_sync_enabled: boolean
         }
         Insert: {
           enabled_models?: Json
@@ -79,6 +80,7 @@ export type Database = {
           max_cost_usd?: number
           updated_at?: string
           updated_by?: string | null
+          weekly_sync_enabled?: boolean
         }
         Update: {
           enabled_models?: Json
@@ -86,6 +88,7 @@ export type Database = {
           max_cost_usd?: number
           updated_at?: string
           updated_by?: string | null
+          weekly_sync_enabled?: boolean
         }
         Relationships: []
       }
