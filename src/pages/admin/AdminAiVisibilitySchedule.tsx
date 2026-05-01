@@ -371,10 +371,11 @@ export default function AdminAiVisibilitySchedule() {
                 <Globe className="h-4 w-4 text-muted-foreground" />
                 Site-by-Site Control
               </CardTitle>
-              <CardDescription>
-                Choose which sites participate in the weekly run. Toggling a site off here only
-                affects the automated schedule — manual syncs still work normally.
-              </CardDescription>
+          <CardDescription>
+              Choose which sites participate in the weekly run. Toggling a site off here only
+              affects the automated schedule — manual syncs still work normally.
+              Only sites that have AI Visibility configured in their settings appear below.
+            </CardDescription>
             </div>
             {!loadingSites && sites.length > 0 && (
               <div className="flex items-center gap-2 shrink-0 text-xs text-muted-foreground pt-1">
@@ -387,6 +388,12 @@ export default function AdminAiVisibilitySchedule() {
             )}
           </div>
         </CardHeader>
+        <div className="border-t px-6 py-3 flex items-start gap-2 text-xs text-muted-foreground bg-muted/20">
+          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          Only sites that have AI Visibility set up (via Site Settings → AI Visibility) appear here.
+          Sites not yet configured are excluded from the weekly run automatically and won't show in this list.
+        </div>
+
         <CardContent className="p-0">
           {loadingSites ? (
             <div className="flex items-center justify-center py-16 gap-2 text-sm text-muted-foreground">
@@ -396,7 +403,7 @@ export default function AdminAiVisibilitySchedule() {
           ) : sites.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-2 text-center px-4">
               <Globe className="h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm font-medium text-muted-foreground">No sites configured</p>
+              <p className="text-sm font-medium text-muted-foreground">No sites configured yet</p>
               <p className="text-xs text-muted-foreground max-w-sm">
                 Sites appear here once a user sets up AI Visibility in their site settings.
               </p>
