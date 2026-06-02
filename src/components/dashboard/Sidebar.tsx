@@ -82,7 +82,7 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="w-64 border-r border-border bg-card/50 backdrop-blur-sm">
+    <aside className="w-64 h-full border-r border-border bg-card/50 backdrop-blur-sm">
       <div className="flex flex-col h-full">
         {/* Logo */}
         <div className="p-6 border-b border-border">
