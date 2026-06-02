@@ -686,7 +686,7 @@ export default function Articles() {
 
   // Separate posts by status
   const scheduledPosts = articles.filter(a => {
-    const isScheduled = a.scheduled_publish_date !== null;
+    const isScheduled = a.scheduled_publish_date !== null && a.publishing_status !== 'published';
     if (isScheduled) {
       console.log('Found scheduled post:', {
         id: a.id,

@@ -323,11 +323,12 @@ serve(async (req: any) => {
       publishing_status: publishSuccess ? "published" : "failed",
       last_published_at: new Date().toISOString(),
     };
-    
+
     // Also update main status field on successful publish
     if (publishSuccess) {
       updateData.status = "published";
       updateData.published_at = new Date().toISOString();
+      updateData.scheduled_publish_date = null;
     }
     
     const { error: updateError } = await supabase
